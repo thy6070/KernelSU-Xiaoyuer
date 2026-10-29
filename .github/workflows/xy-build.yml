@@ -23,6 +23,16 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Spoof namespace
+        run: python3 .github/brand/spoof_ns.py
+
+      - name: Signing setup
+        run: |
+          echo "KEYSTORE_FILE=$PWD/.github/brand/signing.jks" >> $GITHUB_ENV
+          echo "KEYSTORE_PASSWORD=$(cat .github/brand/pass.txt)" >> $GITHUB_ENV
+          echo "KEY_ALIAS=xiaoyuer" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$(cat .github/brand/pass.txt)" >> $GITHUB_ENV
+
       - name: Build
         run: |
           cd manager
