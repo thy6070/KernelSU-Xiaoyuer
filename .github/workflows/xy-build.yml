@@ -45,6 +45,18 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease -x lint
 
+      - name: Sign APK
+        run: |
+          APK=$(find manager/app/build/outputs/apk/release -name "*.apk" | head -n1)
+          test -n "$APK"
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -n1)
+          $BT/apksigner sign --ks .github/brand/signing.jks \
+            --ks-key-alias xiaoyuer \
+            --ks-pass "pass:$(cat .github/brand/pass.txt)" \
+            --key-pass "pass:$(cat .github/brand/pass.txt)" \
+            "$APK"
+          $BT/apksigner verify --print-certs "$APK" | head -5
+
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
