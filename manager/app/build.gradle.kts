@@ -79,7 +79,6 @@ android {
             }
         }
         release {
-            signingConfig = signingConfigs.findByName("xy")
             isMinifyEnabled = true
             isShrinkResources = true
             vcsInfo.include = false
