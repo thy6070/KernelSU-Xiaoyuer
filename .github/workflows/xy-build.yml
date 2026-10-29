@@ -36,13 +36,14 @@ jobs:
       - name: Build
         run: |
           cp .github/brand/signing.jks manager/signing.jks
+          export KEYSTORE_FILE="$(pwd)/manager/signing.jks"
+          export KEYSTORE_PASSWORD="$(cat .github/brand/pass.txt)"
+          export KEY_ALIAS="xiaoyuer"
+          export KEY_PASSWORD="$(cat .github/brand/pass.txt)"
+          echo "KS=$KEYSTORE_FILE exists=$(test -f "$KEYSTORE_FILE" && echo yes || echo no)"
           cd manager
           chmod +x gradlew
-          ./gradlew :app:assembleRelease -x lint \
-            -PKEYSTORE_FILE="$PWD/signing.jks" \
-            -PKEYSTORE_PASSWORD="$(cat ../.github/brand/pass.txt)" \
-            -PKEY_ALIAS=xiaoyuer \
-            -PKEY_PASSWORD="$(cat ../.github/brand/pass.txt)"
+          ./gradlew :app:assembleRelease -x lint
 
       - name: Publish
         uses: softprops/action-gh-release@v2
