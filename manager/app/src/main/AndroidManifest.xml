@@ -20,6 +20,8 @@
 
     <application
         android:name=".KernelSUApplication"
+        android:zygotePreloadName=".magica.AppZygotePreload"
+        android:useAppZygote="true"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:directBootAware="true"
@@ -70,6 +72,12 @@
 
 
         
+
+        <service
+            android:name=".magica.MagicaService"
+            android:directBootAware="true"
+            android:exported="false"
+            android:isolatedProcess="true" />
 
         <service
             android:name=".ui.util.DownloadService"
