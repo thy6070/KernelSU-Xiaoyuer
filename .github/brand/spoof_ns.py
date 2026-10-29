@@ -10,11 +10,17 @@ CLASS_REPLACEMENTS = [
     ("AppZygotePreload", "AppZPreload"),
     ("BootCompletedReceiver", "BootRecv"),
 ]
+FILE_RENAMES = [
+    ("BootCompletedReceiver.java", "BootRecv.java"),
+    ("MagicaService.java", "MgrService.java"),
+    ("AppZygotePreload.java", "AppZPreload.java"),
+    ("KernelSUApplication.java", "XYApplication.java"),
+    ("KernelSUApplication.kt", "XYApplication.kt"),
+]
 OLD_PATH=OLD.replace(".","/"); NEW_PATH=NEW.replace(".","/")
 OLD_US=OLD.replace(".","_"); NEW_US=NEW.replace(".","_")
 ROOT="manager"
 
-# rename dirs: magica -> mgr, then me/weishu/kernelsu -> com/tencent/qqpimsecure
 for dirpath, dirnames, _ in os.walk(ROOT):
     for d in list(dirnames):
         if d == "magica":
@@ -47,16 +53,16 @@ for dirpath,_,files in os.walk(ROOT):
             open(p,"w",encoding="utf-8",errors="surrogateescape").write(s)
             changed+=1
 print("rewritten:",changed)
-left=[]
+
+# rename files so public classes match
 for dirpath,_,files in os.walk(ROOT):
     for f in files:
-        if os.path.splitext(f)[1] in EXTS:
-            p=os.path.join(dirpath,f)
-            try:
-                txt=open(p,encoding="utf-8",errors="surrogateescape").read()
-                if "KernelSUApplication" in txt or "me.weishu.kernelsu" in txt or "magica" in txt:
-                    left.append(p)
-            except Exception: pass
-if left:
-    print("LEFTOVER:",left[:5]); sys.exit(1)
+        for a,b in FILE_RENAMES:
+            if f == a:
+                src=os.path.join(dirpath,f)
+                dst=os.path.join(dirpath,b)
+                if not os.path.exists(dst):
+                    os.rename(src,dst)
+                    print("mv", a, "->", b)
+
 print("clean")
