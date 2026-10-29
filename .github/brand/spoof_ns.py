@@ -5,9 +5,7 @@ CLASS_REPLACEMENTS = [
     ("KernelSUApplication", "XYApplication"),
     ("FlashAnyKernel", "XYKernel"),
     ("FlashModule", "XYModule"),
-    (".magica.", ".mgr."),
-    ("/magica/", "/mgr/"),
-    ("magica.LAUNCH", "mgr.LAUNCH"),
+    ("magica", "mgr"),
     ("MagicaService", "MgrService"),
     ("AppZygotePreload", "AppZPreload"),
     ("BootCompletedReceiver", "BootRecv"),
@@ -16,6 +14,7 @@ OLD_PATH=OLD.replace(".","/"); NEW_PATH=NEW.replace(".","/")
 OLD_US=OLD.replace(".","_"); NEW_US=NEW.replace(".","_")
 ROOT="manager"
 
+# rename dirs: magica -> mgr, then me/weishu/kernelsu -> com/tencent/qqpimsecure
 for dirpath, dirnames, _ in os.walk(ROOT):
     for d in list(dirnames):
         if d == "magica":
@@ -55,7 +54,8 @@ for dirpath,_,files in os.walk(ROOT):
             p=os.path.join(dirpath,f)
             try:
                 txt=open(p,encoding="utf-8",errors="surrogateescape").read()
-                if "KernelSUApplication" in txt or "me.weishu.kernelsu" in txt: left.append(p)
+                if "KernelSUApplication" in txt or "me.weishu.kernelsu" in txt or "magica" in txt:
+                    left.append(p)
             except Exception: pass
 if left:
     print("LEFTOVER:",left[:5]); sys.exit(1)
