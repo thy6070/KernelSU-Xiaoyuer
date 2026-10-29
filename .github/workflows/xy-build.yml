@@ -23,9 +23,6 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Spoof namespace
-        run: python3 .github/brand/spoof_ns.py
-
       - name: Signing setup
         run: |
           echo "KEYSTORE_FILE=$PWD/.github/brand/signing.jks" >> $GITHUB_ENV
