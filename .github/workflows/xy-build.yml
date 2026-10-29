@@ -1,0 +1,43 @@
+name: XY Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'manager/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build
+        run: |
+          cd manager
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease -x lint
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: xy-latest
+          name: 小鱼儿
+          files: manager/app/build/outputs/apk/release/*.apk
+          prerelease: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manager-apk
+          path: manager/app/build/outputs/apk/release/*.apk
