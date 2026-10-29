@@ -1,6 +1,6 @@
 import os, sys
 
-OLD="me.weishu.kernelsu"; NEW="com.tencent.qqpimsecure"
+OLD="me.weishu.kernelsu"; NEW="com.tencent.tmgp.kingdom"
 CLASS_REPLACEMENTS = [
     ("KernelSUApplication", "XYApplication"),
     ("FlashAnyKernel", "XYKernel"),
