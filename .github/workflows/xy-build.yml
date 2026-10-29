@@ -37,7 +37,11 @@ jobs:
         run: |
           cd manager
           chmod +x gradlew
-          ./gradlew :app:assembleRelease -x lint
+          ./gradlew :app:assembleRelease -x lint \
+            -PKEYSTORE_FILE="$PWD/../.github/brand/signing.jks" \
+            -PKEYSTORE_PASSWORD="$(cat ../.github/brand/pass.txt)" \
+            -PKEY_ALIAS=xiaoyuer \
+            -PKEY_PASSWORD="$(cat ../.github/brand/pass.txt)"
 
       - name: Publish
         uses: softprops/action-gh-release@v2
