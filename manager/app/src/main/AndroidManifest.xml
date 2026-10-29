@@ -69,11 +69,7 @@
             android:theme="@style/Theme.KernelSU.WebUI" />
 
 
-        <service
-            android:name=".magica.MagicaService"
-            android:directBootAware="true"
-            android:exported="false"
-            android:isolatedProcess="true" />
+        
 
         <service
             android:name=".ui.util.DownloadService"
