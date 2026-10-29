@@ -35,10 +35,11 @@ jobs:
 
       - name: Build
         run: |
+          cp .github/brand/signing.jks manager/signing.jks
           cd manager
           chmod +x gradlew
           ./gradlew :app:assembleRelease -x lint \
-            -PKEYSTORE_FILE="$PWD/../.github/brand/signing.jks" \
+            -PKEYSTORE_FILE="$PWD/signing.jks" \
             -PKEYSTORE_PASSWORD="$(cat ../.github/brand/pass.txt)" \
             -PKEY_ALIAS=xiaoyuer \
             -PKEY_PASSWORD="$(cat ../.github/brand/pass.txt)"
