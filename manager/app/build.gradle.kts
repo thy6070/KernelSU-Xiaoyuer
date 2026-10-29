@@ -63,6 +63,20 @@ val baseCppFlags = baseCFlags + "-fno-rtti"
 android {
     namespace = "me.weishu.kernelsu"
 
+    signingConfigs {
+        create("xy") {
+            val ks = (project.findProperty("KEYSTORE_FILE") as String?) ?: System.getenv("KEYSTORE_FILE")
+            if (!ks.isNullOrBlank() && file(ks).exists()) {
+                storeFile = file(ks)
+                storePassword = (project.findProperty("KEYSTORE_PASSWORD") as String?)
+                    ?: System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = (project.findProperty("KEY_ALIAS") as String?) ?: "xiaoyuer"
+                keyPassword = (project.findProperty("KEY_PASSWORD") as String?)
+                    ?: System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             externalNativeBuild {
@@ -72,6 +86,7 @@ android {
             }
         }
         release {
+            signingConfig = signingConfigs.findByName("xy")
             isMinifyEnabled = true
             isShrinkResources = true
             vcsInfo.include = false
