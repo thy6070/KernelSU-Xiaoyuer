@@ -103,8 +103,10 @@ jobs:
           cp $U/data/repository/SuperUserRepositoryImpl.kt $S/data/repository/
           cp old/manager/app/src/main/res/xml/file_paths.xml src/manager/app/src/main/res/xml/
           for d in hdpi mdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p src/manager/app/src/main/res/mipmap-$d
             cp old/manager/app/src/main/res/mipmap-$d/ic_modules_foreground.png src/manager/app/src/main/res/mipmap-$d/
           done
+          mkdir -p src/manager/app/src/main/res/xml src/manager/app/src/main/res/drawable-nodpi
           cp old/kernel/feature/selinux_hide.c src/kernel/feature/
           echo overlay-ok
 
