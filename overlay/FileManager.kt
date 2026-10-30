@@ -1639,6 +1639,7 @@ private fun ProMaxIsland(
                                     GradientActionButton("data/储存", Color(0xFF0A84FF)) { switchStep(2) }
                                     GradientActionButton("文件/文件夹", Color(0xFF0A84FF)) { switchStep(1) }
                                     GradientActionButton("跳转", Color(0xFF0A84FF)) { switchStep(4) }
+                                    FpsBadge()
                                 }
                                 1 -> {
                                     Row(
@@ -2242,6 +2243,47 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
 }
 
 @Composable
+@Composable
+private fun FpsBadge() {
+    var fps by remember { mutableStateOf(-1) }
+    LaunchedEffect(Unit) {
+        fun sh(c: String): String {
+            return try {
+                val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                val out = p.inputStream.bufferedReader().readText()
+                p.waitFor()
+                out
+            } catch (t: Throwable) { "" }
+        }
+        while (true) {
+            try {
+                val resumed = sh("dumpsys activity activities 2>/dev/null | grep -m1 ResumedActivity")
+                val pkg = Regex("([a-zA-Z0-9_.]+)/").find(resumed)?.groupValues?.get(1)
+                if (pkg != null) {
+                    val lst = sh("dumpsys SurfaceFlinger --list 2>/dev/null | grep " + pkg + " | head -1")
+                    val layer = Regex("RequestedLayerState\\{\\S+ (.+?) parentId=").find(lst)?.groupValues?.get(1)
+                    if (layer != null) {
+                        val lat = sh("dumpsys SurfaceFlinger --latency '" + layer + "'")
+                        val now = System.nanoTime()
+                        val n = lat.lines().drop(1).mapNotNull { line ->
+                            line.trim().split("\t").getOrNull(1)?.toLongOrNull()
+                        }.count { now - it in 0..1000000000L }
+                        fps = n
+                    } else fps = -1
+                } else fps = -1
+            } catch (t: Throwable) { fps = -1 }
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+    Text(
+        text = if (fps >= 0) "FPS " + fps else "FPS --",
+        color = if (fps >= 60) Color(0xFF34C759) else if (fps >= 30) Color(0xFFFFCC00) else Color(0xFFFF3B30),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 6.dp, top = 2.dp)
+    )
+}
+
 private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
     Box(
         modifier = Modifier.fillMaxSize().clickable { onDismiss() },
