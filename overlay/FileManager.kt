@@ -2243,7 +2243,6 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
 }
 
 @Composable
-@Composable
 private fun FpsBadge() {
     var fps by remember { mutableStateOf(-1) }
     LaunchedEffect(Unit) {
@@ -2284,6 +2283,7 @@ private fun FpsBadge() {
     )
 }
 
+@Composable
 private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
     Box(
         modifier = Modifier.fillMaxSize().clickable { onDismiss() },
