@@ -72,7 +72,9 @@ jobs:
           test -n "$APK"
           BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -n1)
           $BT/apksigner sign --ks .github/brand/jidao.jks --ks-key-alias jidao \
-            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" "$APK"
+            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled false \
+            "$APK"
           $BT/apksigner verify --print-certs "$APK" | head -6
           cp "$APK" manager-32713.apk
 
