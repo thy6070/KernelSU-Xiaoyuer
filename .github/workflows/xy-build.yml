@@ -11,6 +11,9 @@ permissions:
   contents: write
 
 jobs:
+  ksuinit:
+    uses: ./.github/workflows/ksuinit.yml
+
   build-ksud:
     needs: ksuinit
     uses: ./.github/workflows/ksud.yml
