@@ -1,0 +1,177 @@
+name: JD-32713 UI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      cert_size: ${{ steps.cert.outputs.size }}
+      cert_hash: ${{ steps.cert.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Extract jidao cert
+        id: cert
+        run: |
+          PASS=$(cat .github/brand/jidao_pass.txt)
+          keytool -exportcert -keystore .github/brand/jidao.jks -alias jidao -storepass "$PASS" -file cert.der
+          SIZE=$(stat -c%s cert.der)
+          HASH=$(openssl x509 -inform DER -in cert.der -outform DER | sha256sum | cut -d' ' -f1)
+          echo "size=0x$(printf '%03x' $SIZE)" >> "$GITHUB_OUTPUT"
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "cert $SIZE $HASH"
+
+  ksud:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone official 32713
+        run: |
+          git clone -q https://github.com/tiann/KernelSU.git src
+          cd src && git checkout 5955f6bcb48a0fd8ab5cd7cec91be13bb2f5bdc3
+      - name: Setup rust
+        run: |
+          rustup update stable
+          rustup target add aarch64-linux-android
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r29
+      - name: Build ksuinit
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          cd src
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-aarch64-android.a"
+          export RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wno-unused-command-line-argument -C link-arg=$BUILTINS"
+          cargo build --package ksuinit --target=aarch64-linux-android --release
+          mkdir -p userspace/ksud/bin/aarch64
+          cp target/aarch64-linux-android/release/ksuinit userspace/ksud/bin/aarch64/
+      - name: Build ksud
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          KSU_PACKAGE_NAME: com.tencent.THY
+        run: |
+          cd src
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          cargo build --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
+          ls -l target/aarch64-linux-android/release/ksud
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ksud-aarch64
+          path: |
+            src/target/aarch64-linux-android/release/ksud
+            src/target/aarch64-linux-android/release/ksuinit
+
+  apk:
+    needs: [prepare, ksud]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone official 32713
+        run: |
+          git clone -q https://github.com/tiann/KernelSU.git src
+          cd src && git checkout 5955f6bcb48a0fd8ab5cd7cec91be13bb2f5bdc3
+          echo "commit count: $(git rev-list --count HEAD)"
+
+      - name: Clone old UI repo
+        run: git clone -q --depth 1 https://github.com/thy6070/KernelSU-Official.git old
+
+      - name: Overlay old UI files
+        run: |
+          U=old/manager/app/src/main/java/me/weishu/kernelsu
+          S=src/manager/app/src/main/java/me/weishu/kernelsu
+          cp $U/ui/MainActivity.kt $S/ui/
+          cp $U/ui/screen/FileManager.kt $S/ui/screen/
+          cp $U/ui/screen/CardLogin.kt $S/ui/screen/
+          cp $U/ui/screen/FileLocate.kt $S/ui/screen/
+          cp $U/ui/screen/XyTypography.kt $S/ui/screen/
+          cp $U/ui/navigation3/Routes.kt $S/ui/navigation3/
+          cp $U/ui/component/bottombar/NavigationRailMaterial.kt $S/ui/component/bottombar/
+          cp $U/ui/component/material/ExpressiveMenu.kt $S/ui/component/material/
+          cp $U/ui/screen/settings/SettingsMaterial.kt $S/ui/screen/settings/
+          cp $U/data/repository/SuperUserRepositoryImpl.kt $S/data/repository/
+          cp old/manager/app/src/main/res/xml/file_paths.xml src/manager/app/src/main/res/xml/
+          for d in hdpi mdpi xhdpi xxhdpi xxxhdpi; do
+            cp old/manager/app/src/main/res/mipmap-$d/ic_modules_foreground.png src/manager/app/src/main/res/mipmap-$d/
+          done
+          cp old/kernel/feature/selinux_hide.c src/kernel/feature/
+          echo overlay-ok
+
+      - name: Overlay our config
+        run: |
+          cp manager/app/build.gradle.kts src/manager/app/build.gradle.kts
+          cp manager/app/src/main/AndroidManifest.xml src/manager/app/src/main/AndroidManifest.xml
+          cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
+          cp manager/app/src/main/res/drawable-nodpi/ic_zysu.png src/manager/app/src/main/res/drawable-nodpi/ic_zysu.png
+
+      - name: Spoof namespace
+        run: |
+          cd src
+          python3 ../.github/brand/spoof_ns.py
+          echo "spoof ok"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v3
+
+      - name: Build APK
+        run: |
+          cd src/manager
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease -x lint 2>&1 | tail -120
+
+      - name: Download ksud
+        uses: actions/download-artifact@v4
+        with:
+          name: ksud-aarch64
+          path: ksud-out
+
+      - name: Inject ksud + ksuinit
+        run: |
+          KSUD=$(find ksud-out -type f -name ksud | head -n1)
+          KINIT=$(find ksud-out -type f -name ksuinit | head -n1)
+          APK=$(find src/manager/app/build/outputs/apk/release -name "*.apk" | head -n1)
+          test -n "$KSUD"; test -n "$KINIT"; test -n "$APK"
+          mkdir -p inj/lib/arm64-v8a inj/assets
+          cp "$KSUD" inj/lib/arm64-v8a/libksud.so
+          cp "$KINIT" inj/assets/ksuinit
+          chmod 644 inj/lib/arm64-v8a/libksud.so inj/assets/ksuinit
+          cd inj && zip -q -r "../$APK" lib assets && cd ..
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -n1)
+          $BT/zipalign -f -p 4 "$APK" aligned.apk
+
+      - name: Sign APK (v2 only)
+        run: |
+          PASS=$(cat .github/brand/jidao_pass.txt)
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -n1)
+          $BT/apksigner sign --ks .github/brand/jidao.jks --ks-key-alias jidao \
+            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled false \
+            --out manager-32713-ui.apk aligned.apk
+          $BT/apksigner verify --print-certs manager-32713-ui.apk | head -4
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manager-32713-ui
+          path: manager-32713-ui.apk
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jd-32713-ui
+          name: 极道帝兵 UI
+          files: manager-32713-ui.apk
