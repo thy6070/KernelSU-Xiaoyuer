@@ -1,0 +1,31 @@
+name: Generate Key
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Generate keystore
+        run: |
+          PASS="jidao$(date +%s | sha256sum | head -c 12)"
+          keytool -genkeypair -v -keystore jidao.jks -alias jidao \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "$PASS" -keypass "$PASS" \
+            -dname "CN=Jidao, OU=XY, O=XY, L=CN, ST=CN, C=CN"
+          echo "$PASS" > pass.txt
+          keytool -exportcert -alias jidao -keystore jidao.jks -storepass "$PASS" -file cert.der
+          echo "SHA256:"
+          sha256sum cert.der
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jidao-key
+          path: |
+            jidao.jks
+            pass.txt
+            cert.der
