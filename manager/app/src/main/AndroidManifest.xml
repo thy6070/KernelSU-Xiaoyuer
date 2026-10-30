@@ -34,8 +34,11 @@
         android:theme="@style/Theme.KernelSU">
         <activity
             android:name=".ui.MainActivity"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:screenOrientation="landscape"
             android:exported="true"
-            android:theme="@style/Theme.KernelSU.Starting"
+            android:theme="@style/Theme.KernelSU"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
