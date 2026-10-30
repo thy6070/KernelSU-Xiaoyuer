@@ -25,18 +25,18 @@ jobs:
 
       - name: Signing setup
         run: |
-          echo "KEYSTORE_FILE=$PWD/.github/brand/signing.jks" >> $GITHUB_ENV
-          echo "KEYSTORE_PASSWORD=$(cat .github/brand/pass.txt)" >> $GITHUB_ENV
-          echo "KEY_ALIAS=xiaoyuer" >> $GITHUB_ENV
-          echo "KEY_PASSWORD=$(cat .github/brand/pass.txt)" >> $GITHUB_ENV
+          echo "KEYSTORE_FILE=$PWD/.github/brand/jidao.jks" >> $GITHUB_ENV
+          echo "KEYSTORE_PASSWORD=$(cat .github/brand/jidao_pass.txt)" >> $GITHUB_ENV
+          echo "KEY_ALIAS=jidao" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$(cat .github/brand/jidao_pass.txt)" >> $GITHUB_ENV
 
       - name: Build
         run: |
-          cp .github/brand/signing.jks manager/signing.jks
+          cp .github/brand/jidao.jks manager/signing.jks
           export KEYSTORE_FILE="$(pwd)/manager/signing.jks"
-          export KEYSTORE_PASSWORD="$(cat .github/brand/pass.txt)"
+          export KEYSTORE_PASSWORD="$(cat .github/brand/jidao_pass.txt)"
           export KEY_ALIAS="xiaoyuer"
-          export KEY_PASSWORD="$(cat .github/brand/pass.txt)"
+          export KEY_PASSWORD="$(cat .github/brand/jidao_pass.txt)"
           echo "KS=$KEYSTORE_FILE exists=$(test -f "$KEYSTORE_FILE" && echo yes || echo no)"
           cd manager
           chmod +x gradlew
@@ -47,10 +47,10 @@ jobs:
           APK=$(find manager/app/build/outputs/apk/release -name "*.apk" | head -n1)
           test -n "$APK"
           BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -n1)
-          $BT/apksigner sign --ks .github/brand/signing.jks \
-            --ks-key-alias xiaoyuer \
-            --ks-pass "pass:$(cat .github/brand/pass.txt)" \
-            --key-pass "pass:$(cat .github/brand/pass.txt)" \
+          $BT/apksigner sign --ks .github/brand/jidao.jks \
+            --ks-key-alias jidao \
+            --ks-pass "pass:$(cat .github/brand/jidao_pass.txt)" \
+            --key-pass "pass:$(cat .github/brand/jidao_pass.txt)" \
             "$APK"
           $BT/apksigner verify --print-certs "$APK" | head -5
 
