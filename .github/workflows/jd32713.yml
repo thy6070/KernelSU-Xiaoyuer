@@ -1,0 +1,127 @@
+name: JD-32713
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      cert_size: ${{ steps.cert.outputs.size }}
+      cert_hash: ${{ steps.cert.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Extract jidao cert size/hash
+        id: cert
+        run: |
+          PASS=$(cat .github/brand/jidao_pass.txt)
+          keytool -exportcert -keystore .github/brand/jidao.jks -alias jidao -storepass "$PASS" -file cert.der
+          SIZE=$(stat -c%s cert.der)
+          HASH=$(openssl x509 -inform DER -in cert.der -outform DER | sha256sum | cut -d' ' -f1)
+          echo "size=0x$(printf '%03x' $SIZE)" >> "$GITHUB_OUTPUT"
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "cert size=$SIZE hash=$HASH"
+
+  apk:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch official 32713 (full history)
+        run: |
+          git clone -q https://github.com/tiann/KernelSU.git src
+          cd src
+          git checkout 5955f6bcb48a0fd8ab5cd7cec91be13bb2f5bdc3
+          echo "commit count: $(git rev-list --count HEAD)"
+
+      - name: Overlay our changes
+        run: |
+          cp manager/app/build.gradle.kts src/manager/app/build.gradle.kts
+          cp manager/app/src/main/AndroidManifest.xml src/manager/app/src/main/AndroidManifest.xml
+          cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
+          mkdir -p src/manager/app/src/main/res/drawable-nodpi
+          cp manager/app/src/main/res/drawable-nodpi/ic_zysu.png src/manager/app/src/main/res/drawable-nodpi/ic_zysu.png
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v3
+
+      - name: Build APK
+        run: |
+          cd src/manager
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease -x lint
+
+      - name: Sign APK
+        run: |
+          PASS=$(cat .github/brand/jidao_pass.txt)
+          APK=$(find src/manager/app/build/outputs/apk/release -name "*.apk" | head -n1)
+          test -n "$APK"
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -n1)
+          $BT/apksigner sign --ks .github/brand/jidao.jks --ks-key-alias jidao \
+            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" "$APK"
+          $BT/apksigner verify --print-certs "$APK" | head -6
+          cp "$APK" manager-32713.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manager-32713
+          path: manager-32713.apk
+
+      - name: Publish APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jd-32713
+          name: 极道帝兵 32713
+          files: manager-32713.apk
+
+  lkm:
+    needs: [prepare, apk]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:android14-6.1-20260828
+      options: --privileged
+    steps:
+      - name: Fetch official 32713 (full history)
+        run: |
+          git clone -q https://github.com/tiann/KernelSU.git /tmp/ksu
+          cd /tmp/ksu
+          git checkout 5955f6bcb48a0fd8ab5cd7cec91be13bb2f5bdc3
+          git rev-list --count HEAD
+
+      - name: Build kernelsu.ko with THY + jidao signing
+        env:
+          PSIZE: ${{ needs.prepare.outputs.cert_size }}
+          PHASH: ${{ needs.prepare.outputs.cert_hash }}
+        run: |
+          cd /tmp/ksu/kernel
+          CONFIG_KSU=m CC=clang make \
+            KSU_PACKAGE_NAME=com.tencent.THY \
+            KSU_EXPECTED_SIZE=$PSIZE \
+            KSU_EXPECTED_HASH=$PHASH
+          cp kernelsu.ko /tmp/ksu/android14-6.1_kernelsu_THY.ko
+          ls -l /tmp/ksu/android14-6.1_kernelsu_THY.ko
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lkm-32713
+          path: /tmp/ksu/android14-6.1_kernelsu_THY.ko
+
+      - name: Publish .ko
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jd-32713
+          files: /tmp/ksu/android14-6.1_kernelsu_THY.ko
