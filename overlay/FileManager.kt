@@ -2589,36 +2589,26 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                     val perfLines = listOf(
                                         "#!/system/bin/sh",
                                         "sleep 20",
-                                        "N=\$(ls -d /sys/devices/system/cpu/cpu[0-9]* 2>/dev/null | wc -l)",
-                                        "[ \"\$N\" -lt 4 ] && N=8",
-                                        "BIG=\$((N / 2))",
-                                        "[ \"\$BIG\" -lt 2 ] && BIG=2",
-                                        "[ \"\$BIG\" -ge \"\$N\" ] && BIG=\$((N - 1))",
-                                        "TOP=\"\$BIG-\$((N-1))\"",
-                                        "case \"\$TOP\" in ''|*[!0-9-]*) TOP=\"0-\$((N-1))\";; esac",
                                         "BK=/data/adb/service.d/.xy_perf_bak",
                                         "mkdir -p /data/adb/service.d",
                                         ": > \"\$BK\"",
-                                        "for d in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext; do",
-                                        "  [ -f \"\$d/target_loads\" ] || continue",
-                                        "  echo \"TL \$d \$(cat \"\$d/target_loads\" 2>/dev/null)\" >> \"\$BK\"",
-                                        "  echo 50 > \"\$d/target_loads\" 2>/dev/null",
-                                        "  if [ -f \"\$d/up_rate_limit_us\" ]; then echo \"UP \$d \$(cat \"\$d/up_rate_limit_us\")\" >> \"\$BK\"; echo 0 > \"\$d/up_rate_limit_us\" 2>/dev/null; fi",
+                                        "# MTK FPSGO / FBT / perfmgr: firmware driven frame scheduling",
+                                        "for f in /sys/kernel/fpsgo/common/fpsgo_enable /sys/kernel/fpsgo/fbt/enable_ceiling /sys/module/mtk_fpsgo/parameters/perfmgr_enable /sys/module/perfmgr_mtk/parameters/perfmgr_enable /sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled; do",
+                                        "  [ -f \"\$f\" ] || continue",
+                                        "  echo \"FG \$f \$(cat \"\$f\" 2>/dev/null)\" >> \"\$BK\"",
+                                        "  chmod 644 \"\$f\" 2>/dev/null",
+                                        "  echo 1 > \"\$f\" 2>/dev/null",
+                                        "  chmod 444 \"\$f\" 2>/dev/null",
                                         "done",
                                         "for f in /dev/cpuset/top-app/cpus /sys/fs/cgroup/top-app/cpuset.cpus /sys/fs/cgroup/cpuset/top-app/cpuset.cpus; do",
-                                        "  [ -f \"\$f\" ] && echo \"CS \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo \"\$TOP\" > \"\$f\" 2>/dev/null",
+                                        "  [ -f \"\$f\" ] && echo \"CS \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 4-7 > \"\$f\" 2>/dev/null",
                                         "done",
                                         "for f in /dev/cpuset/top-app/uclamp.min /sys/fs/cgroup/top-app/uclamp.min; do",
                                         "  [ -f \"\$f\" ] && echo \"UC \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 1024 > \"\$f\" 2>/dev/null",
                                         "done",
                                         "echo 1024 > /proc/sys/kernel/sched_util_clamp_min 2>/dev/null",
-                                        "MX=\$(dumpsys display 2>/dev/null | grep -oE \"fps=[0-9]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
-                                        "[ -z \"\$MX\" ] && MX=120",
-                                        "case \"\$MX\" in \"\"|*[!0-9]*) MX=120;; esac",
-                                        "[ \"\$MX\" -lt 120 ] && MX=120",
-                                        "echo \"FPS \$MX\" >> \"\$BK\"",
-                                        "settings put system peak_refresh_rate \"\$MX\" 2>/dev/null",
-                                        "settings put system min_refresh_rate \"\$MX\" 2>/dev/null",
+                                        "settings put system peak_refresh_rate 120 2>/dev/null",
+                                        "settings put system min_refresh_rate 120 2>/dev/null",
                                     )
                                     val scriptText = perfLines.joinToString("\n")
                                     su("mkdir -p /data/adb/service.d")
@@ -2638,6 +2628,8 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                         " 前台核" + topCpus.ifEmpty { "?" } + (if (cpuSetOk) "✓" else "✗")
                                 } else {
                                     su("rm -f $path")
+                                    su("BK=/data/adb/service.d/.xy_perf_bak; if [ -f \"\$BK\" ]; then while read -r k p rest; do case \"\$k\" in FG|CS|UC) chmod 644 \"\$p\" 2>/dev/null; echo \"\$rest\" > \"\$p\" 2>/dev/null; chmod 444 \"\$p\" 2>/dev/null;; esac; done < \"\$BK\"; rm -f \"\$BK\"; fi; settings delete system peak_refresh_rate 2>/dev/null; settings delete system min_refresh_rate 2>/dev/null; true")
+                                    su("BK=/data/adb/service.d/.xy_perf_bak; if [ -f \"\$BK\" ]; then while read -r k p rest; do case \"\$k\" in CP|TZ|GM|GG|CS|UC) echo \"\$rest\" > \"\$p\" 2>/dev/null;; esac; done < \"\$BK\"; rm -f \"\$BK\"; fi; for c in /sys/devices/system/cpu/cpu*/cpufreq; do [ -f \"\$c/scaling_governor\" ] && grep -q schedutil \"\$c/scaling_available_governors\" 2>/dev/null && echo schedutil > \"\$c/scaling_governor\" 2>/dev/null; done; settings delete system peak_refresh_rate 2>/dev/null; settings delete system min_refresh_rate 2>/dev/null; true")
                                     su("BK=/data/adb/service.d/.xy_perf_bak; if [ -f \"\$BK\" ]; then while read -r k p rest; do case \"\$k\" in TL|UP|CS|UC) echo \"\$rest\" > \"\$p\" 2>/dev/null;; esac; done < \"\$BK\"; rm -f \"\$BK\"; fi; settings delete system peak_refresh_rate 2>/dev/null; settings delete system min_refresh_rate 2>/dev/null; true")
                                     val gov = su("cat /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor 2>/dev/null").trim()
                                     val fps = su("settings get system peak_refresh_rate 2>/dev/null").trim()
