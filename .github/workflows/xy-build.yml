@@ -54,6 +54,14 @@ jobs:
             "$APK"
           $BT/apksigner verify --print-certs "$APK" | head -5
 
+      - name: Rename APK
+        run: |
+          n="${{ github.run_number }}"
+          for f in manager/app/build/outputs/apk/release/*.apk; do
+            base=$(basename "$f" .apk)
+            mv "$f" "manager/app/build/outputs/apk/release/${base}-${n}.apk"
+          done
+
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
