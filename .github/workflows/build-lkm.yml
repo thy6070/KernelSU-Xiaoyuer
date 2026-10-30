@@ -18,6 +18,20 @@ on:
         default: ''
         type: string
   workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'package name of manager'
+        required: false
+        default: 'com.tencent.THY'
+        type: string
+      expected_size:
+        required: false
+        default: ''
+        type: string
+      expected_hash:
+        required: false
+        default: ''
+        type: string
 jobs:
   build-lkm:
     strategy:
