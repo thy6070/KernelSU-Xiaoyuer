@@ -2603,13 +2603,13 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                         "  if [ -f /sys/kernel/cm_mgr/dbg_cm_mgr ]; then",
                                         "    echo 'cm_passive 1|cm_passive 0|cm_perf_mode_ceiling_opp 0|cm_mgr_dram_opp_ceiling -1' > /sys/kernel/cm_mgr/dbg_cm_mgr 2>/dev/null",
                                         "  fi",
-                                        "  for i in 0 4 7; do",
-                                        "    f=/sys/devices/system/cpu/cpufreq/policy\$i/scaling_min_freq",
-                                        "    [ -f \"\$f\" ] && echo \"MIN\$i \$(cat \"\$f\")\" >> \"\$BK\"",
+                                        "  for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq; do",
+                                        "    [ -f \"\$f\" ] || continue",
+                                        "    mf=\$(cat \"\${f%/scaling_min_freq}/cpuinfo_max_freq\" 2>/dev/null)",
+                                        "    [ -n \"\$mf\" ] || continue",
+                                        "    echo \"MN \$f \$(cat \"\$f\")\" >> \"\$BK\"",
+                                        "    echo \$((mf * 50 / 100)) > \"\$f\" 2>/dev/null",
                                         "  done",
-                                        "  echo 1000000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq 2>/dev/null",
-                                        "  echo 1300000 > /sys/devices/system/cpu/cpufreq/policy4/scaling_min_freq 2>/dev/null",
-                                        "  echo 1800000 > /sys/devices/system/cpu/cpufreq/policy7/scaling_min_freq 2>/dev/null",
                                         "  for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
                                         "    [ -f \"\$f\" ] && echo \"TL \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 20 > \"\$f\" 2>/dev/null",
                                         "  done",
@@ -2669,7 +2669,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                         " 前台核" + topCpus.ifEmpty { "?" } + (if (cpuSetOk) "✓" else "✗")
                                 } else {
                                     su("rm -f $path")
-                                    su("BK=/data/adb/service.d/.xy_perf_bak; if [ -f \"\$BK\" ]; then while read -r k p rest; do case \"\$k\" in FG|FB|GG|TB|UC|TZ) chmod 644 \"\$p\" 2>/dev/null; echo \"\$rest\" > \"\$p\" 2>/dev/null; chmod 444 \"\$p\" 2>/dev/null;; MIN0|MIN4|MIN7) i=\${k#MIN}; echo \"\$p\" > /sys/devices/system/cpu/cpufreq/policy\$i/scaling_min_freq 2>/dev/null;; TL) echo \"\$rest\" > \"\$p\" 2>/dev/null;; esac; done < \"\$BK\"; rm -f \"\$BK\"; fi; echo -1 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; settings delete system peak_refresh_rate 2>/dev/null; settings delete system min_refresh_rate 2>/dev/null; true")
+                                    su("BK=/data/adb/service.d/.xy_perf_bak; if [ -f \"\$BK\" ]; then while read -r k p rest; do case \"\$k\" in FG|FB|GG|TB|UC|TZ) chmod 644 \"\$p\" 2>/dev/null; echo \"\$rest\" > \"\$p\" 2>/dev/null; chmod 444 \"\$p\" 2>/dev/null;; MN) echo \"\$rest\" > \"\$p\" 2>/dev/null;; TL) echo \"\$rest\" > \"\$p\" 2>/dev/null;; esac; done < \"\$BK\"; rm -f \"\$BK\"; fi; echo -1 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; settings delete system peak_refresh_rate 2>/dev/null; settings delete system min_refresh_rate 2>/dev/null; true")
                                     val gov = su("cat /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor 2>/dev/null").trim()
                                     val fps = su("settings get system peak_refresh_rate 2>/dev/null").trim()
                                     "已恢复 · " + (gov.ifEmpty { "?" }) +
