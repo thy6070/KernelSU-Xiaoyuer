@@ -34,6 +34,8 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - uses: gradle/actions/setup-gradle@v3
+
       - name: Signing setup
         run: |
           echo "KEYSTORE_FILE=$PWD/.github/brand/jidao.jks" >> $GITHUB_ENV
