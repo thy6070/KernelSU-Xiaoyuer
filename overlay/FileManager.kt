@@ -2618,6 +2618,11 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                         "    echo 0 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null",
                                         "  fi",
                                         "  echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null",
+                                        "  for f in /sys/module/mtk_fpsgo/parameters/boost_LR; do",
+                                        "    [ -f \"\$f\" ] && echo \"FB \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 1 > \"\$f\" 2>/dev/null",
+                                        "  done",
+                                        "  f=/sys/module/mtk_fpsgo/parameters/set_ux_uclampmin",
+                                        "  [ -f \"\$f\" ] && echo \"FB \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 1024 > \"\$f\" 2>/dev/null",
                                         "fi",
                                         "# ==== Snapdragon ====",
                                         "if [ -d /sys/class/kgsl/kgsl-3d0 ]; then",
@@ -2664,7 +2669,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                         " 前台核" + topCpus.ifEmpty { "?" } + (if (cpuSetOk) "✓" else "✗")
                                 } else {
                                     su("rm -f $path")
-                                    su("BK=/data/adb/service.d/.xy_perf_bak; if [ -f \"\$BK\" ]; then while read -r k p rest; do case \"\$k\" in FG|GG|TB|UC|TZ) chmod 644 \"\$p\" 2>/dev/null; echo \"\$rest\" > \"\$p\" 2>/dev/null; chmod 444 \"\$p\" 2>/dev/null;; MIN0|MIN4|MIN7) i=\${k#MIN}; echo \"\$p\" > /sys/devices/system/cpu/cpufreq/policy\$i/scaling_min_freq 2>/dev/null;; TL) echo \"\$rest\" > \"\$p\" 2>/dev/null;; esac; done < \"\$BK\"; rm -f \"\$BK\"; fi; echo -1 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; settings delete system peak_refresh_rate 2>/dev/null; settings delete system min_refresh_rate 2>/dev/null; true")
+                                    su("BK=/data/adb/service.d/.xy_perf_bak; if [ -f \"\$BK\" ]; then while read -r k p rest; do case \"\$k\" in FG|FB|GG|TB|UC|TZ) chmod 644 \"\$p\" 2>/dev/null; echo \"\$rest\" > \"\$p\" 2>/dev/null; chmod 444 \"\$p\" 2>/dev/null;; MIN0|MIN4|MIN7) i=\${k#MIN}; echo \"\$p\" > /sys/devices/system/cpu/cpufreq/policy\$i/scaling_min_freq 2>/dev/null;; TL) echo \"\$rest\" > \"\$p\" 2>/dev/null;; esac; done < \"\$BK\"; rm -f \"\$BK\"; fi; echo -1 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; settings delete system peak_refresh_rate 2>/dev/null; settings delete system min_refresh_rate 2>/dev/null; true")
                                     val gov = su("cat /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor 2>/dev/null").trim()
                                     val fps = su("settings get system peak_refresh_rate 2>/dev/null").trim()
                                     "已恢复 · " + (gov.ifEmpty { "?" }) +
