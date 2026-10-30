@@ -43,6 +43,9 @@ jobs:
           echo "KEY_ALIAS=jidao" >> $GITHUB_ENV
           echo "KEY_PASSWORD=$(cat .github/brand/jidao_pass.txt)" >> $GITHUB_ENV
 
+      - name: Spoof namespace
+        run: python3 .github/brand/spoof_ns.py
+
       - name: Build
         run: |
           cp .github/brand/jidao.jks manager/signing.jks
