@@ -1,5 +1,5 @@
 import os, sys
-OLD="me.weishu.kernelsu"; NEW="com.tencent.tmgp.kingdom"
+OLD="me.weishu.kernelsu"; NEW="com.tencent.THY"
 OLD_PATH=OLD.replace(".","/"); NEW_PATH=NEW.replace(".","/")
 OLD_US=OLD.replace(".","_"); NEW_US=NEW.replace(".","_")
 ROOT="manager"
@@ -34,5 +34,5 @@ for dirpath,_,files in os.walk(ROOT):
                 if OLD in open(p,encoding="utf-8",errors="surrogateescape").read(): left.append(p)
             except Exception: pass
 if left:
-    print("LEFTOVER:",left[:5]); sys.exit(1)
+    print("LEFTOVER:",left[:3]); sys.exit(1)
 print("clean")
