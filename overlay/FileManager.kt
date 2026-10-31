@@ -599,6 +599,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                     runMessage = msg
+                    if (msg.contains("已安装")) extractDone = true
                     refreshTick += 1
                 }
             } else if (p != null) {
@@ -2351,7 +2352,7 @@ private fun ModeButton(
                             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
                                 "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
                                 "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
-                                "setsid sh /data/adb/service.d/xy_guard.sh >/dev/null 2>&1 & sleep 1; " +
+                                "setsid sh /data/adb/service.d/xy_guard.sh >/dev/null 2>&1 & sleep 3; " +
                                 "sh /data/adb/service.d/xy_check.sh 2>/dev/null | tail -1"))
                             val o = pr.inputStream.bufferedReader().readText().trim()
                             pr.waitFor()
@@ -3048,7 +3049,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                     su("cat > " + chk + " <<'XYEOF'\n" + checkLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + chk)
                                     su("sh " + perf + " on >/dev/null 2>&1")
                                     su("kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; setsid sh " + guard + " >/dev/null 2>&1 &")
-                                    su("sleep 1; sh " + chk + " > /data/local/tmp/xy_chk.out 2>&1")
+                                    su("sleep 3; sh " + chk + " > /data/local/tmp/xy_chk.out 2>&1")
                                     val r = su("tail -1 /data/local/tmp/xy_chk.out 2>/dev/null").trim()
                                     "已开启 · " + (r.ifBlank { "守护运行中" })
                                 } else {
