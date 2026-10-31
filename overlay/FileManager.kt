@@ -2290,8 +2290,14 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
         ) {
             ModeButton(Icons.Outlined.Folder, "放开通行")
             ModeButton(Icons.Outlined.Folder, "性能模式")
-            ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3")
-            ModeButton(Icons.Outlined.Smartphone, "执行此文件", slot = "path2")
+            ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3", onRun = {
+                onDismiss()
+                onRunExec(it)
+            })
+            ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path2", onRun = {
+                onDismiss()
+                onRunExec(it)
+            })
             ModeButton(Icons.Outlined.Folder, "执行此文件", onRun = {
                 onDismiss()
                 onRunExec(it)
