@@ -599,6 +599,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                     runMessage = msg
+                    selectedFile = null
                     refreshTick += 1
                 }
             } else if (p != null) {
