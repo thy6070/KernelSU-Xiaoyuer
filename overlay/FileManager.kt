@@ -553,11 +553,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             "/data/adb/modules/busybox-ndk/system/bin/busybox"
                         ).firstOrNull { java.io.File(it).isFile }
                         val qq = { s: String -> "'" + s.replace("'", "'\''") + "'" }
-                        val wrapped = if (bb != null) {
-                            "exec " + qq(bb) + " script -q /dev/null -c " + qq(cmd + " 2>&1")
-                        } else {
-                            cmd + " 2>&1"
-                        }
+                        // 不用 busybox script（-c 参数解析不稳，嵌套引号会失败），直接执行
+                        val wrapped = cmd + " 2>&1"
                         withContext(Dispatchers.IO) {
                             val pb = ProcessBuilder("/system/bin/sh", "-c", "su -c " + qq(wrapped))
                             pb.redirectErrorStream(true)
@@ -631,11 +628,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "chmod 755 \"$p\" 2>/dev/null ; " +
                                         (if (key.isEmpty()) "\"$p\"" else "\"$p\" -k \"$key\"") + " 2>&1"
                                 }
-                                else -> "chmod 777 \"$file\" 2>/dev/null; exec sh \"$file\""
+                                else -> "cd \"$dir\" 2>/dev/null; chmod 777 \"$file\" 2>/dev/null; sh \"$file\" < /dev/null 2>&1 | tail -n 30"
                             }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
-                            pb.directory(java.io.File(dir))
+                            pb.directory(java.io.File("/data/local/tmp"))
                             pb.environment()["PATH"] = "/system/bin:/system/xbin:/sbin:/vendor/bin"
                             pb.environment()["HOME"] = "/data"
                             pb.environment()["TMPDIR"] = "/data/local/tmp"
