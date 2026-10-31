@@ -1306,9 +1306,10 @@ private fun ProMaxIsland(
                     NavIcon(Icons.Outlined.InsertDriveFile) { openNav("home") }
                     NavIcon(Icons.Outlined.AdminPanelSettings) { openNav("su") }
                     NavIcon(Icons.Outlined.Layers) { openNav("module") }
-                    NavIcon(Icons.Outlined.Settings) {
-                        expanded = false; navMode = false; navTarget = null
-                        onNavigate("settings")
+                    NavIcon(Icons.Outlined.Smartphone) {
+                        expanded = true
+                        navMode = true
+                        navTarget = "device"
                     }
                 }
             }
@@ -1318,6 +1319,74 @@ private fun ProMaxIsland(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     when (navTarget) {
+                        "device" -> {
+                            val models = listOf(
+                                Triple("小米 14 Pro", "23116PN5BC", "Xiaomi"),
+                                Triple("小米 15", "24129PN74C", "Xiaomi"),
+                                Triple("OPPO Find X7 Ultra", "PHY110", "OPPO"),
+                                Triple("一加 12", "PJD110", "OnePlus"),
+                                Triple("vivo X100 Pro", "V2324A", "vivo"),
+                                Triple("iQOO 12", "V2307A", "iQOO"),
+                                Triple("荣耀 Magic6 Pro", "BVL-AN16", "HONOR"),
+                                Triple("红魔 9 Pro+", "NX769J", "nubia"),
+                                Triple("ROG 8 Pro", "AI2401", "asus"),
+                                Triple("三星 S24 Ultra", "SM-S9280", "samsung"),
+                                Triple("华为 Mate 60 Pro", "ALN-AL00", "HUAWEI"),
+                                Triple("Pixel 8 Pro", "GC3VE", "Google")
+                            )
+                            var applied by remember { mutableStateOf<String?>(null) }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                                    .background(Color(0xFF0E0E10), RoundedCornerShape(12.dp))
+                                    .padding(8.dp)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                Text(
+                                    text = if (applied != null) "已伪装为 $applied（重启后仍生效）" else "选择机型（全局伪装 ro.product.*）",
+                                    fontSize = 11.sp,
+                                    color = if (applied != null) Color(0xFF4CAF50) else Color(0xFFBDBDBD),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                                models.forEach { m ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 2.dp)
+                                            .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                applied = m.first
+                                                navScope.launch {
+                                                    withContext(Dispatchers.IO) {
+                                                        try {
+                                                            fun su(c: String): String {
+                                                                val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                                                val o = pr.inputStream.bufferedReader().readText()
+                                                                pr.waitFor()
+                                                                return o
+                                                            }
+                                                            val script = "#!/system/bin/sh\n" +
+                                                                "resetprop ro.product.model \"${m.second}\"\n" +
+                                                                "resetprop ro.product.brand \"${m.third}\"\n" +
+                                                                "resetprop ro.product.manufacturer \"${m.third}\"\n" +
+                                                                "resetprop ro.product.device \"${m.second}\"\n" +
+                                                                "resetprop ro.product.name \"${m.second}\"\n"
+                                                            su(script.replace("
+", "; ").trim())
+                                                            su("cat > /data/adb/service.d/xy_device.sh <<'DEVEOF'\n" + script + "DEVEOF\nchmod 755 /data/adb/service.d/xy_device.sh")
+                                                        } catch (t: Throwable) {
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(text = m.first, fontSize = 12.sp, color = Color.White)
+                                    }
+                                }
+                            }
+                        }
                         "module" -> {
                             Box(
                                 modifier = Modifier
