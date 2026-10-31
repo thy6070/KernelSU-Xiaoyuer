@@ -976,7 +976,6 @@ private fun ProMaxIsland(
     LaunchedEffect(runMessage) {
         if (runMessage == "已安装" || runMessage == "安装失败") {
             expanded = false
-            extractDone = true
         }
     }
     LaunchedEffect(running) {
@@ -2289,9 +2288,9 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
             modifier = Modifier.width(300.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            ModeButton(Icons.Outlined.DarkMode, "放开通行")
-            ModeButton(Icons.Outlined.AcUnit, "性能模式")
-            ModeButton(Icons.Outlined.Person, "隐藏BL")
+            ModeButton(Icons.Outlined.Folder, "放开通行")
+            ModeButton(Icons.Outlined.Folder, "性能模式")
+            ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3")
             ModeButton(Icons.Outlined.Smartphone, "执行此文件", slot = "path2")
             ModeButton(Icons.Outlined.Folder, "执行此文件", onRun = {
                 onDismiss()
