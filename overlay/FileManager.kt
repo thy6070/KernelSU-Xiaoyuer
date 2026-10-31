@@ -924,12 +924,11 @@ private fun ProMaxIsland(
                     val apps = res.getOrNull()?.first ?: emptyList()
                     val pm = navCtx.packageManager
                     apps.filter { ai ->
-                        if (ai.uid < 10000) return@filter false
-                        runCatching {
-                            val fl = pm.getApplicationInfo(ai.packageName, 0).flags
-                            (fl and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 &&
-                                (fl and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
-                        }.getOrDefault(false)
+                        if (ai.packageName == navCtx.packageName) return@filter false
+                        if (ai.allowSu) return@filter true
+                        ai.packageInfo.applicationInfo?.let {
+                            (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
+                        } ?: true
                     }.map { ai ->
                         val icon = try {
                             val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
@@ -2297,8 +2296,8 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
             modifier = Modifier.width(300.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            ModeButton(Icons.Outlined.Folder, "放开通行")
-            ModeButton(Icons.Outlined.Folder, "性能模式")
+            ModeButton(Icons.Outlined.DarkMode, "放开通行")
+            ModeButton(Icons.Outlined.AcUnit, "性能模式")
             ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3", onRun = {
                 onDismiss()
                 onRunExec(it)
