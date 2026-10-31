@@ -2897,6 +2897,40 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     ""
                                     )
                                     su("cat > /data/adb/xy_game.sh <<'XYEOF'\n" + gameLines.joinToString("\n") + "\nXYEOF\nchmod 755 /data/adb/xy_game.sh")
+                                    val checkLines = listOf(
+                    "#!/system/bin/sh",
+                    "OK=0; BAD=0",
+                    "pass() { echo \"✓ \$1\"; OK=\$((OK+1)); }",
+                    "fail() { echo \"✗ \$1\"; BAD=\$((BAD+1)); }",
+                    "for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq; do",
+                    "  [ -f \"\$f\" ] || continue",
+                    "  base=\${f%/scaling_min_freq}",
+                    "  mf=\$(cat \"\$base/cpuinfo_max_freq\" 2>/dev/null); [ -n \"\$mf\" ] || continue",
+                    "  want=\$((mf * 40 / 100)); cur=\$(cat \"\$f\" 2>/dev/null)",
+                    "  lo=\$((want * 90 / 100)); hi=\$((want * 110 / 100))",
+                    "  if [ \"\$cur\" -ge \"\$lo\" ] 2>/dev/null && [ \"\$cur\" -le \"\$hi\" ] 2>/dev/null; then",
+                    "    pass \"min_freq \$(basename \$base) = \$cur (目标 \$want)\"",
+                    "  else",
+                    "    fail \"min_freq \$(basename \$base) = \$cur (目标 \$want)\"",
+                    "  fi",
+                    "done",
+                    "for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
+                    "  [ -f \"\$f\" ] || continue",
+                    "  cur=\$(cat \"\$f\" 2>/dev/null)",
+                    "  [ \"\$cur\" = \"40\" ] && pass \"target_loads \$(basename \$(dirname \$(dirname \$f))) = 40\" || fail \"target_loads \$f = \$cur (应为 40)\"",
+                    "done",
+                    "if [ -f /sys/kernel/fpsgo/common/fpsgo_enable ]; then",
+                    "  [ \"\$(cat /sys/kernel/fpsgo/common/fpsgo_enable 2>/dev/null)\" = \"1\" ] && pass \"FPSGO 已开启\" || fail \"FPSGO 未开启\"",
+                    "fi",
+                    "[ \"\$(cat /proc/sys/kernel/sched_util_clamp_min 2>/dev/null)\" = \"1024\" ] && pass \"uclamp = 1024\" || fail \"uclamp 未设置\"",
+                    "PV=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "MX=\$(dumpsys display 2>/dev/null | grep -oE \"fps=[0-9]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "if [ -n \"\$PV\" ] && [ \"\$PV\" = \"\$MX\" ]; then pass \"刷新率 = \$PV (设备最高)\"; else fail \"刷新率 = \$PV (设备最高 \$MX)\"; fi",
+                    "pgrep -f xy_guard >/dev/null 2>&1 && pass \"守护进程运行中\" || fail \"守护进程未运行\"",
+                    "echo \"通过 \$OK 项，失败 \$BAD 项\"",
+                    ""
+                                    )
+                                    su("cat > /data/adb/service.d/xy_check.sh <<'XYEOF'\n" + checkLines.joinToString("\n") + "\nXYEOF\nchmod 755 /data/adb/service.d/xy_check.sh")
                                     su("printf '#!/system/bin/sh\\nsetsid sh /data/adb/xy_game.sh >/dev/null 2>&1 &\\n' > /data/adb/service.d/xy_game.sh ; chmod 755 /data/adb/service.d/xy_game.sh")
                                     su("kill \$(cat /data/adb/xy_game.pid 2>/dev/null) 2>/dev/null; sleep 0.3; setsid sh /data/adb/xy_game.sh >/dev/null 2>&1 &")
                                     "已开启"
