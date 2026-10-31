@@ -543,7 +543,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val q = "'" + p.replace("'", "'\''") + "'"
                     val cmd = "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
                         "export KSU_VER=1.0.0 ; export KSU_VER_CODE=12100 ; export KSU_KERNEL_VER_CODE=12100 ; " +
-                        "'" + ksud + "' module install " + q + " 2>&1"
+                        "cp -f " + q + " /data/local/tmp/xy_mod.zip 2>/dev/null ; " +
+                        "'" + ksud + "' module install /data/local/tmp/xy_mod.zip 2>&1"
                     try {
                         val bb = listOf(
                             "/data/adb/ksu/bin/busybox",
@@ -553,8 +554,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             "/data/adb/modules/busybox-ndk/system/bin/busybox"
                         ).firstOrNull { java.io.File(it).isFile }
                         val qq = { s: String -> "'" + s.replace("'", "'\''") + "'" }
-                        // 保留 PTY 包装（交互式模块需要终端），写法用实测通过的：script -q -c CMD /dev/null
-                        val wrapped = if (bb != null) {
+                        // 有 script applet 才用 PTY 包装（交互式模块需要），否则直跑
+                        val hasScript = bb != null && try {
+                            ProcessBuilder("/system/bin/sh", "-c", qq(bb) + " script -h >/dev/null 2>&1").start().waitFor() == 0
+                        } catch (t: Throwable) {
+                            false
+                        }
+                        val wrapped = if (hasScript) {
                             "exec " + qq(bb) + " script -q -c " + qq(cmd + " 2>&1") + " /dev/null"
                         } else {
                             cmd + " 2>&1"
