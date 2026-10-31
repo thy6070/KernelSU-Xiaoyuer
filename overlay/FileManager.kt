@@ -922,7 +922,12 @@ private fun ProMaxIsland(
                     val res = repo.getAppList()
                     val apps = res.getOrNull()?.first ?: emptyList()
                     val pm = navCtx.packageManager
-                    apps.filter { it.uid >= 10000 }.map { ai ->
+                    apps.filter { ai ->
+                        ai.uid >= 10000 && runCatching {
+                            (pm.getApplicationInfo(ai.packageName, 0).flags and
+                                android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
+                        }.getOrDefault(true)
+                    }.map { ai ->
                         val icon = try {
                             val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
                             val w = d.intrinsicWidth.coerceAtLeast(1)
@@ -974,7 +979,7 @@ private fun ProMaxIsland(
         }
     }
     LaunchedEffect(runMessage) {
-        if (runMessage == "已安装" || runMessage == "安装失败") {
+        if (runMessage == "已安装" || runMessage == "安装失败" || runMessage == "已完成") {
             expanded = false
         }
     }
