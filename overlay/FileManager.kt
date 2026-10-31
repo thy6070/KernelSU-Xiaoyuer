@@ -914,7 +914,7 @@ private fun ProMaxIsland(
                 val prefs = bootCtx.getSharedPreferences("yx_mode", 0)
                 if (prefs.getBoolean("perf", false)) {
                     Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
-                        "sh /data/adb/service.d/xy_perf.sh >/dev/null 2>&1")).waitFor()
+                        "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; setsid sh /data/adb/service.d/xy_guard.sh >/dev/null 2>&1 &")).waitFor()
                 }
                 if (prefs.getBoolean("open", false)) {
                     Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
@@ -2317,7 +2317,7 @@ private fun ModeButton(
                     withContext(kotlinx.coroutines.Dispatchers.IO) {
                         runCatching {
                             Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
-                                "sh /data/adb/service.d/xy_perf.sh >/dev/null 2>&1")).waitFor()
+                                "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; setsid sh /data/adb/service.d/xy_guard.sh >/dev/null 2>&1 &")).waitFor()
                         }
                     }
                 }
