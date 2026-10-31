@@ -582,6 +582,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val p = longPressPath ?: selectedFile
             val apkName = p?.substringAfterLast('/') ?: ""
             if (p != null && isApk(apkName)) {
+                selectedFile = null
                 uiScope.launch {
                     runMessage = "安装中…"
                     val msg = withContext(Dispatchers.IO) {
@@ -599,7 +600,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                     runMessage = msg
-                    selectedFile = null
                     refreshTick += 1
                 }
             } else if (p != null) {
@@ -982,7 +982,8 @@ private fun ProMaxIsland(
         }
     }
     LaunchedEffect(runMessage) {
-        if (runMessage == "已安装" || runMessage == "安装失败" || runMessage == "已完成") {
+        if (runMessage == "安装中…" || runMessage == "已安装" ||
+            runMessage == "安装失败" || runMessage == "已完成") {
             expanded = false
         }
     }
