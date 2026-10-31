@@ -1541,12 +1541,13 @@ private fun ProMaxIsland(
                                                     }
                                                     if (hasWeb) {
                                                         try {
+                                                            val token = me.weishu.kernelsu.data.repository.SettingsRepositoryImpl().intentToken
                                                             val it = android.content.Intent(
                                                                 navCtx,
                                                                 me.weishu.kernelsu.ui.webui.WebUIActivity::class.java
                                                             ).apply {
                                                                 putExtra("is_internal_transition", true)
-                                                                setData(android.net.Uri.parse("kernelsu://webui/${mod.id}"))
+                                                                setData(android.net.Uri.parse("ksu://webui?id=${mod.id}&token=$token"))
                                                                 putExtra("id", mod.id)
                                                                 putExtra("name", mod.name)
                                                             }
