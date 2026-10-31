@@ -642,7 +642,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
-                            pb.directory(java.io.File("/data/local/tmp"))
+                            pb.directory(java.io.File(dir))
                             pb.environment()["PATH"] = "/system/bin:/system/xbin:/sbin:/vendor/bin"
                             pb.environment()["HOME"] = "/data"
                             pb.environment()["TMPDIR"] = "/data/local/tmp"
