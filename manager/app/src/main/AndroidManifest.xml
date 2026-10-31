@@ -35,7 +35,6 @@
         <activity
             android:name=".ui.MainActivity"
             android:launchMode="singleTask"
-            android:taskAffinity=""
             android:screenOrientation="landscape"
             android:exported="true"
             android:theme="@style/Theme.KernelSU"
