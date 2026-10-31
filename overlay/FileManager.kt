@@ -1639,7 +1639,6 @@ private fun ProMaxIsland(
                                     GradientActionButton("data/储存", Color(0xFF0A84FF)) { switchStep(2) }
                                     GradientActionButton("文件/文件夹", Color(0xFF0A84FF)) { switchStep(1) }
                                     GradientActionButton("跳转", Color(0xFF0A84FF)) { switchStep(4) }
-                                    FpsBadge()
                                 }
                                 1 -> {
                                     Row(
@@ -2243,47 +2242,6 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun FpsBadge() {
-    var fps by remember { mutableStateOf(-1) }
-    LaunchedEffect(Unit) {
-        fun sh(c: String): String {
-            return try {
-                val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
-                val out = p.inputStream.bufferedReader().readText()
-                p.waitFor()
-                out
-            } catch (t: Throwable) { "" }
-        }
-        while (true) {
-            try {
-                val resumed = sh("dumpsys activity activities 2>/dev/null | grep -m1 ResumedActivity")
-                val pkg = Regex("([a-zA-Z0-9_.]+)/").find(resumed)?.groupValues?.get(1)
-                if (pkg != null) {
-                    val lst = sh("dumpsys SurfaceFlinger --list 2>/dev/null | grep " + pkg + " | head -1")
-                    val layer = Regex("RequestedLayerState\\{\\S+ (.+?) parentId=").find(lst)?.groupValues?.get(1)
-                    if (layer != null) {
-                        val lat = sh("dumpsys SurfaceFlinger --latency '" + layer + "'")
-                        val now = System.nanoTime()
-                        val n = lat.lines().drop(1).mapNotNull { line ->
-                            line.trim().split("\t").getOrNull(1)?.toLongOrNull()
-                        }.count { now - it in 0..1000000000L }
-                        fps = n
-                    } else fps = -1
-                } else fps = -1
-            } catch (t: Throwable) { fps = -1 }
-            kotlinx.coroutines.delay(1000)
-        }
-    }
-    Text(
-        text = if (fps >= 0) "FPS " + fps else "FPS --",
-        color = if (fps >= 60) Color(0xFF34C759) else if (fps >= 30) Color(0xFFFFCC00) else Color(0xFFFF3B30),
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 6.dp, top = 2.dp)
-    )
-}
-
-@Composable
 private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
     Box(
         modifier = Modifier.fillMaxSize().clickable { onDismiss() },
@@ -2614,7 +2572,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                         latencyMsg = msg
                     }
                 }
-                if (title == "性能模式") {
+if (title == "性能模式") {
                     val enabling = on
                     latencyMsg = "处理中…"
                     scope2.launch {
@@ -2626,96 +2584,299 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                     p.waitFor()
                                     return out
                                 }
-                                val path = "/data/adb/service.d/xy_perf.sh"
+                                val perfLines = listOf(
+                    "#!/system/bin/sh",
+                    "# 极道帝兵 性能模式测试脚本（Scene EP fast+ 配方）",
+                    "# 用法: sh xy_perf.sh on | off | status",
+                    "MODE=\${1:-status}",
+                    "BK=/data/adb/service.d/.xy_perf_bak",
+                    "",
+                    "say() { echo \"\$@\"; }",
+                    "gv()  { cat \"\$1\" 2>/dev/null | head -1; }",
+                    "sv()  { echo \"\$2\" > \"\$1\" 2>/dev/null && echo \"  \$1 = \$2\" || echo \"  \$1 -> FAILED\"; }",
+                    "",
+                    "status() {",
+                    "  echo \"== CPU 频率下限 (scaling_min_freq) ==\"",
+                    "  for p in /sys/devices/system/cpu/cpufreq/policy*/; do",
+                    "    [ -f \"\$p/scaling_min_freq\" ] || continue",
+                    "    echo \"  \$p  min=\$(gv \$p/scaling_min_freq)  max=\$(gv \$p/scaling_max_freq)  gov=\$(gv \$p/scaling_governor)\"",
+                    "  done",
+                    "  echo \"== sugov target_loads ==\"",
+                    "  for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
+                    "    [ -f \"\$f\" ] && echo \"  \$f = \$(gv \$f)\"",
+                    "  done",
+                    "  echo \"== FPSGO ==\"",
+                    "  for f in /sys/kernel/fpsgo/common/fpsgo_enable /sys/module/mtk_fpsgo/parameters/p_perf /sys/module/mtk_fpsgo/parameters/better_perf /sys/module/mtk_fpsgo/parameters/boost_LR /sys/module/mtk_fpsgo/parameters/set_ux_uclampmin; do",
+                    "    [ -f \"\$f\" ] && echo \"  \$f = \$(gv \$f)\"",
+                    "  done",
+                    "  echo \"== cm_mgr ==\"",
+                    "  [ -f /sys/kernel/cm_mgr/dbg_cm_mgr ] && head -2 /sys/kernel/cm_mgr/dbg_cm_mgr",
+                    "  echo \"== GPU ==\"",
+                    "  for f in /proc/gpufreqv2/fix_target_opp_index /sys/class/kgsl/kgsl-3d0/devfreq/governor; do",
+                    "    [ -f \"\$f\" ] && echo \"  \$f = \$(gv \$f)\"",
+                    "  done",
+                    "  echo \"== 温控 ==\"",
+                    "  echo \"  zone0 mode = \$(gv /sys/class/thermal/thermal_zone0/mode)\"",
+                    "  echo \"  zone0 trip0 = \$(gv /sys/class/thermal/thermal_zone0/trip_point_0_temp)\"",
+                    "  echo \"== 刷新率 ==\"",
+                    "  echo \"  peak = \$(settings get system peak_refresh_rate)\"",
+                    "  echo \"  min  = \$(settings get system min_refresh_rate)\"",
+                    "  echo \"== uclamp ==\"",
+                    "  echo \"  sched_util_clamp_min = \$(gv /proc/sys/kernel/sched_util_clamp_min)\"",
+                    "  echo \"  top-app uclamp.min = \$(gv /dev/cpuset/top-app/uclamp.min)\"",
+                    "}",
+                    "",
+                    "apply_all() {",
+                    "  echo \"==== 应用性能模式 ====\"",
+                    "  mkdir -p /data/adb/service.d",
+                    "  [ -f \"\$BK\" ] || : > \"\$BK\"",
+                    "",
+                    "  if [ -d /sys/module/mtk_fpsgo ]; then",
+                    "    echo \"-- MTK FPSGO\"",
+                    "    for f in /sys/module/mtk_fpsgo/parameters/p_perf /sys/module/mtk_fpsgo/parameters/better_perf /sys/kernel/fpsgo/common/fpsgo_enable; do",
+                    "      [ -f \"\$f\" ] || continue",
+                    "      echo \"FG \$f \$(gv \$f)\" >> \"\$BK\"",
+                    "      chmod 644 \"\$f\" 2>/dev/null; sv \"\$f\" 1; chmod 444 \"\$f\" 2>/dev/null",
+                    "    done",
+                    "    f=/sys/module/mtk_fpsgo/parameters/boost_LR",
+                    "    [ -f \"\$f\" ] && { echo \"FB \$f \$(gv \$f)\" >> \"\$BK\"; sv \"\$f\" 1; }",
+                    "    f=/sys/module/mtk_fpsgo/parameters/set_ux_uclampmin",
+                    "    [ -f \"\$f\" ] && { echo \"FB \$f \$(gv \$f)\" >> \"\$BK\"; sv \"\$f\" 1024; }",
+                    "    if [ -f /sys/kernel/cm_mgr/dbg_cm_mgr ]; then",
+                    "      echo 'cm_passive 1|cm_passive 0|cm_perf_mode_ceiling_opp 0|cm_mgr_dram_opp_ceiling -1' > /sys/kernel/cm_mgr/dbg_cm_mgr 2>/dev/null",
+                    "      echo \"  cm_mgr 已设置\"",
+                    "    fi",
+                    "    echo \"-- CPU 频率下限 = 最高频 50%\"",
+                    "    for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq; do",
+                    "      [ -f \"\$f\" ] || continue",
+                    "      mf=\$(gv \"\${f%/scaling_min_freq}/cpuinfo_max_freq\")",
+                    "      [ -n \"\$mf\" ] || continue",
+                    "      echo \"MN \$f \$(gv \$f)\" >> \"\$BK\"",
+                    "      sv \"\$f\" \$((mf * 50 / 100))",
+                    "    done",
+                    "    echo \"-- target_loads = 20\"",
+                    "    for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
+                    "      [ -f \"\$f\" ] || continue",
+                    "      echo \"TL \$f \$(gv \$f)\" >> \"\$BK\"",
+                    "      sv \"\$f\" 20",
+                    "    done",
+                    "    echo \"-- GPU 锁最高 OPP\"",
+                    "    [ -f /proc/gpufreqv2/fix_target_opp_index ] && { echo -1 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; echo 0 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; echo \"  GPU OPP -> 0 0\"; }",
+                    "    [ -f /sys/kernel/ged/hal/dcs_mode ] && echo 0 > /sys/kernel/ged/hal/dcs_mode 2>/dev/null && echo \"  DCS -> disabled (12 cores always on)\"",
+                    "    echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null",
+                    "    # DDR bandwidth: pin min_freq to highest available",
+                    "    DD=/sys/class/devfreq/mtk-dvfsrc-devfreq",
+                    "    if [ -f \"\$DD/min_freq\" ]; then",
+                    "      echo \"DDR \$DD/min_freq \$(cat \$DD/min_freq)\" >> \"\$BK\"",
+                    "      DH=\$(tr ' ' '\\n' < \"\$DD/available_frequencies\" 2>/dev/null | sort -n | tail -1)",
+                    "      [ -n \"\$DH\" ] && echo \"\$DH\" > \"\$DD/min_freq\" 2>/dev/null && echo \"  DDR min_freq -> \$DH\"",
+                    "    fi",
+                    "    # keep every core online (no hotplug jitter)",
+                    "    echo \"HP /sys/devices/system/cpu\" >> \"\$BK\"",
+                    "    for c in /sys/devices/system/cpu/cpu[0-9]*/online; do [ -f \"\$c\" ] && echo 1 > \"\$c\" 2>/dev/null; done",
+                    "    echo \"  cpu hotplug -> all online\"",
+                    "  fi",
+                    "",
+                    "  if [ -d /sys/class/kgsl/kgsl-3d0 ]; then",
+                    "    echo \"-- Snapdragon kgsl\"",
+                    "    for f in /sys/class/kgsl/kgsl-3d0/devfreq/governor /sys/class/kgsl/kgsl-3d0/pwrscale/trustzone/governor; do",
+                    "      [ -f \"\$f\" ] && { echo \"GG \$f \$(gv \$f)\" >> \"\$BK\"; sv \"\$f\" performance; }",
+                    "    done",
+                    "    f=/sys/module/msm_performance/parameters/touchboost",
+                    "    [ -f \"\$f\" ] && { echo \"TB \$f \$(gv \$f)\" >> \"\$BK\"; sv \"\$f\" 1; }",
+                    "  fi",
+                    "",
+                    "  echo \"-- uclamp\"",
+                    "  echo 1024 > /proc/sys/kernel/sched_util_clamp_min 2>/dev/null",
+                    "  for f in /dev/cpuset/top-app/uclamp.min /sys/fs/cgroup/top-app/uclamp.min; do",
+                    "    [ -f \"\$f\" ] && { echo \"UC \$f \$(gv \$f)\" >> \"\$BK\"; sv \"\$f\" 1024; }",
+                    "  done",
+                    "",
+                    "  echo \"-- 温控放宽到 95C\"",
+                    "  for z in /sys/class/thermal/thermal_zone*/trip_point_*_temp; do",
+                    "    [ -f \"\$z\" ] || continue",
+                    "    echo \"TZ \$z \$(gv \$z)\" >> \"\$BK\"",
+                    "    chmod 644 \"\$z\" 2>/dev/null",
+                    "    echo 95000 > \"\$z\" 2>/dev/null",
+                    "  done",
+                    "  echo \"  完成\"",
+                    "",
+                    "  echo \"-- 刷新率取最高\"",
+                    "  MX=\$(dumpsys display 2>/dev/null | grep -oE \"fps=[0-9]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "  [ -z \"\$MX\" ] && MX=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "  case \"\$MX\" in ''|*[!0-9]*) MX=0;; esac",
+                    "  if [ \"\$MX\" -ge 60 ]; then",
+                    "    settings put system peak_refresh_rate \"\$MX\" 2>/dev/null",
+                    "    settings put system min_refresh_rate \"\$MX\" 2>/dev/null",
+                    "    echo \"  refresh = \$MX (device max)\"",
+                    "  else",
+                    "    echo \"  refresh = 保持系统默认（没读到支持列表）\"",
+                    "  fi",
+                    "  echo \"==== 应用完成 ====\"",
+                    "}",
+                    "",
+                    "revert_all() {",
+                    "  echo \"==== 恢复 ====\"",
+                    "  if [ -f \"\$BK\" ]; then",
+                    "    while read -r k p rest; do",
+                    "      case \"\$k\" in",
+                    "        FG|FB|GG|TB|UC|TZ) chmod 644 \"\$p\" 2>/dev/null; echo \"\$rest\" > \"\$p\" 2>/dev/null; chmod 444 \"\$p\" 2>/dev/null; echo \"  restore \$p = \$rest\" ;;",
+                    "        CP) echo \"\$rest\" > \"\$p\" 2>/dev/null; echo \"  restore \$p = \$rest\" ;;",
+                    "        DDR) echo \"\$rest\" > \"\$p\" 2>/dev/null; echo \"  restore \$p = \$rest\" ;;",
+                    "        MN|TL) echo \"\$rest\" > \"\$p\" 2>/dev/null; echo \"  restore \$p = \$rest\" ;;",
+                    "      esac",
+                    "    done < \"\$BK\"",
+                    "    rm -f \"\$BK\"",
+                    "  else",
+                    "    echo \"  没有备份文件，跳过\"",
+                    "  fi",
+                    "  echo 1 > /sys/kernel/ged/hal/dcs_mode 2>/dev/null",
+                    "  echo -1 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null",
+                    "  echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null",
+                    "  settings delete system peak_refresh_rate 2>/dev/null",
+                    "  settings delete system min_refresh_rate 2>/dev/null",
+                    "  echo \"==== 恢复完成 ====\"",
+                    "}",
+                    "",
+                    "boost() {",
+                    "  PKG=\$1",
+                    "  [ -z \"\$PKG\" ] && { echo \"用法: sh \$0 boost <包名>\"; return; }",
+                    "  PID=\$(pidof \"\$PKG\" | awk '{print \$1}')",
+                    "  if [ -z \"\$PID\" ]; then echo \"  \$PKG 没在运行\"; return; fi",
+                    "  echo \"  进程 \$PID\"",
+                    "  echo \"\$PID\" > /dev/cpuset/top-app/cgroup.procs 2>/dev/null && echo \"  -> top-app cgroup\"",
+                    "  for t in /proc/\$PID/task/*; do",
+                    "    [ -d \"\$t\" ] || continue",
+                    "    n=\$(cat \"\$t/comm\" 2>/dev/null)",
+                    "    case \"\$n\" in",
+                    "      RenderThread|hwuiTask*|*GLThread*|*gpu*|*GPU*)",
+                    "        TID=\${t##*/}",
+                    "        if [ \"\$2\" = \"rt\" ]; then",
+                    "          chrt -f -p 10 \"\$TID\" 2>/dev/null && echo \"  tid \$TID \$n  -> SCHED_FIFO 10 + cpu4-7\"",
+                    "        else",
+                    "          renice -n -10 -p \"\$TID\" >/dev/null 2>&1 && echo \"  tid \$TID \$n  -> nice -10 + cpu4-7\"",
+                    "        fi",
+                    "        taskset -p f0 \"\$TID\" >/dev/null 2>&1",
+                    "        ;;",
+                    "    esac",
+                    "  done",
+                    "}",
+                    "",
+                    "front() {",
+                    "  echo \"-- top-app cpus -> 4-7\"",
+                    "  echo \"CP /dev/cpuset/top-app/cpus \$(cat /dev/cpuset/top-app/cpus 2>/dev/null)\" >> \"\$BK\" 2>/dev/null",
+                    "  echo 4-7 > /dev/cpuset/top-app/cpus 2>/dev/null && echo \"  cpus = \$(cat /dev/cpuset/top-app/cpus)\"",
+                    "  echo 1024 > /dev/cpuset/top-app/uclamp.min 2>/dev/null && echo \"  uclamp.min = 1024\"",
+                    "  P=\$(dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity)",
+                    "  PKG=\$(echo \"\$P\" | sed -E 's/.* ([a-zA-Z0-9_.]+)\\/.*/\\1/')",
+                    "  if [ -n \"\$PKG\" ]; then",
+                    "    echo \"  前台: \$PKG\"",
+                    "    PID=\$(pidof \"\$PKG\" | awk '{print \$1}')",
+                    "    [ -n \"\$PID\" ] && echo \"\$PID\" > /dev/cpuset/top-app/cgroup.procs 2>/dev/null && echo \"  pid \$PID -> top-app\"",
+                    "    am set-standby-bucket \"\$PKG\" active >/dev/null 2>&1 && echo \"  standby-bucket -> active\"",
+                    "  fi",
+                    "}",
+                    "",
+                    "dcs() {",
+                    "  case \"\$1\" in",
+                    "    off) echo 0 > /sys/kernel/ged/hal/dcs_mode 2>/dev/null; echo \"DCS disabled\";;",
+                    "    on)  echo 1 > /sys/kernel/ged/hal/dcs_mode 2>/dev/null; echo \"DCS enabled\";;",
+                    "    *)   cat /sys/kernel/ged/hal/dcs_mode 2>/dev/null;;",
+                    "  esac",
+                    "}",
+                    "",
+                    "guard() {",
+                    "  case \"\$1\" in",
+                    "    on)",
+                    "      pkill -f xy_guard.sh 2>/dev/null",
+                    "      setsid nohup sh /data/local/tmp/xy_guard.sh >/dev/null 2>&1 &",
+                    "      sleep 1",
+                    "      echo \"守护已启动: \$(pgrep -f xy_guard.sh | head -1)\"",
+                    "      ;;",
+                    "    off)",
+                    "      pkill -f xy_guard.sh 2>/dev/null && echo \"守护已停止\" || echo \"守护没在跑\"",
+                    "      ;;",
+                    "    log)",
+                    "      tail -20 /data/local/tmp/xy_guard.log 2>/dev/null",
+                    "      ;;",
+                    "    *) pgrep -f xy_guard.sh >/dev/null && echo \"守护运行中\" || echo \"守护未运行\" ;;",
+                    "  esac",
+                    "}",
+                    "",
+                    "case \"\$MODE\" in",
+                    "  on)     apply_all; echo; status ;;",
+                    "  off)    revert_all; echo; status ;;",
+                    "  status) status ;;",
+                    "  boost)  shift; boost \"\$@\" ;;",
+                    "  front)  front ;;",
+                    "  dcs)    shift; dcs \"\$@\" ;;",
+                    "  guard)  shift; guard \"\$@\" ;;",
+                    "  *)      echo \"用法: sh \$0 on|off|status\" ;;",
+                    "esac",
+                    ""
+                                )
+                                val guardLines = listOf(
+                    "#!/system/bin/sh",
+                    "# 前台游戏守护：检测前台切换 -> 自动把渲染线程绑大核 + 提优先级",
+                    "LOG=/data/local/tmp/xy_guard.log",
+                    "echo \$\$ > /data/local/tmp/xy_guard.pid",
+                    "last=\"\"",
+                    "while true; do",
+                    "  pkg=\$(dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity | sed -E 's/.* ([a-zA-Z0-9_.]+)\\/.*/\\1/')",
+                    "  if [ -n \"\$pkg\" ] && [ \"\$pkg\" != \"\$last\" ]; then",
+                    "    pid=\$(pidof \"\$pkg\" 2>/dev/null | awk '{print \$1}')",
+                    "    if [ -n \"\$pid\" ]; then",
+                    "      echo \"\$pid\" > /dev/cpuset/top-app/cgroup.procs 2>/dev/null",
+                    "      ionice -c 1 -p \"\$pid\" >/dev/null 2>&1",
+                    "      cmd game set --mode 2 \"\$pkg\" >/dev/null 2>&1",
+                    "      n=0",
+                    "      for t in /proc/\$pid/task/*; do",
+                    "        [ -d \"\$t\" ] || continue",
+                    "        name=\$(cat \"\$t/comm\" 2>/dev/null)",
+                    "        case \"\$name\" in",
+                    "          RenderThread|hwuiTask*|*GLThread*|UnityMain|*GPU*|*gpu*)",
+                    "            tid=\${t##*/}",
+                    "            renice -n -10 -p \"\$tid\" >/dev/null 2>&1",
+                    "            taskset -p f0 \"\$tid\" >/dev/null 2>&1",
+                    "            n=\$((n+1))",
+                    "            ;;",
+                    "        esac",
+                    "      done",
+                    "      echo \"\$(date '+%H:%M:%S') \$pkg pid=\$pid threads=\$n\" >> \"\$LOG\"",
+                    "    fi",
+                    "    last=\"\$pkg\"",
+                    "  fi",
+                    "  # --- 持续锁定：系统 thermal/perfmgr 会把 min_freq/target_loads 改回去 ---",
+                    "  for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq; do",
+                    "    [ -f \"\$f\" ] || continue",
+                    "    mf=\$(cat \"\${f%/scaling_min_freq}/cpuinfo_max_freq\" 2>/dev/null)",
+                    "    [ -n \"\$mf\" ] || continue",
+                    "    want=\$((mf * 50 / 100))",
+                    "    cur=\$(cat \"\$f\" 2>/dev/null)",
+                    "    [ \"\$cur\" = \"\$want\" ] || echo \"\$want\" > \"\$f\" 2>/dev/null",
+                    "  done",
+                    "  for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
+                    "    [ -f \"\$f\" ] && [ \"\$(cat \"\$f\" 2>/dev/null)\" != \"20\" ] && echo 20 > \"\$f\" 2>/dev/null",
+                    "  done",
+                    "  for c in /sys/devices/system/cpu/cpu[0-9]*/online; do [ -f \"\$c\" ] && [ \"\$(cat \$c 2>/dev/null)\" = \"0\" ] && echo 1 > \"\$c\" 2>/dev/null; done",
+                    "  sleep 2",
+                    "done",
+                    ""
+                                )
+                                val dir = "/data/adb/service.d"
+                                val perf = dir + "/xy_perf.sh"
+                                val guard = dir + "/xy_guard.sh"
                                 if (enabling) {
-                                    val perfLines = listOf(
-                                        "#!/system/bin/sh",
-                                        "sleep 20",
-                                        "BK=/data/adb/service.d/.xy_perf_bak",
-                                        "mkdir -p /data/adb/service.d",
-                                        ": > \"\$BK\"",
-                                        "# ==== MTK: Scene EP fast preset ====",
-                                        "if [ -d /sys/module/mtk_fpsgo ]; then",
-                                        "  for f in /sys/module/mtk_fpsgo/parameters/p_perf /sys/module/mtk_fpsgo/parameters/better_perf /sys/kernel/fpsgo/common/fpsgo_enable; do",
-                                        "    [ -f \"\$f\" ] || continue",
-                                        "    echo \"FG \$f \$(cat \"\$f\" 2>/dev/null)\" >> \"\$BK\"",
-                                        "    chmod 644 \"\$f\" 2>/dev/null",
-                                        "    echo 1 > \"\$f\" 2>/dev/null",
-                                        "  done",
-                                        "  if [ -f /sys/kernel/cm_mgr/dbg_cm_mgr ]; then",
-                                        "    echo 'cm_passive 1|cm_passive 0|cm_perf_mode_ceiling_opp 0|cm_mgr_dram_opp_ceiling -1' > /sys/kernel/cm_mgr/dbg_cm_mgr 2>/dev/null",
-                                        "  fi",
-                                        "  for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq; do",
-                                        "    [ -f \"\$f\" ] || continue",
-                                        "    mf=\$(cat \"\${f%/scaling_min_freq}/cpuinfo_max_freq\" 2>/dev/null)",
-                                        "    [ -n \"\$mf\" ] || continue",
-                                        "    echo \"MN \$f \$(cat \"\$f\")\" >> \"\$BK\"",
-                                        "    echo \$((mf * 50 / 100)) > \"\$f\" 2>/dev/null",
-                                        "  done",
-                                        "  for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
-                                        "    [ -f \"\$f\" ] && echo \"TL \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 20 > \"\$f\" 2>/dev/null",
-                                        "  done",
-                                        "  if [ -f /proc/gpufreqv2/fix_target_opp_index ]; then",
-                                        "    echo -1 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null",
-                                        "    echo 0 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null",
-                                        "  fi",
-                                        "  echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null",
-                                        "  for f in /sys/module/mtk_fpsgo/parameters/boost_LR; do",
-                                        "    [ -f \"\$f\" ] && echo \"FB \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 1 > \"\$f\" 2>/dev/null",
-                                        "  done",
-                                        "  f=/sys/module/mtk_fpsgo/parameters/set_ux_uclampmin",
-                                        "  [ -f \"\$f\" ] && echo \"FB \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 1024 > \"\$f\" 2>/dev/null",
-                                        "fi",
-                                        "# ==== Snapdragon ====",
-                                        "if [ -d /sys/class/kgsl/kgsl-3d0 ]; then",
-                                        "  for f in /sys/class/kgsl/kgsl-3d0/devfreq/governor /sys/class/kgsl/kgsl-3d0/pwrscale/trustzone/governor; do",
-                                        "    [ -f \"\$f\" ] && echo \"GG \$f \$(cat \"\$f\" 2>/dev/null)\" >> \"\$BK\" && echo performance > \"\$f\" 2>/dev/null",
-                                        "  done",
-                                        "  f=/sys/module/msm_performance/parameters/touchboost",
-                                        "  [ -f \"\$f\" ] && echo \"TB \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 1 > \"\$f\" 2>/dev/null",
-                                        "fi",
-                                        "# ==== common ====",
-                                        "echo 1024 > /proc/sys/kernel/sched_util_clamp_min 2>/dev/null",
-                                        "for f in /dev/cpuset/top-app/uclamp.min /sys/fs/cgroup/top-app/uclamp.min; do",
-                                        "  [ -f \"\$f\" ] && echo \"UC \$f \$(cat \"\$f\")\" >> \"\$BK\" && echo 1024 > \"\$f\" 2>/dev/null",
-                                        "done",
-                                        "# ==== thermal relax 95C (heatsink) ====",
-                                        "for z in /sys/class/thermal/thermal_zone*/trip_point_*_temp /sys/devices/virtual/thermal/thermal_zone*/trip_point_*_temp; do",
-                                        "  [ -f \"\$z\" ] || continue",
-                                        "  echo \"TZ \$z \$(cat \"\$z\" 2>/dev/null)\" >> \"\$BK\"",
-                                        "  chmod 644 \"\$z\" 2>/dev/null",
-                                        "  echo 95000 > \"\$z\" 2>/dev/null",
-                                        "done",
-                                        "# ==== refresh rate: auto max ====",
-                                        "MX=\$(dumpsys display 2>/dev/null | grep -oE \"fps=[0-9]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
-                                        "[ -z \"\$MX\" ] && MX=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
-                                        "case \"\$MX\" in ''|*[!0-9]*) MX=120;; esac",
-                                        "settings put system peak_refresh_rate \"\$MX\" 2>/dev/null",
-                                        "settings put system min_refresh_rate \"\$MX\" 2>/dev/null",
-                                    )
-                                    val scriptText = perfLines.joinToString("\n")
-                                    su("mkdir -p /data/adb/service.d")
-                                    su("printf '%s' '" + scriptText.replace("'", "'\\''") + "' > " + path + " ; chmod 755 " + path)
-                                    su("sed 's/^sleep 20$/sleep 1/' " + path + " > /data/local/tmp/xy_now.sh ; chmod 755 /data/local/tmp/xy_now.sh ; sh /data/local/tmp/xy_now.sh >/dev/null 2>&1")
-                                    val gov = su("cat /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor 2>/dev/null || cat /sys/devices/system/cpu/cpu4/cpufreq/scaling_governor 2>/dev/null").trim()
-                                    val fps = su("settings get system peak_refresh_rate 2>/dev/null").trim()
-                                    val th = su("cat /sys/class/thermal/thermal_zone0/mode 2>/dev/null").trim()
-                                    val topCpus = su("cat /dev/cpuset/top-app/cpus 2>/dev/null || cat /sys/fs/cgroup/top-app/cpuset.cpus 2>/dev/null").trim()
-                                    val govOk = gov == "performance"
-                                    val fpsOk = fps.toIntOrNull()?.let { it >= 120 } == true
-                                    val thOk = th == "disabled"
-                                    val cpuSetOk = topCpus.contains("4-7") || topCpus == "4,5,6,7"
-                                    "FPS" + fps.ifEmpty { "?" } + (if (fpsOk) "✓" else "✗") +
-                                        " 温控" + (if (thOk) "✓" else "✗") +
-                                        " CPU" + (if (govOk) "✓" else "✗") +
-                                        " 前台核" + topCpus.ifEmpty { "?" } + (if (cpuSetOk) "✓" else "✗")
+                                    su("mkdir -p " + dir)
+                                    su("cat > " + perf + " <<'XYEOF'\n" + perfLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + perf)
+                                    su("cat > " + guard + " <<'XYEOF'\n" + guardLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + guard)
+                                    su("sh " + perf + " on >/dev/null 2>&1")
+                                    su("pkill -f xy_guard 2>/dev/null; setsid nohup sh " + guard + " >/dev/null 2>&1 &")
+                                    "已开启 · 守护已启动"
                                 } else {
-                                    su("rm -f $path")
-                                    su("BK=/data/adb/service.d/.xy_perf_bak; if [ -f \"\$BK\" ]; then while read -r k p rest; do case \"\$k\" in FG|FB|GG|TB|UC|TZ) chmod 644 \"\$p\" 2>/dev/null; echo \"\$rest\" > \"\$p\" 2>/dev/null; chmod 444 \"\$p\" 2>/dev/null;; MN) echo \"\$rest\" > \"\$p\" 2>/dev/null;; TL) echo \"\$rest\" > \"\$p\" 2>/dev/null;; esac; done < \"\$BK\"; rm -f \"\$BK\"; fi; echo -1 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; settings delete system peak_refresh_rate 2>/dev/null; settings delete system min_refresh_rate 2>/dev/null; true")
-                                    val gov = su("cat /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor 2>/dev/null").trim()
-                                    val fps = su("settings get system peak_refresh_rate 2>/dev/null").trim()
-                                    "已恢复 · " + (gov.ifEmpty { "?" }) +
-                                        " · FPS" + (fps.ifEmpty { "默认" })
+                                    su("pkill -f xy_guard 2>/dev/null")
+                                    su("sh " + perf + " off >/dev/null 2>&1; rm -f " + perf + " " + guard)
+                                    "已关闭"
                                 }
                             } catch (t: Throwable) {
                                 "操作失败"
