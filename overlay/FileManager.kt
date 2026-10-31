@@ -2367,13 +2367,9 @@ private fun ModeButton(
                         }
                         return best
                     }
-                    val reachable = try {
-                        android.system.Os.stat("/data/adb/modules")
-                        true
-                    } catch (e: Throwable) {
-                        false
-                    }
-                    if (!reachable) "会拉闸" else "不会拉闸"
+                    val den = (measure("/data/system") + measure("/data/misc")) / 2.0
+                    val mod = measure("/data/adb/modules")
+                    if (mod - den > 500.0) "会拉闸" else "不会拉闸"
                 } catch (t: Throwable) {
                     null
                 }
