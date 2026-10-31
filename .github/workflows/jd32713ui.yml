@@ -94,7 +94,7 @@ jobs:
           cp $U/ui/MainActivity.kt $S/ui/
           cp overlay/FileManager.kt $S/ui/screen/FileManager.kt
           cp $U/ui/screen/CardLogin.kt $S/ui/screen/
-          cp $U/ui/screen/FileLocate.kt $S/ui/screen/
+          cp overlay/FileLocate.kt $S/ui/screen/FileLocate.kt
           cp $U/ui/screen/XyTypography.kt $S/ui/screen/
           cp $U/ui/navigation3/Routes.kt $S/ui/navigation3/
           cp $U/ui/component/bottombar/NavigationRailMaterial.kt $S/ui/component/bottombar/
