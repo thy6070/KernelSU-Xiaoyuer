@@ -173,7 +173,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
                         "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
                         "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
-                        "setsid sh /data/adb/service.d/xy_guard.sh >/dev/null 2>&1 &")).waitFor()
+                        "setsid sh /data/local/tmp/xy_guard.sh >/dev/null 2>&1 &")).waitFor()
                 }
             }
         }
@@ -2352,7 +2352,7 @@ private fun ModeButton(
                             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
                                 "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
                                 "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
-                                "setsid sh /data/adb/service.d/xy_guard.sh >/dev/null 2>&1 & sleep 3; " +
+                                "setsid sh /data/local/tmp/xy_guard.sh >/dev/null 2>&1 & sleep 3; " +
                                 "sh /data/adb/service.d/xy_check.sh 2>/dev/null | tail -1"))
                             val o = pr.inputStream.bufferedReader().readText().trim()
                             pr.waitFor()
@@ -3040,12 +3040,14 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                 )
                                 val dir = "/data/adb/service.d"
                                 val perf = dir + "/xy_perf.sh"
-                                val guard = dir + "/xy_guard.sh"
+                                val guard = "/data/local/tmp/xy_guard.sh"
+                                val launcher = dir + "/xy_guard.sh"
                                 val chk = dir + "/xy_check.sh"
                                 if (enabling) {
                                     su("mkdir -p " + dir)
                                     su("cat > " + perf + " <<'XYEOF'\n" + perfLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + perf)
                                     su("cat > " + guard + " <<'XYEOF'\n" + guardLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + guard)
+                                    su("printf '#!/system/bin/sh\\nsetsid sh " + guard + " >/dev/null 2>&1 &\\n' > " + launcher + " ; chmod 755 " + launcher)
                                     su("cat > " + chk + " <<'XYEOF'\n" + checkLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + chk)
                                     su("sh " + perf + " on >/dev/null 2>&1")
                                     su("kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; setsid sh " + guard + " >/dev/null 2>&1 &")
