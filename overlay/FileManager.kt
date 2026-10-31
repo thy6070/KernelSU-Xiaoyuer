@@ -2323,7 +2323,17 @@ private fun ModeButton(
     slot: String = "path"
 ) {
     var on by remember { mutableStateOf(false) }
+    val ctxMsg = androidx.compose.ui.platform.LocalContext.current
     var latencyMsg by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        latencyMsg = ctxMsg.getSharedPreferences("yx_mode", 0).getString("msg_" + title, null)
+    }
+    LaunchedEffect(latencyMsg) {
+        val v = latencyMsg
+        if (v != null) {
+            ctxMsg.getSharedPreferences("yx_mode", 0).edit().putString("msg_" + title, v).apply()
+        }
+    }
     val ctx3 = androidx.compose.ui.platform.LocalContext.current
     val scope2 = rememberCoroutineScope()
     var execPath by remember { mutableStateOf<String?>(null) }
