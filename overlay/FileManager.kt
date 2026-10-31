@@ -554,17 +554,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             "/data/adb/modules/busybox-ndk/system/bin/busybox"
                         ).firstOrNull { java.io.File(it).isFile }
                         val qq = { s: String -> "'" + s.replace("'", "'\''") + "'" }
-                        // 有 script applet 才用 PTY 包装（交互式模块需要），否则直跑
-                        val hasScript = bb != null && try {
-                            ProcessBuilder("/system/bin/sh", "-c", qq(bb) + " script -h >/dev/null 2>&1").start().waitFor() == 0
-                        } catch (t: Throwable) {
-                            false
-                        }
-                        val wrapped = if (hasScript) {
-                            "exec " + qq(bb) + " script -q -c " + qq(cmd + " 2>&1") + " /dev/null"
-                        } else {
-                            cmd + " 2>&1"
-                        }
+                        // 照原版：直接执行（不用 busybox script）；输出仍逐行喂给灵动岛终端
+                        val wrapped = cmd + " 2>&1"
                         withContext(Dispatchers.IO) {
                             val pb = ProcessBuilder("/system/bin/sh", "-c", "su -c " + qq(wrapped))
                             pb.redirectErrorStream(true)
