@@ -1377,11 +1377,13 @@ private fun ProMaxIsland(
                                         color = Color.White,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    Text(
-                                        text = if (softReboot) "开 | 关" else "开 | 关",
-                                        fontSize = 11.sp,
-                                        color = if (softReboot) Color(0xFF0A84FF) else Color(0xFF8E8E93)
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = "开", fontSize = 12.sp,
+                                            color = if (softReboot) Color.White else Color(0xFF5A5A5E))
+                                        Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
+                                        Text(text = "关", fontSize = 12.sp,
+                                            color = if (softReboot) Color(0xFF5A5A5E) else Color.White)
+                                    }
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
@@ -1399,11 +1401,13 @@ private fun ProMaxIsland(
                                         color = Color.White,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    Text(
-                                        text = if (selinuxHide) "开 | 关" else "开 | 关",
-                                        fontSize = 11.sp,
-                                        color = if (selinuxHide) Color(0xFF0A84FF) else Color(0xFF8E8E93)
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = "开", fontSize = 12.sp,
+                                            color = if (selinuxHide) Color.White else Color(0xFF5A5A5E))
+                                        Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
+                                        Text(text = "关", fontSize = 12.sp,
+                                            color = if (selinuxHide) Color(0xFF5A5A5E) else Color.White)
+                                    }
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
@@ -1421,11 +1425,13 @@ private fun ProMaxIsland(
                                         color = Color.White,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    Text(
-                                        text = if (kernelUmount) "开 | 关" else "开 | 关",
-                                        fontSize = 11.sp,
-                                        color = if (kernelUmount) Color(0xFF0A84FF) else Color(0xFF8E8E93)
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = "开", fontSize = 12.sp,
+                                            color = if (kernelUmount) Color.White else Color(0xFF5A5A5E))
+                                        Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
+                                        Text(text = "关", fontSize = 12.sp,
+                                            color = if (kernelUmount) Color(0xFF5A5A5E) else Color.White)
+                                    }
                                 }
                             }
                         }
