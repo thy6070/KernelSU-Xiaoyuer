@@ -2892,6 +2892,278 @@ if (title == "性能模式") {
                     "  sleep 0.5",
                     "done",
                     ""
+                                )
+                                val checkLines = listOf(
+                    "#!/system/bin/sh",
+                    "# 性能模式生效自检：逐项打 ✓ / ✗",
+                    "OK=0; BAD=0",
+                    "pass() { echo \"✓ \$1\"; OK=\$((OK+1)); }",
+                    "fail() { echo \"✗ \$1\"; BAD=\$((BAD+1)); }",
+                    "",
+                    "echo \"================ 性能模式自检 ================\"",
+                    "",
+                    "# 1. CPU 频率下限 = 50% 最高频",
+                    "for p in /sys/devices/system/cpu/cpufreq/policy*/; do",
+                    "  f=\${p}scaling_min_freq",
+                    "  [ -f \"\$f\" ] || continue",
+                    "  mf=\$(cat \"\${p}cpuinfo_max_freq\" 2>/dev/null)",
+                    "  [ -n \"\$mf\" ] || continue",
+                    "  want=\$((mf * 50 / 100)); cur=\$(cat \"\$f\" 2>/dev/null)",
+                    "  lo=\$((want * 90 / 100)); hi=\$((want * 110 / 100)); [ \"\$hi\" -lt \"\$want\" ] && hi=\$want",
+                    "  if [ \"\$cur\" -ge \"\$lo\" ] 2>/dev/null && [ \"\$cur\" -le \"\$hi\" ] 2>/dev/null; then pass \"min_freq \$(basename \$p) = \$cur (目标 \$want)\"; else fail \"min_freq \$(basename \$p) = \$cur (目标 \$want)\"; fi",
+                    "done",
+                    "",
+                    "# 2. sugov 升频阈值 = 20",
+                    "for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
+                    "  [ -f \"\$f\" ] || continue",
+                    "  cur=\$(cat \"\$f\" 2>/dev/null)",
+                    "  if [ \"\$cur\" = \"20\" ]; then pass \"target_loads \$(dirname \$(dirname \$f) | xargs basename) = 20\"; else fail \"target_loads \$f = \$cur (应为 20)\"; fi",
+                    "done",
+                    "",
+                    "# 3. GPU OPP 锁定",
+                    "if [ -f /proc/gpufreqv2/fix_target_opp_index ]; then",
+                    "  if grep -q \"0/0\" /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; then pass \"GPU OPP 锁定 0/0\"; else fail \"GPU OPP 未锁定\"; fi",
+                    "fi",
+                    "if [ -f /sys/class/kgsl/kgsl-3d0/devfreq/governor ]; then",
+                    "  cur=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/governor 2>/dev/null)",
+                    "  if [ \"\$cur\" = \"performance\" ]; then pass \"骁龙 GPU governor = performance\"; else fail \"骁龙 GPU governor = \$cur\"; fi",
+                    "fi",
+                    "",
+                    "# 4. DCS 关闭",
+                    "if [ -f /sys/kernel/ged/hal/dcs_mode ]; then",
+                    "  if head -3 /sys/kernel/ged/hal/dcs_mode 2>/dev/null | grep -q \"disabled\"; then pass \"DCS 已关闭\"; else fail \"DCS 仍开启\"; fi",
+                    "fi",
+                    "",
+                    "# 5. DDR 频率锁最高",
+                    "D=/sys/class/devfreq/mtk-dvfsrc-devfreq",
+                    "if [ -f \"\$D/min_freq\" ]; then",
+                    "  cur=\$(cat \"\$D/min_freq\" 2>/dev/null)",
+                    "  top=\$(tr ' ' '\\n' < \"\$D/available_frequencies\" 2>/dev/null | sort -n | tail -1)",
+                    "  if [ \"\$cur\" = \"\$top\" ]; then pass \"DDR min_freq = \$cur (最高)\"; else fail \"DDR min_freq = \$cur (最高应 \$top)\"; fi",
+                    "fi",
+                    "",
+                    "# 6. 全核在线",
+                    "OFF=0",
+                    "for c in /sys/devices/system/cpu/cpu[0-9]*/online; do [ -f \"\$c\" ] && [ \"\$(cat \$c)\" = \"0\" ] && OFF=\$((OFF+1)); done",
+                    "[ \"\$OFF\" = \"0\" ] && pass \"CPU 全核在线\" || fail \"有 \$OFF 个核离线\"",
+                    "",
+                    "# 7. FPSGO 参数（MTK）",
+                    "if [ -d /sys/module/mtk_fpsgo ]; then",
+                    "  for f in p_perf better_perf boost_LR; do",
+                    "    p=/sys/module/mtk_fpsgo/parameters/\$f",
+                    "    [ -f \"\$p\" ] || continue",
+                    "    cur=\$(cat \"\$p\" 2>/dev/null)",
+                    "    [ \"\$cur\" = \"1\" ] && pass \"fpsgo \$f = 1\" || fail \"fpsgo \$f = \${cur:-空}\"",
+                    "  done",
+                    "fi",
+                    "",
+                    "# 8. uclamp",
+                    "cur=\$(cat /proc/sys/kernel/sched_util_clamp_min 2>/dev/null)",
+                    "[ \"\$cur\" = \"1024\" ] && pass \"sched_util_clamp_min = 1024\" || fail \"sched_util_clamp_min = \$cur\"",
+                    "",
+                    "# 9. 温控跳变点",
+                    "if [ -f /sys/class/thermal/thermal_zone0/trip_point_0_temp ]; then",
+                    "  cur=\$(cat /sys/class/thermal/thermal_zone0/trip_point_0_temp 2>/dev/null)",
+                    "  [ \"\$cur\" = \"95000\" ] && pass \"thermal trip_point_0 = 95000\" || fail \"thermal trip_point_0 = \${cur:-空}\"",
+                    "fi",
+                    "",
+                    "# 10. 刷新率",
+                    "PV=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "MAX=\$(dumpsys display 2>/dev/null | grep -oE \"fps=[0-9]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "if [ -n \"\$PV\" ] && [ \"\$PV\" = \"\$MAX\" ]; then pass \"刷新率 = \$PV (设备最高)\"; else fail \"刷新率 = \$PV (设备最高 \$MAX)\"; fi",
+                    "",
+                    "# 11. 守护进程",
+                    "if pgrep -f 'xy_gua[r]d' >/dev/null 2>&1; then pass \"守护进程运行中\"; else fail \"守护进程未运行\"; fi",
+                    "",
+                    "# 12. 前台进程归属 top-app + ionice",
+                    "PKG=\$(dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity | sed -E 's/.* ([a-zA-Z0-9_.]+)\\/.*/\\1/')",
+                    "if [ -n \"\$PKG\" ]; then",
+                    "  PID=\$(pidof \"\$PKG\" 2>/dev/null | awk '{print \$1}')",
+                    "  if [ -n \"\$PID\" ]; then",
+                    "    CG=\$(cat /proc/\$PID/cgroup 2>/dev/null | grep cpuset | grep -o 'top-app')",
+                    "    [ \"\$CG\" = \"top-app\" ] && pass \"前台 \$PKG 在 top-app cgroup\" || fail \"前台 \$PKG 不在 top-app\"",
+                    "    IO=\$(/system/bin/ionice -p \$PID 2>/dev/null | grep -oiE 'realtime|best-effort')",
+                    "    [ -n \"\$IO\" ] && pass \"前台 IO 优先级已提升\" || fail \"前台 IO 优先级未提升\"",
+                    "  fi",
+                    "fi",
+                    "",
+                    "echo \"=============================================\"",
+                    "echo \"通过 \$OK 项，失败 \$BAD 项\"",
+                    ""
+                                )
+                                val dir = "/data/adb/service.d"
+                                val perf = dir + "/xy_perf.sh"
+                                val guard = dir + "/xy_guard.sh"
+                                val chk = dir + "/xy_check.sh"
+                                if (enabling) {
+                                    su("mkdir -p " + dir)
+                                    su("cat > " + perf + " <<'XYEOF'\n" + perfLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + perf)
+                                    su("cat > " + guard + " <<'XYEOF'\n" + guardLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + guard)
+                                    su("cat > " + chk + " <<'XYEOF'\n" + checkLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + chk)
+                                    su("sh " + perf + " on >/dev/null 2>&1")
+                                    su("pkill -f xy_guard 2>/dev/null; setsid nohup sh " + guard + " >/dev/null 2>&1 &")
+                                    su("sh " + chk + " > /data/local/tmp/xy_chk.out 2>&1")
+                                    val r = su("tail -1 /data/local/tmp/xy_chk.out 2>/dev/null").trim()
+                                    "已开启 · " + (r.ifBlank { "守护运行中" })
+                                } else {
+                                    su("pkill -f xy_guard 2>/dev/null")
+                                    su("sh " + perf + " off >/dev/null 2>&1; rm -f " + perf + " " + guard + " " + chk)
+                                    "已关闭"
+                                }
+                            } catch (t: Throwable) {
+                                "操作失败"
+                            }
+                        }
+                        latencyMsg = msg
+                    }
+                }
+                if (title == "放开通行") {
+                    val enabling = on
+                    scope2.launch {
+                        withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                fun su(c: String): String {
+                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                    val out = p.inputStream.bufferedReader().readText()
+                                    p.waitFor()
+                                    return out
+                                }
+                                if (enabling) {
+                                    // install a boot script so the state survives reboots
+                                    try {
+                                        val bootDir = "/data/adb/service.d"
+                                        su("mkdir -p $bootDir")
+                                        val boot = "#!/system/bin/sh\n" +
+                                            "chmod 771 /data/adb\n" +
+                                            "chmod 755 /data/adb/modules\n" +
+                                            "chmod 755 /data/adb/ksu\n" +
+                                            "chmod 755 /data/adb/ksud\n" +
+                                            "printf 'allow untrusted_app adb_data_file dir { open read search getattr }\\n' > /data/local/tmp/xy_allow.txt\n" +
+                                            "printf 'allow untrusted_app adb_data_file file { open read getattr }\\n' >> /data/local/tmp/xy_allow.txt\n" +
+                                            "for c in /data/adb/ksud /data/adb/ksu/bin/ksud; do [ -x \"\$c\" ] && \"\$c\" sepolicy apply /data/local/tmp/xy_allow.txt; done\n"
+                                        su("printf '%s' '" + boot.replace("'", "'\''") + "' > $bootDir/xy_open_access.sh ; chmod 755 $bootDir/xy_open_access.sh")
+                                    } catch (t: Throwable) {
+                                    }
+                                    for ((path, mode) in listOf(
+                                        "/data/adb" to "771",
+                                        "/data/adb/modules" to "755",
+                                        "/data/adb/ksu" to "755",
+                                        "/data/adb/ksud" to "755"
+                                    )) {
+                                        su("chmod $mode '" + path.replace("'", "'\''") + "' 2>/dev/null; true")
+                                    }
+                                    val domains = listOf(
+                                        "untrusted_app", "untrusted_app_25", "untrusted_app_27",
+                                        "untrusted_app_29", "untrusted_app_30", "untrusted_app_32",
+                                        "untrusted_app_34"
+                                    )
+                                    val rules = domains.joinToString("\n") { dm ->
+                                        "allow " + dm + " adb_data_file dir { open read search getattr }\n" +
+                                            "allow " + dm + " adb_data_file file { open read getattr }\n" +
+                                            "allow " + dm + " adb_data_file lnk_file read\n" +
+                                            "allow " + dm + " proc_modules file { open read getattr }"
+                                    } + "\n"
+                                    val rf = "/data/local/tmp/sepolicy_rules.txt"
+                                    su("printf '%s' '" + rules.replace("'", "'\''") + "' > $rf ; chmod 644 $rf ; true")
+                                    val ks = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
+                                    if (java.io.File(ks).exists()) {
+                                        su("'" + ks.replace("'", "'\\''") + "' sepolicy apply $rf 2>&1; true")
+                                    }
+                                } else {
+                                    try {
+                                        su("rm -f /data/adb/service.d/xy_open_access.sh")
+                                    } catch (t: Throwable) {
+                                    }
+                                    for (path in listOf(
+                                        "/data/adb", "/data/adb/modules",
+                                        "/data/adb/ksu", "/data/adb/ksud"
+                                    )) {
+                                        su("chmod 700 '" + path.replace("'", "'\''") + "' 2>/dev/null; true")
+                                    }
+                                    val rules = "deny untrusted_app adb_data_file dir { open read search getattr }\n" +
+                                        "deny untrusted_app adb_data_file file { open read getattr }\n" +
+                                        "deny untrusted_app adb_data_file lnk_file read\n" +
+                                        "deny untrusted_app proc_modules file { open read getattr }\n"
+                                    val rf = "/data/local/tmp/sepolicy_deny.txt"
+                                    su("printf '%s' '" + rules.replace("'", "'\''") + "' > $rf ; chmod 644 $rf ; true")
+                                    val ks = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
+                                    if (java.io.File(ks).exists()) {
+                                        su("'" + ks.replace("'", "'\\''") + "' sepolicy apply $rf 2>&1; true")
+                                    }
+                                }
+                            } catch (t: Throwable) {
+                            }
+                        }
+                        kotlinx.coroutines.delay(600)
+                        refreshLatency()
+                    }
+                }
+            }
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(22.dp)
+        )
+        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 16.sp,
+                modifier = Modifier.align(Alignment.Center)
+            )
+            Text(
+                text = subtitle ?: latencyMsg
+                    ?: (if (title == "执行此文件" || title == "刷入驱动") (execPath ?: "暂无设置") else ""),
+                color = Color(0x66FFFFFF),
+                fontSize = 9.sp,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp)
+                    .then(
+                        if (title == "执行此文件" || title == "刷入驱动") {
+                            Modifier.clickable {
+                                pathInput = execPath ?: ""
+                                showPathDialog = true
+                            }
+                        } else Modifier
+                    )
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "开",
+                color = if (on) Color.White else Color(0xFF5A5A5E),
+                fontSize = 15.sp,
+                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal
+            )
+            Text(text = " | ", color = Color(0xFF6A6A6E), fontSize = 15.sp)
+            Text(
+                text = "关",
+                color = if (!on) Color.White else Color(0xFF5A5A5E),
+                fontSize = 15.sp,
+                fontWeight = if (!on) FontWeight.SemiBold else FontWeight.Normal
+            )
+        }
+    }
+    if (showUrlDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showUrlDialog = false },
+            title = { androidx.compose.material3.Text("驱动 zip 直链") },
+            text = {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = urlInput,
+                    onValueChange = { urlInput = it },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 12.sp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
+                        .padding(8.dp)
                 )
             },
             confirmButton = {
