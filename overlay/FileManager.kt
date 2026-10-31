@@ -1334,8 +1334,8 @@ private fun ProMaxIsland(
                                             pr.waitFor()
                                             return o
                                         }
-                                        selinuxHide = q("/data/adb/ksud feature get selinux_hide 2>/dev/null").contains("ENABLED")
-                                        kernelUmount = q("/data/adb/ksud feature get kernel_umount 2>/dev/null").contains("ENABLED")
+                                        selinuxHide = q("/data/adb/ksud feature get selinux_hide 2>/dev/null").contains("Value: 1")
+                                        kernelUmount = q("/data/adb/ksud feature get kernel_umount 2>/dev/null").contains("Value: 1")
                                     } catch (t: Throwable) {
                                     }
                                 }
