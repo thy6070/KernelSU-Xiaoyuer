@@ -166,6 +166,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val appCtx = LocalContext.current
     val view = LocalView.current
 
+    LaunchedEffect(Unit) {
+        if (appCtx.getSharedPreferences("yx_mode", 0).getBoolean("perf", false)) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                        "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
+                        "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
+                        "setsid sh /data/adb/service.d/xy_guard.sh >/dev/null 2>&1 &")).waitFor()
+                }
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         val window = (view.context as? Activity)?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, view) }
