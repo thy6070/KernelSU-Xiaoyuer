@@ -605,9 +605,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 }
                                 else -> "chmod 777 \"$file\" 2>/dev/null; exec sh \"$file\""
                             }
-                            val pb = ProcessBuilder(suBin(), "-c", cmd)
+                            val pb = ProcessBuilder(suBin(), "-c", cmd).directory(java.io.File("/data/local/tmp"))
                             pb.redirectErrorStream(true)
-                            pb.directory(java.io.File(dir))
                             pb.environment()["PATH"] = "/system/bin:/system/xbin:/sbin:/vendor/bin"
                             pb.environment()["HOME"] = "/data"
                             pb.environment()["TMPDIR"] = "/data/local/tmp"
@@ -1089,7 +1088,7 @@ private fun ProMaxIsland(
     val lowerSel = sel?.lowercase() ?: ""
     val actionLabel = when {
         sel == null -> ""
-        lowerSel.endsWith(".apk") -> "安装"
+        isApk(selName) -> "安装"
         lowerSel.endsWith(".so") -> "启动"
         lowerSel.endsWith(".sh") || lowerSel.endsWith(".rc") -> "执行"
         lowerSel.endsWith(".zip") || lowerSel.endsWith(".tar") || lowerSel.endsWith(".gz") ||
@@ -1527,7 +1526,7 @@ private fun ProMaxIsland(
                                     val isArchive = lowerLp.endsWith(".zip") || lowerLp.endsWith(".tar") ||
                                         lowerLp.endsWith(".gz") || lowerLp.endsWith(".7z") ||
                                         lowerLp.endsWith(".rar") || lowerLp.endsWith(".xz")
-                                    val isApk = lowerLp.endsWith(".apk")
+                                    val isApkFile = isApk(lp.substringAfterLast('/'))
                                     val isExec = lowerLp.endsWith(".sh") || lowerLp.endsWith(".so") ||
                                         lowerLp.endsWith(".rc")
                                     Column(
@@ -1573,7 +1572,7 @@ private fun ProMaxIsland(
                                         if (!longPressIsDir) {
                                             IslandActionButton(
                                                 when {
-                                                    isApk -> "安装"
+                                                    isApkFile -> "安装"
                                                     isArchive -> "进入"
                                                     isExec -> "编辑"
                                                     else -> "执行"
@@ -1581,7 +1580,7 @@ private fun ProMaxIsland(
                                                 Color(0xFF0A84FF)
                                             ) {
                                                 when {
-                                                    isApk -> onFileOp("install", "")
+                                                    isApkFile -> onFileOp("install", "")
                                                     isArchive -> onArchiveEnter()
                                                     isExec -> onFileOp("edit", "")
                                                     else -> onAction("")
@@ -1715,25 +1714,6 @@ private fun ProMaxIsland(
                                     }
                                 }
                                 4 -> {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("向左", Color(0xFF3A3A3C)) {
-                                                jumpSide = 1
-                                                switchStep(5)
-                                            }
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("向右", Color(0xFF0A84FF)) {
-                                                jumpSide = 2
-                                                switchStep(5)
-                                            }
-                                        }
-                                    }
-                                }
-                                5 -> {
                                     androidx.compose.foundation.text.BasicTextField(
                                         value = jumpInput,
                                         onValueChange = { jumpInput = it },
@@ -1747,9 +1727,22 @@ private fun ProMaxIsland(
                                         ),
                                         singleLine = true
                                     )
-                                    IslandActionButton("确定", Color(0xFF0A84FF)) {
-                                        if (jumpSide == 1) onGoLeft(jumpInput) else onGoRight(jumpInput)
-                                        closeIsland()
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            IslandActionButton("向左", Color(0xFF3A3A3C)) {
+                                                onGoLeft(jumpInput)
+                                                closeIsland()
+                                            }
+                                        }
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            IslandActionButton("向右", Color(0xFF0A84FF)) {
+                                                onGoRight(jumpInput)
+                                                closeIsland()
+                                            }
+                                        }
                                     }
                                 }
                                 7 -> {
@@ -3609,7 +3602,7 @@ internal fun suBin(): String {
 /** Runs a root command with a bounded wait so a hidden grant dialog cannot stall the UI. */
 internal fun suNow(cmd: String, timeoutMs: Long = 20000L): String {
     return try {
-        val pr = ProcessBuilder(suBin(), "-c", cmd).redirectErrorStream(true).start()
+        val pr = ProcessBuilder(suBin(), "-c", cmd).directory(java.io.File("/data/local/tmp")).redirectErrorStream(true).start()
         val done = java.util.concurrent.Executors.newSingleThreadExecutor().submit<Boolean> {
             pr.waitFor(); true
         }.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
