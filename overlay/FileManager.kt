@@ -599,7 +599,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                     runMessage = msg
-                    if (msg.contains("已安装")) extractDone = true
                     refreshTick += 1
                 }
             } else if (p != null) {
@@ -1226,9 +1225,9 @@ private fun ProMaxIsland(
                         .size(26.dp)
                         .clip(RoundedCornerShape(percent = 22))
                 )
-                if (extractDone) {
+                if (extractDone || runMessage == "已安装" || runMessage == "安装失败") {
                     Text(
-                        text = "已完成",
+                        text = if (runMessage == "安装失败") "安装失败" else "已完成",
                         modifier = Modifier.weight(1f),
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
