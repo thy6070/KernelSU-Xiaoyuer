@@ -3408,37 +3408,9 @@ private fun BrowserPane(
         }
     }
 
-        Column(modifier = modifier.fillMaxSize()) {
-            if (pullDy > 40f) {
-                Text(
-                    text = if (pullDy > 160f) "松开刷新" else "下拉刷新",
-                    color = Color(0xFF8E8E93),
-                    fontSize = 11.sp,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    textAlign = TextAlign.Center
-                )
-            }
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))
-                .pointerInput(path) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        if (listState.firstVisibleItemIndex != 0 ||
-                            listState.firstVisibleItemScrollOffset != 0) return@awaitEachGesture
-                        var dy = 0f
-                        while (true) {
-                            val ev = awaitPointerEvent()
-                            val ch = ev.changes.firstOrNull() ?: break
-                            dy += ch.positionChange().y
-                            pullDy = dy
-                            if (dy > 0f) ch.consume()
-                            if (!ch.pressed) break
-                        }
-                        pullDy = 0f
-                        if (dy > 160f) onRefresh()
-                    }
-                },
+            modifier = modifier.fillMaxSize().background(Color(BG_COLOR)),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
         item {
@@ -3482,7 +3454,6 @@ private fun BrowserPane(
             )
         }
     }
-        }
 }
 
 @Composable
