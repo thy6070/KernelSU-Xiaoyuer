@@ -1326,7 +1326,7 @@ private fun ProMaxIsland(
                             var kernelUmount by remember { mutableStateOf(false) }
                             LaunchedEffect(Unit) {
                                 withContext(Dispatchers.IO) {
-                                    softReboot = navCtx.getSharedPreferences("yx_mode", 0).getBoolean("soft_reboot", false)
+                                    softReboot = navCtx.getSharedPreferences("settings", 0).getBoolean("soft_reboot", false)
                                     try {
                                         fun q(c: String): String {
                                             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
@@ -1365,7 +1365,7 @@ private fun ProMaxIsland(
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
                                             softReboot = !softReboot
-                                            navCtx.getSharedPreferences("yx_mode", 0).edit()
+                                            navCtx.getSharedPreferences("settings", 0).edit()
                                                 .putBoolean("soft_reboot", softReboot).apply()
                                         }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
