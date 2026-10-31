@@ -2367,9 +2367,13 @@ private fun ModeButton(
                         }
                         return best
                     }
-                    val den = (measure("/data/system") + measure("/data/misc")) / 2.0
-                    val mod = measure("/data/adb/modules")
-                    if (mod - den > 500.0) "会拉闸" else "不会拉闸"
+                    val reachable = try {
+                        android.system.Os.stat("/data/adb/modules")
+                        true
+                    } catch (e: Throwable) {
+                        false
+                    }
+                    if (!reachable) "会拉闸" else "不会拉闸"
                 } catch (t: Throwable) {
                     null
                 }
@@ -2935,7 +2939,17 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                             "chmod 755 /data/adb/ksud\n" +
                                             "printf 'allow untrusted_app adb_data_file dir { open read search getattr }\\n' > /data/local/tmp/xy_allow.txt\n" +
                                             "printf 'allow untrusted_app adb_data_file file { open read getattr }\\n' >> /data/local/tmp/xy_allow.txt\n" +
-                                            "for c in /data/adb/ksud /data/adb/ksu/bin/ksud; do [ -x \"\$c\" ] && \"\$c\" sepolicy apply /data/local/tmp/xy_allow.txt; done\n"
+                                            "n=0\n" +
+                                            "while [ \"\$n\" -lt 30 ]; do\n" +
+                                            "  done_ok=0\n" +
+                                            "  for c in /data/adb/ksud /data/adb/ksu/bin/ksud; do\n" +
+                                            "    [ -x \"\$c\" ] || continue\n" +
+                                            "    \"\$c\" sepolicy apply /data/local/tmp/xy_allow.txt >/dev/null 2>&1 && done_ok=1\n" +
+                                            "  done\n" +
+                                            "  [ \"\$done_ok\" = \"1\" ] && break\n" +
+                                            "  n=\$((n + 1))\n" +
+                                            "  sleep 2\n" +
+                                            "done\n"
                                         su("printf '%s' '" + boot.replace("'", "'\''") + "' > $bootDir/xy_open_access.sh ; chmod 755 $bootDir/xy_open_access.sh")
                                     } catch (t: Throwable) {
                                     }
