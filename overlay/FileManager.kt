@@ -922,7 +922,7 @@ private fun ProMaxIsland(
                     val res = repo.getAppList()
                     val apps = res.getOrNull()?.first ?: emptyList()
                     val pm = navCtx.packageManager
-                    apps.map { ai ->
+                    apps.filter { it.uid >= 10000 }.map { ai ->
                         val icon = try {
                             val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
                             val w = d.intrinsicWidth.coerceAtLeast(1)
