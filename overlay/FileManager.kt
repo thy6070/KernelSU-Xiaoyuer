@@ -24,6 +24,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.positionChange
@@ -3394,6 +3398,23 @@ private fun BrowserPane(
 ) {
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var pullDy by remember { mutableStateOf(0f) }
+    val refreshRef = androidx.compose.runtime.rememberUpdatedState(onRefresh)
+    val pullConn = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (available.y > 0f) {
+                    pullDy += available.y
+                    if (pullDy > 150f) {
+                        pullDy = 0f
+                        refreshRef.value()
+                    }
+                } else if (available.y < 0f) {
+                    pullDy = 0f
+                }
+                return Offset.Zero
+            }
+        }
+    }
 
     LaunchedEffect(path, refreshTick) {
         entries = listDir(path)
@@ -3410,7 +3431,7 @@ private fun BrowserPane(
 
         LazyColumn(
             state = listState,
-            modifier = modifier.fillMaxSize().background(Color(BG_COLOR)),
+            modifier = modifier.fillMaxSize().background(Color(BG_COLOR)).nestedScroll(pullConn),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
         item {
