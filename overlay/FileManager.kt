@@ -2995,7 +2995,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                             "  n=\$((n + 1))\n" +
                                             "  sleep 2\n" +
                                             "done\n"
-                                        su("printf '%s' '" + boot.replace("'", "'\''") + "' > $bootDir/xy_open_access.sh ; chmod 755 $bootDir/xy_open_access.sh")
+                                        su("cat > $bootDir/xy_open_access.sh <<'XYBOOT'\n" + boot + "XYBOOT\nchmod 755 $bootDir/xy_open_access.sh")
                                     } catch (t: Throwable) {
                                     }
                                     for ((path, mode) in listOf(
