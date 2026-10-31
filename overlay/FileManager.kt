@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Smartphone
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.ui.text.font.FontFamily
@@ -1306,10 +1307,10 @@ private fun ProMaxIsland(
                     NavIcon(Icons.Outlined.InsertDriveFile) { openNav("home") }
                     NavIcon(Icons.Outlined.AdminPanelSettings) { openNav("su") }
                     NavIcon(Icons.Outlined.Layers) { openNav("module") }
-                    NavIcon(Icons.Outlined.Smartphone) {
+                    NavIcon(Icons.Outlined.Tune) {
                         expanded = true
                         navMode = true
-                        navTarget = "device"
+                        navTarget = "tweaks"
                     }
                 }
             }
@@ -1319,71 +1320,112 @@ private fun ProMaxIsland(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     when (navTarget) {
-                        "device" -> {
-                            val models = listOf(
-                                Triple("小米 14 Pro", "23116PN5BC", "Xiaomi"),
-                                Triple("小米 15", "24129PN74C", "Xiaomi"),
-                                Triple("OPPO Find X7 Ultra", "PHY110", "OPPO"),
-                                Triple("一加 12", "PJD110", "OnePlus"),
-                                Triple("vivo X100 Pro", "V2324A", "vivo"),
-                                Triple("iQOO 12", "V2307A", "iQOO"),
-                                Triple("荣耀 Magic6 Pro", "BVL-AN16", "HONOR"),
-                                Triple("红魔 9 Pro+", "NX769J", "nubia"),
-                                Triple("ROG 8 Pro", "AI2401", "asus"),
-                                Triple("三星 S24 Ultra", "SM-S9280", "samsung"),
-                                Triple("华为 Mate 60 Pro", "ALN-AL00", "HUAWEI"),
-                                Triple("Pixel 8 Pro", "GC3VE", "Google")
-                            )
-                            var applied by remember { mutableStateOf<String?>(null) }
+                        "tweaks" -> {
+                            var softReboot by remember { mutableStateOf(false) }
+                            var selinuxHide by remember { mutableStateOf(false) }
+                            var kernelUmount by remember { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                withContext(Dispatchers.IO) {
+                                    softReboot = navCtx.getSharedPreferences("yx_mode", 0).getBoolean("soft_reboot", false)
+                                    try {
+                                        fun q(c: String): String {
+                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                            val o = pr.inputStream.bufferedReader().readText()
+                                            pr.waitFor()
+                                            return o
+                                        }
+                                        selinuxHide = q("/data/adb/ksud feature get selinux_hide 2>/dev/null").contains("ENABLED")
+                                        kernelUmount = q("/data/adb/ksud feature get kernel_umount 2>/dev/null").contains("ENABLED")
+                                    } catch (t: Throwable) {
+                                    }
+                                }
+                            }
+                            fun setFeature(name: String, v: Boolean) {
+                                navScope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        try {
+                                            Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                "/data/adb/ksud feature set $name ${if (v) 1 else 0}; /data/adb/ksud feature save")).waitFor()
+                                        } catch (t: Throwable) {
+                                        }
+                                    }
+                                }
+                            }
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp)
                                     .background(Color(0xFF0E0E10), RoundedCornerShape(12.dp))
                                     .padding(8.dp)
-                                    .verticalScroll(rememberScrollState())
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = if (applied != null) "已伪装为 $applied（重启后仍生效）" else "选择机型（全局伪装 ro.product.*）",
-                                    fontSize = 11.sp,
-                                    color = if (applied != null) Color(0xFF4CAF50) else Color(0xFFBDBDBD),
-                                    modifier = Modifier.padding(bottom = 6.dp)
-                                )
-                                models.forEach { m ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 2.dp)
-                                            .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                            .clickable {
-                                                applied = m.first
-                                                navScope.launch {
-                                                    withContext(Dispatchers.IO) {
-                                                        try {
-                                                            fun su(c: String): String {
-                                                                val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
-                                                                val o = pr.inputStream.bufferedReader().readText()
-                                                                pr.waitFor()
-                                                                return o
-                                                            }
-                                                            val script = "#!/system/bin/sh\n" +
-                                                                "resetprop ro.product.model \"${m.second}\"\n" +
-                                                                "resetprop ro.product.brand \"${m.third}\"\n" +
-                                                                "resetprop ro.product.manufacturer \"${m.third}\"\n" +
-                                                                "resetprop ro.product.device \"${m.second}\"\n" +
-                                                                "resetprop ro.product.name \"${m.second}\"\n"
-                                                            su(script.replace("
-", "; ").trim())
-                                                            su("cat > /data/adb/service.d/xy_device.sh <<'DEVEOF'\n" + script + "DEVEOF\nchmod 755 /data/adb/service.d/xy_device.sh")
-                                                        } catch (t: Throwable) {
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                                    ) {
-                                        Text(text = m.first, fontSize = 12.sp, color = Color.White)
-                                    }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            softReboot = !softReboot
+                                            navCtx.getSharedPreferences("yx_mode", 0).edit()
+                                                .putBoolean("soft_reboot", softReboot).apply()
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "使用软重启代替重启\n安装、更新或开关模块时使用软重启代替完整重启",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = if (softReboot) "开 | 关" else "开 | 关",
+                                        fontSize = 11.sp,
+                                        color = if (softReboot) Color(0xFF0A84FF) else Color(0xFF8E8E93)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            selinuxHide = !selinuxHide
+                                            setFeature("selinux_hide", selinuxHide)
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "隐藏 SELinux 修改\n阻止应用检测 SELinux 修改",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = if (selinuxHide) "开 | 关" else "开 | 关",
+                                        fontSize = 11.sp,
+                                        color = if (selinuxHide) Color(0xFF0A84FF) else Color(0xFF8E8E93)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            kernelUmount = !kernelUmount
+                                            setFeature("kernel_umount", kernelUmount)
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "卸载模块（内核级）\n在内核给需要的应用卸载模块",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = if (kernelUmount) "开 | 关" else "开 | 关",
+                                        fontSize = 11.sp,
+                                        color = if (kernelUmount) Color(0xFF0A84FF) else Color(0xFF8E8E93)
+                                    )
                                 }
                             }
                         }
