@@ -1412,8 +1412,15 @@ private fun ProMaxIsland(
                                             if (mod != null) {
                                                 navScope.launch {
                                                     val hasWeb = withContext(Dispatchers.IO) {
-                                                        Shell.cmd("test -d \"/data/adb/modules/${mod.id}/webroot\" && echo yes")
-                                                            .exec().out.joinToString("").contains("yes")
+                                                        try {
+                                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                                "test -d \"/data/adb/modules/${mod.id}/webroot\" && echo yes"))
+                                                            val o = pr.inputStream.bufferedReader().readText()
+                                                            pr.waitFor()
+                                                            o.contains("yes")
+                                                        } catch (t: Throwable) {
+                                                            false
+                                                        }
                                                     }
                                                     if (hasWeb) {
                                                         try {
@@ -1432,8 +1439,8 @@ private fun ProMaxIsland(
                                                     } else {
                                                         withContext(Dispatchers.IO) {
                                                             try {
-                                                                Shell.cmd("sh \"/data/adb/modules/${mod.id}/action.sh\" 2>/dev/null")
-                                                                    .exec()
+                                                                Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                                    "sh \"/data/adb/modules/${mod.id}/action.sh\" 2>/dev/null")).waitFor()
                                                             } catch (t: Throwable) {
                                                             }
                                                         }
