@@ -22,6 +22,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -261,6 +262,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 },
                 refreshTick = refreshTick,
+                onRefresh = { refreshTick += 1 },
                 selectedPath = selectedFile,
                 highlightName = leftHighlight,
                 modifier = Modifier.weight(1f)
@@ -298,6 +300,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 },
                 refreshTick = refreshTick,
+                onRefresh = { refreshTick += 1 },
                 selectedPath = selectedFile,
                 modifier = Modifier.weight(1f)
             )
@@ -3386,9 +3389,11 @@ private fun BrowserPane(
     selectedPath: String? = null,
     highlightName: String? = null,
     onLongPress: (String) -> Unit = {},
+    onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
+    var pullDy by remember { mutableStateOf(0f) }
 
     LaunchedEffect(path, refreshTick) {
         entries = listDir(path)
@@ -3403,9 +3408,37 @@ private fun BrowserPane(
         }
     }
 
+        Column(modifier = modifier.fillMaxSize()) {
+            if (pullDy > 40f) {
+                Text(
+                    text = if (pullDy > 160f) "松开刷新" else "下拉刷新",
+                    color = Color(0xFF8E8E93),
+                    fontSize = 11.sp,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
         LazyColumn(
             state = listState,
-            modifier = modifier.fillMaxSize().background(Color(BG_COLOR)),
+            modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))
+                .pointerInput(path) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (listState.firstVisibleItemIndex != 0 ||
+                            listState.firstVisibleItemScrollOffset != 0) return@awaitEachGesture
+                        var dy = 0f
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            val ch = ev.changes.firstOrNull() ?: break
+                            dy += ch.positionChange().y
+                            pullDy = dy
+                            if (dy > 0f) ch.consume()
+                            if (!ch.pressed) break
+                        }
+                        pullDy = 0f
+                        if (dy > 160f) onRefresh()
+                    }
+                },
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
         item {
@@ -3449,6 +3482,7 @@ private fun BrowserPane(
             )
         }
     }
+        }
 }
 
 @Composable
