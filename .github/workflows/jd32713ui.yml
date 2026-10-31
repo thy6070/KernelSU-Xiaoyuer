@@ -117,6 +117,8 @@ jobs:
           cp manager/app/src/main/AndroidManifest.xml src/manager/app/src/main/AndroidManifest.xml
           cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
           cp manager/app/src/main/res/drawable-nodpi/ic_zysu.png src/manager/app/src/main/res/drawable-nodpi/ic_zysu.png
+          mkdir -p src/manager/app/src/main/assets
+          cp -r manager/app/src/main/assets/. src/manager/app/src/main/assets/ 2>/dev/null || true
 
       - name: Spoof namespace
         run: |
