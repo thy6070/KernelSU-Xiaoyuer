@@ -628,7 +628,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "chmod 755 \"$p\" 2>/dev/null ; " +
                                         (if (key.isEmpty()) "\"$p\"" else "\"$p\" -k \"$key\"") + " 2>&1"
                                 }
-                                else -> "cd \"$dir\" 2>/dev/null; chmod 777 \"$file\" 2>/dev/null; sh \"$file\" < /dev/null 2>&1 | tail -n 30"
+                                else -> "chmod 777 \"$file\" 2>/dev/null; exec sh \"$file\""
                             }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
