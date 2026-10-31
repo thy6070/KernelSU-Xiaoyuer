@@ -91,7 +91,7 @@ jobs:
         run: |
           U=old/manager/app/src/main/java/me/weishu/kernelsu
           S=src/manager/app/src/main/java/me/weishu/kernelsu
-          cp $U/ui/MainActivity.kt $S/ui/
+          cp overlay/MainActivity.kt $S/ui/MainActivity.kt
           cp overlay/FileManager.kt $S/ui/screen/FileManager.kt
           cp $U/ui/screen/CardLogin.kt $S/ui/screen/
           cp overlay/FileLocate.kt $S/ui/screen/FileLocate.kt
