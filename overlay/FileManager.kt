@@ -2511,14 +2511,14 @@ private fun ModeButton(
                     showUrlDialog = true
                 }
                 if (title == "执行此文件" && onRun != null) {
-                    val savedPath = ctx3.getSharedPreferences("yx_exec", 0).getString("path", null)
+                    val savedPath = ctx3.getSharedPreferences("yx_exec", 0).getString(slot, null)
                     if (savedPath.isNullOrBlank()) {
                         latencyMsg = "暂无设置"
                     } else {
                         onRun(savedPath)
                     }
                 } else if (title == "执行此文件") {
-                    val path = ctx3.getSharedPreferences("yx_exec", 0).getString("path", null)
+                    val path = ctx3.getSharedPreferences("yx_exec", 0).getString(slot, null)
                     if (path.isNullOrBlank()) {
                         latencyMsg = "暂无设置"
                     } else if (path.endsWith(".so")) {
