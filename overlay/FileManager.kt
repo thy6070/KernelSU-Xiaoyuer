@@ -2852,186 +2852,21 @@ if (title == "性能模式") {
                     "    mf=\$(cat \"\${f%/scaling_min_freq}/cpuinfo_max_freq\" 2>/dev/null)",
                     "    [ -n \"\$mf\" ] || continue",
                     "    want=\$((mf * 50 / 100))",
-                    "    cur=\$(cat \"\$f\" 2>/dev/null)",
-                    "    [ \"\$cur\" = \"\$want\" ] || echo \"\$want\" > \"\$f\" 2>/dev/null",
+                    "    echo \"\$want\" > \"\$f\" 2>/dev/null",
                     "  done",
                     "  for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
-                    "    [ -f \"\$f\" ] && [ \"\$(cat \"\$f\" 2>/dev/null)\" != \"20\" ] && echo 20 > \"\$f\" 2>/dev/null",
+                    "    [ -f \"\$f\" ] && echo 20 > \"\$f\" 2>/dev/null",
                     "  done",
+                    "  # DDR 带宽保持最高",
+                    "  DD=/sys/class/devfreq/mtk-dvfsrc-devfreq",
+                    "  if [ -f \"\$DD/min_freq\" ]; then",
+                    "    DH=\$(tr ' ' '\\n' < \"\$DD/available_frequencies\" 2>/dev/null | sort -n | tail -1)",
+                    "    [ -n \"\$DH\" ] && [ \"\$(cat \"\$DD/min_freq\" 2>/dev/null)\" != \"\$DH\" ] && echo \"\$DH\" > \"\$DD/min_freq\" 2>/dev/null",
+                    "  fi",
                     "  for c in /sys/devices/system/cpu/cpu[0-9]*/online; do [ -f \"\$c\" ] && [ \"\$(cat \$c 2>/dev/null)\" = \"0\" ] && echo 1 > \"\$c\" 2>/dev/null; done",
-                    "  sleep 2",
+                    "  sleep 0.5",
                     "done",
                     ""
-                                )
-                                val dir = "/data/adb/service.d"
-                                val perf = dir + "/xy_perf.sh"
-                                val guard = dir + "/xy_guard.sh"
-                                if (enabling) {
-                                    su("mkdir -p " + dir)
-                                    su("cat > " + perf + " <<'XYEOF'\n" + perfLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + perf)
-                                    su("cat > " + guard + " <<'XYEOF'\n" + guardLines.joinToString("\n") + "\nXYEOF\nchmod 755 " + guard)
-                                    su("sh " + perf + " on >/dev/null 2>&1")
-                                    su("pkill -f xy_guard 2>/dev/null; setsid nohup sh " + guard + " >/dev/null 2>&1 &")
-                                    "已开启 · 守护已启动"
-                                } else {
-                                    su("pkill -f xy_guard 2>/dev/null")
-                                    su("sh " + perf + " off >/dev/null 2>&1; rm -f " + perf + " " + guard)
-                                    "已关闭"
-                                }
-                            } catch (t: Throwable) {
-                                "操作失败"
-                            }
-                        }
-                        latencyMsg = msg
-                    }
-                }
-                if (title == "放开通行") {
-                    val enabling = on
-                    scope2.launch {
-                        withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            try {
-                                fun su(c: String): String {
-                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
-                                    val out = p.inputStream.bufferedReader().readText()
-                                    p.waitFor()
-                                    return out
-                                }
-                                if (enabling) {
-                                    // install a boot script so the state survives reboots
-                                    try {
-                                        val bootDir = "/data/adb/service.d"
-                                        su("mkdir -p $bootDir")
-                                        val boot = "#!/system/bin/sh\n" +
-                                            "chmod 771 /data/adb\n" +
-                                            "chmod 755 /data/adb/modules\n" +
-                                            "chmod 755 /data/adb/ksu\n" +
-                                            "chmod 755 /data/adb/ksud\n" +
-                                            "printf 'allow untrusted_app adb_data_file dir { open read search getattr }\\n' > /data/local/tmp/xy_allow.txt\n" +
-                                            "printf 'allow untrusted_app adb_data_file file { open read getattr }\\n' >> /data/local/tmp/xy_allow.txt\n" +
-                                            "for c in /data/adb/ksud /data/adb/ksu/bin/ksud; do [ -x \"\$c\" ] && \"\$c\" sepolicy apply /data/local/tmp/xy_allow.txt; done\n"
-                                        su("printf '%s' '" + boot.replace("'", "'\''") + "' > $bootDir/xy_open_access.sh ; chmod 755 $bootDir/xy_open_access.sh")
-                                    } catch (t: Throwable) {
-                                    }
-                                    for ((path, mode) in listOf(
-                                        "/data/adb" to "771",
-                                        "/data/adb/modules" to "755",
-                                        "/data/adb/ksu" to "755",
-                                        "/data/adb/ksud" to "755"
-                                    )) {
-                                        su("chmod $mode '" + path.replace("'", "'\''") + "' 2>/dev/null; true")
-                                    }
-                                    val domains = listOf(
-                                        "untrusted_app", "untrusted_app_25", "untrusted_app_27",
-                                        "untrusted_app_29", "untrusted_app_30", "untrusted_app_32",
-                                        "untrusted_app_34"
-                                    )
-                                    val rules = domains.joinToString("\n") { dm ->
-                                        "allow " + dm + " adb_data_file dir { open read search getattr }\n" +
-                                            "allow " + dm + " adb_data_file file { open read getattr }\n" +
-                                            "allow " + dm + " adb_data_file lnk_file read\n" +
-                                            "allow " + dm + " proc_modules file { open read getattr }"
-                                    } + "\n"
-                                    val rf = "/data/local/tmp/sepolicy_rules.txt"
-                                    su("printf '%s' '" + rules.replace("'", "'\''") + "' > $rf ; chmod 644 $rf ; true")
-                                    val ks = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
-                                    if (java.io.File(ks).exists()) {
-                                        su("'" + ks.replace("'", "'\\''") + "' sepolicy apply $rf 2>&1; true")
-                                    }
-                                } else {
-                                    try {
-                                        su("rm -f /data/adb/service.d/xy_open_access.sh")
-                                    } catch (t: Throwable) {
-                                    }
-                                    for (path in listOf(
-                                        "/data/adb", "/data/adb/modules",
-                                        "/data/adb/ksu", "/data/adb/ksud"
-                                    )) {
-                                        su("chmod 700 '" + path.replace("'", "'\''") + "' 2>/dev/null; true")
-                                    }
-                                    val rules = "deny untrusted_app adb_data_file dir { open read search getattr }\n" +
-                                        "deny untrusted_app adb_data_file file { open read getattr }\n" +
-                                        "deny untrusted_app adb_data_file lnk_file read\n" +
-                                        "deny untrusted_app proc_modules file { open read getattr }\n"
-                                    val rf = "/data/local/tmp/sepolicy_deny.txt"
-                                    su("printf '%s' '" + rules.replace("'", "'\''") + "' > $rf ; chmod 644 $rf ; true")
-                                    val ks = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
-                                    if (java.io.File(ks).exists()) {
-                                        su("'" + ks.replace("'", "'\\''") + "' sepolicy apply $rf 2>&1; true")
-                                    }
-                                }
-                            } catch (t: Throwable) {
-                            }
-                        }
-                        kotlinx.coroutines.delay(600)
-                        refreshLatency()
-                    }
-                }
-            }
-            .padding(horizontal = 18.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(22.dp)
-        )
-        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 16.sp,
-                modifier = Modifier.align(Alignment.Center)
-            )
-            Text(
-                text = subtitle ?: latencyMsg
-                    ?: (if (title == "执行此文件" || title == "刷入驱动") (execPath ?: "暂无设置") else ""),
-                color = Color(0x66FFFFFF),
-                fontSize = 9.sp,
-                maxLines = 1,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 6.dp)
-                    .then(
-                        if (title == "执行此文件" || title == "刷入驱动") {
-                            Modifier.clickable {
-                                pathInput = execPath ?: ""
-                                showPathDialog = true
-                            }
-                        } else Modifier
-                    )
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "开",
-                color = if (on) Color.White else Color(0xFF5A5A5E),
-                fontSize = 15.sp,
-                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal
-            )
-            Text(text = " | ", color = Color(0xFF6A6A6E), fontSize = 15.sp)
-            Text(
-                text = "关",
-                color = if (!on) Color.White else Color(0xFF5A5A5E),
-                fontSize = 15.sp,
-                fontWeight = if (!on) FontWeight.SemiBold else FontWeight.Normal
-            )
-        }
-    }
-    if (showUrlDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showUrlDialog = false },
-            title = { androidx.compose.material3.Text("驱动 zip 直链") },
-            text = {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = urlInput,
-                    onValueChange = { urlInput = it },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 12.sp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
-                        .padding(8.dp)
                 )
             },
             confirmButton = {
