@@ -553,8 +553,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             "/data/adb/modules/busybox-ndk/system/bin/busybox"
                         ).firstOrNull { java.io.File(it).isFile }
                         val qq = { s: String -> "'" + s.replace("'", "'\''") + "'" }
-                        // 不用 busybox script（-c 参数解析不稳，嵌套引号会失败），直接执行
-                        val wrapped = cmd + " 2>&1"
+                        // 保留 PTY 包装（交互式模块需要终端），写法用实测通过的：script -q -c CMD /dev/null
+                        val wrapped = if (bb != null) {
+                            "exec " + qq(bb) + " script -q -c " + qq(cmd + " 2>&1") + " /dev/null"
+                        } else {
+                            cmd + " 2>&1"
+                        }
                         withContext(Dispatchers.IO) {
                             val pb = ProcessBuilder("/system/bin/sh", "-c", "su -c " + qq(wrapped))
                             pb.redirectErrorStream(true)
