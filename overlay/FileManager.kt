@@ -580,7 +580,28 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
         onAction = { soKey ->
             val p = longPressPath ?: selectedFile
-            if (p != null) {
+            val apkName = p?.substringAfterLast('/') ?: ""
+            if (p != null && isApk(apkName)) {
+                uiScope.launch {
+                    runMessage = "安装中…"
+                    val msg = withContext(Dispatchers.IO) {
+                        try {
+                            val q = "'" + p.replace("'", "'\''") + "'"
+                            val out = Shell.cmd(
+                                "cp -f " + q + " /data/local/tmp/xy_install.apk; " +
+                                    "chmod 644 /data/local/tmp/xy_install.apk; " +
+                                    "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
+                            ).exec()
+                            val txt = (out.out + out.err).joinToString("\n")
+                            if (txt.contains("Success")) "已安装" else "安装失败"
+                        } catch (t: Throwable) {
+                            "安装失败：" + (t.message ?: "")
+                        }
+                    }
+                    runMessage = msg
+                    refreshTick += 1
+                }
+            } else if (p != null) {
                 val lower = p.lowercase()
                 uiScope.launch {
                     running = true
