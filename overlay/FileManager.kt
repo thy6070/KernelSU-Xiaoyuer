@@ -432,7 +432,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 "unzip" -> "unzip -o " + q(srcPath) + " -d " + q(arg)
                                 "rename" -> "mv -f " + q(srcPath) + " " + q(dir + "/" + arg)
                                 "delete" -> "rm -rf " + q(srcPath)
-                                "install" -> "pm install -r " + q(srcPath)
+                                "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
                                 "edit" -> "chmod 644 " + q(srcPath)
                                 else -> ""
                             }
@@ -440,6 +440,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             if (cmd.isNotEmpty()) {
                                 val res = Shell.cmd(cmd).exec()
                                 ok = res.isSuccess
+                                if (op == "install") {
+                                    val txt = (res.out + res.err).joinToString("\n")
+                                    ok = txt.contains("Success")
+                                }
                             }
                             if (op == "share") {
                                 // verbatim from the ZySU source: private cache dir works with FileProvider
