@@ -589,7 +589,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             val dir = p.substringBeforeLast('/', "/")
                             val file = p.substringAfterLast('/')
                             val cmd = when {
-                                lower.contains(".apk") ->
+                                lower.endsWith(".apk") ->
                                     "cp -f " + shq(p) + " /data/local/tmp/xy_install.apk ; " +
                                         "chmod 644 /data/local/tmp/xy_install.apk ; " +
                                         "pm install -r /data/local/tmp/xy_install.apk"
@@ -1085,7 +1085,7 @@ private fun ProMaxIsland(
     val lowerSel = sel?.lowercase() ?: ""
     val actionLabel = when {
         sel == null -> ""
-        lowerSel.contains(".apk") -> "安装"
+        lowerSel.endsWith(".apk") -> "安装"
         lowerSel.endsWith(".so") -> "启动"
         lowerSel.endsWith(".sh") || lowerSel.endsWith(".rc") -> "执行"
         lowerSel.endsWith(".zip") || lowerSel.endsWith(".tar") || lowerSel.endsWith(".gz") ||
@@ -1523,7 +1523,7 @@ private fun ProMaxIsland(
                                     val isArchive = lowerLp.endsWith(".zip") || lowerLp.endsWith(".tar") ||
                                         lowerLp.endsWith(".gz") || lowerLp.endsWith(".7z") ||
                                         lowerLp.endsWith(".rar") || lowerLp.endsWith(".xz")
-                                    val isApk = lowerLp.contains(".apk")
+                                    val isApk = lowerLp.endsWith(".apk")
                                     val isExec = lowerLp.endsWith(".sh") || lowerLp.endsWith(".so") ||
                                         lowerLp.endsWith(".rc")
                                     Column(
@@ -2327,12 +2327,19 @@ private fun ModeButton(
             val remembered = ctx3.getSharedPreferences("yx_mode", 0).getBoolean("perf", false)
             if (remembered) {
                 scope2.launch {
-                    withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        runCatching {
-                            Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
-                                "sh /data/adb/service.d/xy_perf.sh >/dev/null 2>&1")).waitFor()
-                        }
+                    val r = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
+                                "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
+                                "setsid sh /data/adb/service.d/xy_guard.sh >/dev/null 2>&1 & sleep 1; " +
+                                "sh /data/adb/service.d/xy_check.sh 2>/dev/null | tail -1"))
+                            val o = pr.inputStream.bufferedReader().readText().trim()
+                            pr.waitFor()
+                            o
+                        } catch (t: Throwable) { "" }
                     }
+                    latencyMsg = if (r.isNotBlank()) "已开启 · " + r else "已开启 · 守护运行中"
                 }
             }
             on = remembered ||
