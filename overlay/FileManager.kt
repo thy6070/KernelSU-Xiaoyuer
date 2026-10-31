@@ -973,6 +973,12 @@ private fun ProMaxIsland(
             extractDone = false
         }
     }
+    LaunchedEffect(runMessage) {
+        if (runMessage == "已安装" || runMessage == "安装失败") {
+            expanded = false
+            extractDone = true
+        }
+    }
     LaunchedEffect(running) {
         if (running) {
             showWave = true
