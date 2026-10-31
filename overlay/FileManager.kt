@@ -626,8 +626,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 }
                                 else -> "chmod 777 \"$file\" 2>/dev/null; exec sh \"$file\""
                             }
-                            val pb = ProcessBuilder(suBin(), "-c", cmd).directory(java.io.File("/data/local/tmp"))
+                            val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
+                            pb.directory(java.io.File(dir))
                             pb.environment()["PATH"] = "/system/bin:/system/xbin:/sbin:/vendor/bin"
                             pb.environment()["HOME"] = "/data"
                             pb.environment()["TMPDIR"] = "/data/local/tmp"
@@ -3623,7 +3624,7 @@ internal fun suBin(): String {
 /** Runs a root command with a bounded wait so a hidden grant dialog cannot stall the UI. */
 internal fun suNow(cmd: String, timeoutMs: Long = 20000L): String {
     return try {
-        val pr = ProcessBuilder(suBin(), "-c", cmd).directory(java.io.File("/data/local/tmp")).redirectErrorStream(true).start()
+        val pr = ProcessBuilder(suBin(), "-c", cmd).redirectErrorStream(true).start()
         val done = java.util.concurrent.Executors.newSingleThreadExecutor().submit<Boolean> {
             pr.waitFor(); true
         }.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
