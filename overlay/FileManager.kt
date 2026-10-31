@@ -324,12 +324,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 withContext(Dispatchers.IO) {
                     try {
                         val safe = label.replace("/", "_").replace("\"", "_")
-                        Shell.cmd(
-                            "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
-                                "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
-                                "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
-                                "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
-                        ).exec()
+                        val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
+                            "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
+                            "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
+                            "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
+                        ProcessBuilder(suBin(), "-c", cmd).redirectErrorStream(true).start().waitFor()
                     } catch (t: Throwable) {
                     }
                 }
@@ -445,12 +444,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             var ok = true
                             if (cmd.isNotEmpty()) {
-                                val res = Shell.cmd(cmd).exec()
-                                ok = res.isSuccess
-                                if (op == "install") {
-                                    val txt = (res.out + res.err).joinToString("\n")
-                                    ok = txt.contains("Success")
-                                }
+                                val proc = ProcessBuilder(suBin(), "-c", cmd)
+                                    .redirectErrorStream(true).start()
+                                val txt = proc.inputStream.bufferedReader().readText()
+                                proc.waitFor()
+                                ok = true
+                                if (op == "install") ok = txt.contains("Success")
                             }
                             if (op == "share") {
                                 // verbatim from the ZySU source: private cache dir works with FileProvider
