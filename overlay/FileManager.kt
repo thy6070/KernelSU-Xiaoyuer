@@ -628,11 +628,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "cp -f \"$p\" /data/local/tmp/xy_exec.so 2>/dev/null ; " +
                                         "chmod 755 /data/local/tmp/xy_exec.so 2>/dev/null ; " +
                                         "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
-                                        (if (key.isEmpty()) "/data/local/tmp/xy_exec.so" else "/data/local/tmp/xy_exec.so -k \"$key\"") + " 2>&1"
+                                        (if (key.isEmpty()) "/data/local/tmp/xy_exec.so" else "/data/local/tmp/xy_exec.so -k \"$key\"") +
+                                        " 2>&1 ; rm -f /data/local/tmp/xy_exec.so"
                                 }
                                 else -> "cp -f \"$p\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
-                                    "exec sh /data/local/tmp/xy_exec.sh"
+                                    "sh /data/local/tmp/xy_exec.sh ; rm -f /data/local/tmp/xy_exec.sh"
                             }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
