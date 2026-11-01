@@ -2594,7 +2594,18 @@ private fun ModeButton(
             }
         }
         if (title == "执行此文件" || title == "刷入驱动") {
-            execPath = ctx3.getSharedPreferences("yx_exec", 0).getString(slot, null)
+            execPath = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val lineNo = when (slot) { "path" -> 3; "path2" -> 4; "path3" -> 5; else -> 3 }
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                        "sed -n '" + lineNo + "p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+                    val o = pr.inputStream.bufferedReader().readText().trim()
+                    pr.waitFor()
+                    o.ifEmpty { null }
+                } catch (t: Throwable) {
+                    null
+                }
+            }
         }
         if (title == "隐藏BL") {
             on = ctx3.getSharedPreferences("yx_mode", 0).getBoolean("bl", false) ||
@@ -2724,14 +2735,14 @@ private fun ModeButton(
                     showUrlDialog = true
                 }
                 if (title == "执行此文件" && onRun != null) {
-                    val savedPath = ctx3.getSharedPreferences("yx_exec", 0).getString(slot, null)
+                    val savedPath = execPath
                     if (savedPath.isNullOrBlank()) {
                         latencyMsg = "暂无设置"
                     } else {
                         onRun(savedPath)
                     }
                 } else if (title == "执行此文件") {
-                    val path = ctx3.getSharedPreferences("yx_exec", 0).getString(slot, null)
+                    val path = execPath
                     if (path.isNullOrBlank()) {
                         latencyMsg = "暂无设置"
                     } else if (path.endsWith(".so")) {
@@ -3537,9 +3548,22 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     val v = pathInput.trim()
-                    ctx3.getSharedPreferences("yx_exec", 0).edit().putString(slot, v).apply()
+                    val lineNo = when (slot) { "path" -> 3; "path2" -> 4; "path3" -> 5; else -> 3 }
                     execPath = v
                     showPathDialog = false
+                    scope2.launch {
+                        withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                val sv = v.replace("'", "'\\''")
+                                val awk = "awk -v n=$lineNo -v v='" + sv + "' 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}'"
+                                val cmd = "F='/storage/emulated/0/小鱼儿/小鱼儿密钥' ; mkdir -p '/storage/emulated/0/小鱼儿' ; " +
+                                    "[ -f \"\$F\" ] || : > \"\$F\" ; " +
+                                    awk + " \"\$F\" > /data/local/tmp/xy_kf && cat /data/local/tmp/xy_kf > \"\$F\" ; rm -f /data/local/tmp/xy_kf ; chmod 600 \"\$F\""
+                                Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd)).waitFor()
+                            } catch (t: Throwable) {
+                            }
+                        }
+                    }
                 }) { androidx.compose.material3.Text("确定") }
             },
             dismissButton = {
