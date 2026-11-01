@@ -353,10 +353,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
         onDelete = {
             val p = selectedFile
-            if (p != null) uiScope.launch {
-                withContext(Dispatchers.IO) { Shell.cmd("rm -rf \"$p\"").exec() }
-                selectedFile = null
-                refreshTick += 1
+            if (p != null) {
+                // 删除前确认（文件和文件夹都走这里）
+                android.app.AlertDialog.Builder(appCtx)
+                    .setTitle("确认删除")
+                    .setMessage(p)
+                    .setPositiveButton("删除") { _, _ ->
+                        uiScope.launch {
+                            withContext(Dispatchers.IO) { Shell.cmd("rm -rf \"$p\"").exec() }
+                            selectedFile = null
+                            refreshTick += 1
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
             }
         },
         runMessage = runMessage,
@@ -422,6 +432,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         shareFailTick = shareFailTick,
         onClearLongPress = { longPressPath = null },
         oppositePath = if (longPressFromRight) leftPath else rightPath,
+        currentPath = if (longPressFromRight) rightPath else leftPath,
         onFileOp = { op, arg ->
             val srcPath = longPressPath ?: selectedFile
             if (srcPath != null) {
@@ -835,6 +846,7 @@ private fun ProMaxIsland(
     shareFailTick: Int,
     onClearLongPress: () -> Unit,
     oppositePath: String,
+    currentPath: String = "/storage/emulated/0/",
     onFileOp: (String, String) -> Unit,
     onOpen: () -> Unit
 ) {
@@ -870,7 +882,7 @@ private fun ProMaxIsland(
         }
         zygiskOn = false
     }
-    var paneTarget by remember { mutableStateOf("/storage/emulated/0/") }
+    var paneTarget by remember(currentPath) { mutableStateOf(currentPath.trimEnd('/') + "/") }
     var createIsDir by remember { mutableStateOf(true) }
     var extractDone by remember { mutableStateOf(false) }
     var rootOk by remember { mutableStateOf(true) }
