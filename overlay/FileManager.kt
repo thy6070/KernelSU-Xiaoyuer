@@ -2548,6 +2548,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                 onDismiss()
                 onRunExec(it)
             })
+            ModeButton(Icons.Outlined.Memory, "小鱼儿寄生")
             ModeButton(Icons.Outlined.Folder, "执行此文件", onRun = {
                 onDismiss()
                 onRunExec(it)
@@ -2622,6 +2623,8 @@ private fun ModeButton(
                                     out.writeBytes(plain)
                                     val qp = "'" + out.absolutePath.replace("'", "'\\''") + "'"
                                     sh2("chmod 644 " + qp)
+                                    // 先卸载已加载的模块，避免 already-exists 导致验证失败
+                                    sh2("/data/adb/ksud unload 2>/dev/null")
                                     val res = sh2("/data/adb/ksud boot-patch -m " + qp + " -f 2>&1")
                                     if (res.contains("Success", true) || res.contains("successfully", true)) {
                                         "已安装 " + out.name + "（重启生效）"
@@ -2782,7 +2785,7 @@ private fun ModeButton(
             .background(Color(0xE60E0E10))
             .clickable {
                 on = !on
-                if (title == "刷入内核模块") {
+                if (title == "小鱼儿寄生" || title == "刷入内核模块") {
                     koList = ctx3.assets.list("lkm")?.filter { it.endsWith(".ko.bin") }?.sorted() ?: emptyList()
                     showKoPick = koList.isNotEmpty()
                     latencyMsg = if (koList.isEmpty()) "无内置模块" else null
