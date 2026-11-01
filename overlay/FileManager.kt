@@ -2194,11 +2194,10 @@ private fun ProMaxIsland(
                                 try {
                                     fun sq(x: String) = "'" + x.replace("'", "'\''") + "'"
                                     if (manual.isNotEmpty()) {
-                                        val cmd = "mkdir -p '/storage/emulated/0/小鱼儿' ; " +
-                                            "F='/storage/emulated/0/小鱼儿/小鱼儿密钥' ; " +
-                                            "L1=\$(head -1 \"\$F\" 2>/dev/null) ; " +
-                                            "printf '%s\\n%s\\n' \"\$L1\" " + sq(manual) + " > \"\$F\" ; " +
-                                            "chmod 600 \"\$F\""
+                                        // 只改第 2 行，保留 1/3/4/5（之前 printf 会截断后面几行）
+                                        val cmd = "F='/storage/emulated/0/小鱼儿/小鱼儿密钥' ; mkdir -p '/storage/emulated/0/小鱼儿' ; " +
+                                            "[ -f \"\$F\" ] || : > \"\$F\" ; " +
+                                            "awk -v n=2 -v v=" + sq(manual) + " 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}' \"\$F\" > /data/local/tmp/xy_kf2 && cat /data/local/tmp/xy_kf2 > \"\$F\" ; rm -f /data/local/tmp/xy_kf2 ; chmod 600 \"\$F\""
                                         Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd)).waitFor()
                                         manual
                                     } else {
