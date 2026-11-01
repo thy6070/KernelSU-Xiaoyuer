@@ -353,20 +353,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
         onDelete = {
             val p = selectedFile
-            if (p != null) {
-                // 删除前确认（文件和文件夹都走这里）
-                android.app.AlertDialog.Builder(appCtx)
-                    .setTitle("确认删除")
-                    .setMessage(p)
-                    .setPositiveButton("删除") { _, _ ->
-                        uiScope.launch {
-                            withContext(Dispatchers.IO) { Shell.cmd("rm -rf \"$p\"").exec() }
-                            selectedFile = null
-                            refreshTick += 1
-                        }
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
+            if (p != null) uiScope.launch {
+                withContext(Dispatchers.IO) { Shell.cmd("rm -rf \"$p\"").exec() }
+                selectedFile = null
+                refreshTick += 1
             }
         },
         runMessage = runMessage,
@@ -433,6 +423,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         onClearLongPress = { longPressPath = null },
         oppositePath = if (longPressFromRight) leftPath else rightPath,
         currentPath = if (longPressFromRight) rightPath else leftPath,
+        leftPath = leftPath,
+        rightPath = rightPath,
         onFileOp = { op, arg ->
             val srcPath = longPressPath ?: selectedFile
             if (srcPath != null) {
@@ -847,6 +839,8 @@ private fun ProMaxIsland(
     onClearLongPress: () -> Unit,
     oppositePath: String,
     currentPath: String = "/storage/emulated/0/",
+    leftPath: String = "/storage/emulated/0/",
+    rightPath: String = "/data/",
     onFileOp: (String, String) -> Unit,
     onOpen: () -> Unit
 ) {
@@ -2027,15 +2021,16 @@ private fun ProMaxIsland(
                                                     navScope.launch {
                                                         withContext(Dispatchers.IO) {
                                                             try {
+                                                                val base = leftPath.trimEnd('/') + "/"
                                                                 if (createIsDir) {
-                                                                    Shell.cmd("mkdir -p \"$paneTarget$nm\"").exec()
+                                                                    Shell.cmd("mkdir -p \"$base$nm\"").exec()
                                                                 } else {
-                                                                    Shell.cmd("touch \"$paneTarget$nm\"").exec()
+                                                                    Shell.cmd("touch \"$base$nm\"").exec()
                                                                 }
                                                             } catch (t: Throwable) {
                                                             }
                                                         }
-                                                        onGoLeft(paneTarget)
+                                                        onGoLeft(leftPath.trimEnd('/') + "/")
                                                         closeIsland()
                                                     }
                                                 }
@@ -2048,15 +2043,16 @@ private fun ProMaxIsland(
                                                     navScope.launch {
                                                         withContext(Dispatchers.IO) {
                                                             try {
+                                                                val base = rightPath.trimEnd('/') + "/"
                                                                 if (createIsDir) {
-                                                                    Shell.cmd("mkdir -p \"$paneTarget$nm\"").exec()
+                                                                    Shell.cmd("mkdir -p \"$base$nm\"").exec()
                                                                 } else {
-                                                                    Shell.cmd("touch \"$paneTarget$nm\"").exec()
+                                                                    Shell.cmd("touch \"$base$nm\"").exec()
                                                                 }
                                                             } catch (t: Throwable) {
                                                             }
                                                         }
-                                                        onGoRight(paneTarget)
+                                                        onGoRight(rightPath.trimEnd('/') + "/")
                                                         closeIsland()
                                                     }
                                                 }
