@@ -2159,17 +2159,28 @@ private fun ProMaxIsland(
                         singleLine = true
                     )
                     IslandActionButton("启动", Color(0xFF0A84FF)) {
-                        // 每次点启动都重新读密钥文件第二行（读不到才用手动输入）
+                        // 输入框有内容 -> 写入密钥文件第二行（覆盖）；空 -> 读第二行
                         navScope.launch {
+                            val manual = soInput.trim()
                             val key = withContext(Dispatchers.IO) {
                                 try {
                                     val f = java.io.File("/storage/emulated/0/小鱼儿/小鱼儿密钥")
-                                    if (f.isFile) f.readLines().getOrNull(1)?.trim() else null
+                                    f.parentFile?.mkdirs()
+                                    if (manual.isNotEmpty()) {
+                                        val lines = (if (f.isFile) f.readLines() else emptyList())
+                                            .toMutableList()
+                                        while (lines.size < 2) lines.add("")
+                                        lines[1] = manual
+                                        f.writeText(lines.joinToString("\n") + "\n")
+                                        manual
+                                    } else {
+                                        if (f.isFile) f.readLines().getOrNull(1)?.trim() else null
+                                    }
                                 } catch (t: Throwable) {
-                                    null
+                                    manual.ifEmpty { null }
                                 }
                             }
-                            onAction(if (!key.isNullOrEmpty()) key else soInput)
+                            onAction(key ?: soInput)
                         }
                         soPanel = false
                     }
