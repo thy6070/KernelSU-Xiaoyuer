@@ -1052,12 +1052,10 @@ private fun ProMaxIsland(
     fun switchStep(target: Int) {
         reopenScope.launch {
             navClosing = true
-            expanded = false
-            jumpStep = 0
             kotlinx.coroutines.delay(110)
-            navMode = true
-            navTarget = "home"      // 必须给 home，否则渲染成导航栏
             jumpStep = target
+            navMode = true
+            navTarget = "home"
             navClosing = false
             expanded = true
         }
