@@ -625,15 +625,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "pm install -r /data/local/tmp/xy_install.apk"
                                 lower.endsWith(".so") -> {
                                     val key = soKey.trim()
-                                    "cd \"$dir\" ; export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
-                                        "chmod 755 \"$p\" 2>/dev/null ; " +
-                                        (if (key.isEmpty()) "\"$p\"" else "\"$p\" -k \"$key\"") + " 2>&1"
+                                    "cp -f \"$p\" /data/local/tmp/xy_exec.so 2>/dev/null ; " +
+                                        "chmod 755 /data/local/tmp/xy_exec.so 2>/dev/null ; " +
+                                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                                        (if (key.isEmpty()) "/data/local/tmp/xy_exec.so" else "/data/local/tmp/xy_exec.so -k \"$key\"") + " 2>&1"
                                 }
-                                else -> "chmod 777 \"$file\" 2>/dev/null; exec sh \"$file\""
+                                else -> "cp -f \"$p\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
+                                    "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
+                                    "exec sh /data/local/tmp/xy_exec.sh"
                             }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
-                            pb.directory(java.io.File(dir))
+                            pb.directory(java.io.File("/data/local/tmp"))
                             pb.environment()["PATH"] = "/system/bin:/system/xbin:/sbin:/vendor/bin"
                             pb.environment()["HOME"] = "/data"
                             pb.environment()["TMPDIR"] = "/data/local/tmp"
