@@ -2745,28 +2745,30 @@ private fun ModeButton(
                                 val assets = ctx3.assets
                                 val listed = assets.list("lkm")?.toList() ?: emptyList()
                                 // prefer the file whose kmi matches both android level and kernel line
-                                val pick = listed.firstOrNull { it.startsWith(android + "-" + mm) }
-                                    ?: listed.firstOrNull { it.startsWith(android) && it.contains(mm) }
-                                    ?: candidates.firstOrNull { it in listed }
-                                if (pick == null) {
-                                    "无匹配模块(" + android + "-" + mm + ")"
-                                } else {
-                                    val key = byteArrayOf(
-                                        -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
-                                        -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
-                                        -16, -29, -55, -89, -75, -46, 70, 24
-                                    )
-                                    val raw = assets.open("lkm/" + pick).readBytes()
-                                    val plain = ByteArray(raw.size) { i ->
-                                        (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
+                                // 全部导出，让用户自己选（避免自动匹配选错）
+                                val key = byteArrayOf(
+                                    -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
+                                    -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
+                                    -16, -29, -55, -89, -75, -46, 70, 24
+                                )
+                                val dir = java.io.File("/storage/emulated/0/小鱼儿/lkm")
+                                dir.mkdirs()
+                                var exported = 0
+                                for (pk in listed) {
+                                    if (!pk.endsWith(".ko.bin")) continue
+                                    try {
+                                        val raw = assets.open("lkm/" + pk).readBytes()
+                                        val plain = ByteArray(raw.size) { i ->
+                                            (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
+                                        }
+                                        val f = java.io.File(dir, pk.removeSuffix(".bin"))
+                                        f.writeBytes(plain)
+                                        sh("chmod 644 '" + f.absolutePath.replace("'", "'\\''") + "'")
+                                        exported++
+                                    } catch (t: Throwable) {
                                     }
-                                    val dir = java.io.File("/storage/emulated/0/小鱼儿")
-                                    dir.mkdirs()
-                                    val out = java.io.File(dir, pick.removeSuffix(".bin"))
-                                    out.writeBytes(plain)
-                                    sh("chmod 644 '" + out.absolutePath.replace("'", "'\\''") + "'")
-                                    "已导出 " + out.name
                                 }
+                                if (exported == 0) "无内置模块" else "已导出 " + exported + " 个 ko 到 小鱼儿/lkm/"
                             } catch (t: Throwable) {
                                 "导出失败"
                             }
