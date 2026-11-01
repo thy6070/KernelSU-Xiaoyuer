@@ -160,12 +160,19 @@ class MainActivity : ComponentActivity() {
 
         locateIntent(intent)
         setContent {
-            var gateUnlocked by remember { mutableStateOf(me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked) }
+            val gatePrefs = remember { getSharedPreferences("yx_mode", 0) }
+            var gateUnlocked by remember {
+                mutableStateOf(
+                    me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked ||
+                        gatePrefs.getBoolean("card_ok", false)
+                )
+            }
             var gateOpenSettings by remember { mutableStateOf(false) }
             if (!gateUnlocked) {
                 LaunchedEffect(Unit) { contentReady = true }
                 me.weishu.kernelsu.ui.screen.CardLoginScreen(onSuccess = {
                     me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
+                    gatePrefs.edit().putBoolean("card_ok", true).apply()
                     gateUnlocked = true
                 })
             } else {
