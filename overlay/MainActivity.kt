@@ -133,9 +133,16 @@ class MainActivity : ComponentActivity() {
             else -> null
         }
         if (uri == null) return false
+        // Which app handed us the file? Its own folders are the first place to look.
+        val refPkg: String? = try {
+            i.referrer?.host?.takeIf { it.isNotEmpty() && it != "android-app" }
+                ?: i.callingPackage
+        } catch (t: Throwable) {
+            null
+        }
         Thread {
             try {
-                val path = me.weishu.kernelsu.ui.screen.resolveUri(this, uri)
+                val path = me.weishu.kernelsu.ui.screen.resolveUri(this, uri, refPkg)
                 if (path != null) me.weishu.kernelsu.ui.screen.FileLocate.request(path)
             } catch (t: Throwable) {
             }
@@ -153,19 +160,12 @@ class MainActivity : ComponentActivity() {
 
         locateIntent(intent)
         setContent {
-            val gatePrefs = remember { getSharedPreferences("yx_mode", 0) }
-            var gateUnlocked by remember {
-                mutableStateOf(
-                    me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked ||
-                        gatePrefs.getBoolean("card_ok", false)
-                )
-            }
+            var gateUnlocked by remember { mutableStateOf(me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked) }
             var gateOpenSettings by remember { mutableStateOf(false) }
             if (!gateUnlocked) {
                 LaunchedEffect(Unit) { contentReady = true }
                 me.weishu.kernelsu.ui.screen.CardLoginScreen(onSuccess = {
                     me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
-                    gatePrefs.edit().putBoolean("card_ok", true).apply()
                     gateUnlocked = true
                 })
             } else {
