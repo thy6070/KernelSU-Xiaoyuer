@@ -3419,7 +3419,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                 modifier = Modifier.align(Alignment.Center)
             )
             Text(
-                text = subtitle ?: latencyMsg
+                text = subtitle ?: (execPath ?: latencyMsg)
                     ?: (if (title == "执行此文件" || title == "刷入驱动") (execPath ?: "暂无设置") else ""),
                 color = Color(0x66FFFFFF),
                 fontSize = 9.sp,
