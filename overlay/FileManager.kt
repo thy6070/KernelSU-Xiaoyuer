@@ -2278,7 +2278,7 @@ private fun GradientActionButton(label: String, color: Color, onClick: () -> Uni
             .fillMaxWidth()
             .clickable { onClick() }
             .background(color, RoundedCornerShape(percent = 50))
-            .padding(vertical = 12.dp),
+            .padding(vertical = 11.dp),
         fontSize = 14.sp,
         lineHeight = 18.sp,
         textAlign = TextAlign.Center,
@@ -2296,7 +2296,7 @@ private fun DarkActionButton(label: String, onClick: () -> Unit) {
             .clickable { onClick() }
             .background(Color(0xFF16161A), RoundedCornerShape(percent = 50))
             .border(0.5.dp, Color(0xFF3A3A3C), RoundedCornerShape(percent = 50))
-            .padding(vertical = 12.dp),
+            .padding(vertical = 11.dp),
         fontSize = 14.sp,
         lineHeight = 18.sp,
         textAlign = TextAlign.Center,
@@ -2352,7 +2352,7 @@ private fun IslandActionButton(
             .fillMaxWidth()
             .clickable { onClick() }
             .background(color, RoundedCornerShape(percent = 50))
-            .padding(vertical = 12.dp),
+            .padding(vertical = 11.dp),
         fontSize = 14.sp,
         lineHeight = 18.sp,
         textAlign = TextAlign.Center,
