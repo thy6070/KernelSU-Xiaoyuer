@@ -2569,6 +2569,7 @@ private fun ModeButton(
     var latencyMsg by remember { mutableStateOf<String?>(null) }
     var koList by remember { mutableStateOf<List<String>>(emptyList()) }
     var showKoPick by remember { mutableStateOf(false) }
+    var selectedKo by remember { mutableStateOf<String?>(null) }
     if (showKoPick) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showKoPick = false },
@@ -2576,72 +2577,71 @@ private fun ModeButton(
             text = {
                 Column {
                     koList.forEach { f ->
+                        val chosen = f == selectedKo
                         androidx.compose.material3.Text(
-                            text = f.removeSuffix(".bin"),
+                            text = (if (chosen) "● " else "○ ") + f.removeSuffix(".bin"),
                             modifier = androidx.compose.ui.Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    showKoPick = false
-                                    latencyMsg = "导出中…"
-                                    scope2.launch {
-                                        val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                            try {
-                                                fun sh2(c: String): String {
-                                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
-                                                    val o = pr.inputStream.bufferedReader().readText()
-                                                    pr.waitFor()
-                                                    return o
-                                                }
-                                                val key = byteArrayOf(
-                                                    -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
-                                                    -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
-                                                    -16, -29, -55, -89, -75, -46, 70, 24
-                                                )
-                                                val raw = ctx3.assets.open("lkm/" + f).readBytes()
-                                                val plain = ByteArray(raw.size) { i ->
-                                                    (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
-                                                }
-                                                val dir = java.io.File("/storage/emulated/0/小鱼儿")
-                                                dir.mkdirs()
-                                                val out = java.io.File(dir, f.removeSuffix(".bin"))
-                                                out.writeBytes(plain)
-                                                val qp = "'" + out.absolutePath.replace("'", "'\\''") + "'"
-                                                sh2("chmod 644 " + qp)
-                                                // 直接用选中的 ko 修补并刷入 boot
-                                                val res = sh2("/data/adb/ksud boot-patch -m " + qp + " -f 2>&1")
-                                                if (res.contains("Success", ignoreCase = true) || res.contains("successfully", ignoreCase = true)) {
-                                                    "已安装 " + out.name + "（重启生效）"
-                                                } else {
-                                                    "安装结果：" + res.takeLast(200).trim()
-                                                }
-                                            } catch (t: Throwable) {
-                                                "导出失败"
-                                            }
-                                        }
-                                        latencyMsg = msg
-                                    }
-                                }
+                                .clickable { selectedKo = f }
                                 .padding(vertical = 10.dp),
-                            color = Color.White
+                            color = if (chosen) Color(0xFF0A84FF) else Color.White
                         )
                     }
                 }
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { showKoPick = false }) {
+                androidx.compose.material3.TextButton(
+                    enabled = selectedKo != null,
+                    onClick = {
+                        val f = selectedKo ?: return@TextButton
+                        showKoPick = false
+                        latencyMsg = "安装中…"
+                        scope2.launch {
+                            val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    fun sh2(c: String): String {
+                                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                        val o = pr.inputStream.bufferedReader().readText()
+                                        pr.waitFor()
+                                        return o
+                                    }
+                                    val key = byteArrayOf(
+                                        -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
+                                        -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
+                                        -16, -29, -55, -89, -75, -46, 70, 24
+                                    )
+                                    val raw = ctx3.assets.open("lkm/" + f).readBytes()
+                                    val plain = ByteArray(raw.size) { i ->
+                                        (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
+                                    }
+                                    val dir = java.io.File("/storage/emulated/0/小鱼儿")
+                                    dir.mkdirs()
+                                    val out = java.io.File(dir, f.removeSuffix(".bin"))
+                                    out.writeBytes(plain)
+                                    val qp = "'" + out.absolutePath.replace("'", "'\\''") + "'"
+                                    sh2("chmod 644 " + qp)
+                                    val res = sh2("/data/adb/ksud boot-patch -m " + qp + " -f 2>&1")
+                                    if (res.contains("Success", true) || res.contains("successfully", true)) {
+                                        "已安装 " + out.name + "（重启生效）"
+                                    } else {
+                                        "安装结果：" + res.takeLast(200).trim()
+                                    }
+                                } catch (t: Throwable) {
+                                    "安装失败：" + (t.message ?: "")
+                                }
+                            }
+                            latencyMsg = msg
+                            selectedKo = null
+                        }
+                    }
+                ) { androidx.compose.material3.Text("确认") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showKoPick = false; selectedKo = null }) {
                     androidx.compose.material3.Text("取消")
                 }
             }
         )
-    }
-    LaunchedEffect(Unit) {
-        latencyMsg = ctxMsg.getSharedPreferences("yx_mode", 0).getString("msg_" + title, null)
-    }
-    LaunchedEffect(latencyMsg) {
-        val v = latencyMsg
-        if (v != null) {
-            ctxMsg.getSharedPreferences("yx_mode", 0).edit().putString("msg_" + title, v).apply()
-        }
     }
     val ctx3 = androidx.compose.ui.platform.LocalContext.current
     val scope2 = rememberCoroutineScope()
