@@ -1054,6 +1054,8 @@ private fun ProMaxIsland(
             kotlinx.coroutines.delay(110)
             jumpStep = target
             navClosing = false
+            navMode = true          // 关键：step 面板只在 navMode 时渲染
+            navTarget = null
             expanded = true
         }
     }
