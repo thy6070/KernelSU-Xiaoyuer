@@ -2152,8 +2152,8 @@ private fun ProMaxIsland(
                                 .clickable { onTermRun() }
                                 .padding(start = 10.dp)
                                 .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
-                                .padding(horizontal = 10.dp, vertical = 3.dp),
-                            fontSize = 11.sp,
+                                .padding(horizontal = 16.dp, vertical = 7.dp),
+                            fontSize = 14.sp,
                             color = Color.White
                         )
 
