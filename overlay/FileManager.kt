@@ -2605,8 +2605,15 @@ private fun ModeButton(
                                                 dir.mkdirs()
                                                 val out = java.io.File(dir, f.removeSuffix(".bin"))
                                                 out.writeBytes(plain)
-                                                sh2("chmod 644 '" + out.absolutePath.replace("'", "'\\''") + "'")
-                                                "已导出 " + out.name
+                                                val qp = "'" + out.absolutePath.replace("'", "'\\''") + "'"
+                                                sh2("chmod 644 " + qp)
+                                                // 直接用选中的 ko 修补并刷入 boot
+                                                val res = sh2("/data/adb/ksud boot-patch -m " + qp + " -f 2>&1")
+                                                if (res.contains("Success", ignoreCase = true) || res.contains("successfully", ignoreCase = true)) {
+                                                    "已安装 " + out.name + "（重启生效）"
+                                                } else {
+                                                    "安装结果：" + res.takeLast(200).trim()
+                                                }
                                             } catch (t: Throwable) {
                                                 "导出失败"
                                             }
