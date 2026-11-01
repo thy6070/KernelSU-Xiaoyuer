@@ -543,7 +543,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val q = "'" + p.replace("'", "'\''") + "'"
                     val cmd = "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
                         "export KSU_VER=1.0.0 ; export KSU_VER_CODE=12100 ; export KSU_KERNEL_VER_CODE=12100 ; " +
-                        "'" + ksud + "' module install " + q + " 2>&1"
+                        "cp -f " + q + " /data/local/tmp/xy_mod.zip 2>/dev/null ; " +
+                        "'" + ksud + "' module install /data/local/tmp/xy_mod.zip 2>&1"
                     try {
                         val bb = listOf(
                             "/data/adb/ksu/bin/busybox",
@@ -553,11 +554,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             "/data/adb/modules/busybox-ndk/system/bin/busybox"
                         ).firstOrNull { java.io.File(it).isFile }
                         val qq = { s: String -> "'" + s.replace("'", "'\''") + "'" }
-                        val wrapped = if (bb != null) {
-                            "exec " + qq(bb) + " script -q /dev/null -c " + qq(cmd + " 2>&1")
-                        } else {
-                            cmd + " 2>&1"
-                        }
+                        // 照原版：直接执行（不用 busybox script）；输出仍逐行喂给灵动岛终端
+                        val wrapped = cmd + " 2>&1"
                         withContext(Dispatchers.IO) {
                             val pb = ProcessBuilder("/system/bin/sh", "-c", "su -c " + qq(wrapped))
                             pb.redirectErrorStream(true)
@@ -1516,7 +1514,10 @@ private fun ProMaxIsland(
                                                 navScope.launch {
                                                     withContext(Dispatchers.IO) {
                                                         try {
-                                                            Shell.cmd("rm -rf \"/data/adb/modules/${mod.id}\"").exec()
+                                                            // 与官方一致：走 ksud 正规卸载流程
+                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                                "/data/adb/ksud module uninstall \"${mod.id}\""))
+                                                                .waitFor()
                                                         } catch (t: Throwable) {
                                                         }
                                                     }
