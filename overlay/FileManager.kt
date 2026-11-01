@@ -2569,6 +2569,8 @@ private fun ModeButton(
     var latencyMsg by remember { mutableStateOf<String?>(null) }
     var koList by remember { mutableStateOf<List<String>>(emptyList()) }
     var showKoPick by remember { mutableStateOf(false) }
+    val ctx3 = androidx.compose.ui.platform.LocalContext.current
+    val scope2 = rememberCoroutineScope()
     var selectedKo by remember { mutableStateOf<String?>(null) }
     if (showKoPick) {
         androidx.compose.material3.AlertDialog(
@@ -2643,8 +2645,6 @@ private fun ModeButton(
             }
         )
     }
-    val ctx3 = androidx.compose.ui.platform.LocalContext.current
-    val scope2 = rememberCoroutineScope()
     var execPath by remember { mutableStateOf<String?>(null) }
     var showPathDialog by remember { mutableStateOf(false) }
     var showKeyDialog by remember { mutableStateOf(false) }
