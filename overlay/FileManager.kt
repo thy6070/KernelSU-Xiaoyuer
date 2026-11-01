@@ -1039,7 +1039,12 @@ private fun ProMaxIsland(
         }
     }
     LaunchedEffect(selectedFile) {
-        if (selectedFile != null) navMode = false
+        if (selectedFile != null) {
+            // 选中新文件时，先收起确认删除等步骤面板，避免两层重叠
+            navMode = false
+            navTarget = null
+            navClosing = false
+        }
         soPanel = false
     }
     LaunchedEffect(extractDone) {
@@ -2265,8 +2270,8 @@ private fun GradientActionButton(label: String, color: Color, onClick: () -> Uni
             .fillMaxWidth()
             .clickable { onClick() }
             .background(color, RoundedCornerShape(percent = 50))
-            .padding(vertical = 13.dp),
-        fontSize = 14.sp,
+            .padding(vertical = 10.dp),
+        fontSize = 13.sp,
         lineHeight = 18.sp,
         textAlign = TextAlign.Center,
         maxLines = 1,
@@ -2283,8 +2288,8 @@ private fun DarkActionButton(label: String, onClick: () -> Unit) {
             .clickable { onClick() }
             .background(Color(0xFF16161A), RoundedCornerShape(percent = 50))
             .border(0.5.dp, Color(0xFF3A3A3C), RoundedCornerShape(percent = 50))
-            .padding(vertical = 13.dp),
-        fontSize = 14.sp,
+            .padding(vertical = 10.dp),
+        fontSize = 13.sp,
         lineHeight = 18.sp,
         textAlign = TextAlign.Center,
         maxLines = 1,
@@ -2339,8 +2344,8 @@ private fun IslandActionButton(
             .fillMaxWidth()
             .clickable { onClick() }
             .background(color, RoundedCornerShape(percent = 50))
-            .padding(vertical = 13.dp),
-        fontSize = 14.sp,
+            .padding(vertical = 10.dp),
+        fontSize = 13.sp,
         lineHeight = 18.sp,
         textAlign = TextAlign.Center,
         maxLines = 1,
