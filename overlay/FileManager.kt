@@ -1752,11 +1752,11 @@ private fun ProMaxIsland(
                                             }
                                             closeIsland()
                                         }
-                                        // 文件和文件夹都提供删除（走同一套确认步骤）
-                                        IslandActionButton("删除", Color(0xFFFF3B30)) {
-                                            switchStep(12)
-                                        }
-                                        if (!longPressIsDir) {
+                                        if (longPressIsDir) {
+                                            IslandActionButton("删除", Color(0xFFFF3B30)) {
+                                                switchStep(12)
+                                            }
+                                        } else {
                                             IslandActionButton("分享", Color(0xFF0A84FF)) {
                                                 onFileOp("share", "")
                                                 closeIsland()
