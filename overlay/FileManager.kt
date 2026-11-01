@@ -529,6 +529,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                     refreshTick += 1
                     longPressPath = null
+                    if (op == "delete") selectedFile = null   // 删除后清掉选中，否则快捷条还挂着
                     runOk = true
                     runMessage = if (op == "share") null else ("已完成")
                 }
