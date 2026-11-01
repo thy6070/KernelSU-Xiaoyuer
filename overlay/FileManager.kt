@@ -250,9 +250,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             o.trim() == "y"
                         }.getOrDefault(false)
                     longPressFromRight = false
-                    // 长按新目标时先收起终端，避免叠在一起
+                    // 长按新目标时先收起终端和文件快捷条，避免叠层
                     showTerminal = false
                     termText = ""
+                    selectedFile = null
                     longPressPath = lp
                     longPressTick += 1
                 },
@@ -291,9 +292,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             o.trim() == "y"
                         }.getOrDefault(false)
                     longPressFromRight = true
-                    // 长按新目标时先收起终端，避免叠在一起
+                    // 长按新目标时先收起终端和文件快捷条，避免叠层
                     showTerminal = false
                     termText = ""
+                    selectedFile = null
                     longPressPath = lp
                     longPressTick += 1
                 },
