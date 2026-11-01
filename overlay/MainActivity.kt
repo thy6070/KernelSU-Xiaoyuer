@@ -135,8 +135,9 @@ class MainActivity : ComponentActivity() {
         if (uri == null) return false
         // Which app handed us the file? Its own folders are the first place to look.
         val refPkg: String? = try {
-            i.referrer?.host?.takeIf { it.isNotEmpty() && it != "android-app" }
-                ?: i.callingPackage
+            (if (android.os.Build.VERSION.SDK_INT >= 22) referrer?.host else null)
+                ?.takeIf { it.isNotEmpty() && it != "android-app" }
+                ?: callingPackage
         } catch (t: Throwable) {
             null
         }
