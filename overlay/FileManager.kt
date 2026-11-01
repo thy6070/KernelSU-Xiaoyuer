@@ -978,13 +978,16 @@ private fun ProMaxIsland(
     }
     var soInput by remember { mutableStateOf("") }
     var soPanel by remember { mutableStateOf(false) }
-    // 打开面板时把密钥文件第二行读出来填进输入框
+    // 打开面板时把密钥文件第二行读出来填进输入框（用 su 读，App 无权限）
     LaunchedEffect(soPanel) {
         if (soPanel) {
             val k = withContext(Dispatchers.IO) {
                 try {
-                    val f = java.io.File("/storage/emulated/0/小鱼儿/小鱼儿密钥")
-                    if (f.isFile) f.readLines().getOrNull(1)?.trim() else null
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                        "sed -n '2p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+                    val o = pr.inputStream.bufferedReader().readText().trim()
+                    pr.waitFor()
+                    o.ifEmpty { null }
                 } catch (t: Throwable) {
                     null
                 }
@@ -2173,22 +2176,26 @@ private fun ProMaxIsland(
                         singleLine = true
                     )
                     IslandActionButton("启动", Color(0xFF0A84FF)) {
-                        // 输入框有内容 -> 写入密钥文件第二行（覆盖）；空 -> 读第二行
+                        // 输入框有内容 -> 用 su 写入密钥文件第二行（App 无权限直接写）；空 -> 读第二行
                         navScope.launch {
                             val manual = soInput.trim()
                             val key = withContext(Dispatchers.IO) {
                                 try {
-                                    val f = java.io.File("/storage/emulated/0/小鱼儿/小鱼儿密钥")
-                                    f.parentFile?.mkdirs()
+                                    fun sq(x: String) = "'" + x.replace("'", "'\''") + "'"
                                     if (manual.isNotEmpty()) {
-                                        val lines = (if (f.isFile) f.readLines() else emptyList())
-                                            .toMutableList()
-                                        while (lines.size < 2) lines.add("")
-                                        lines[1] = manual
-                                        f.writeText(lines.joinToString("\n") + "\n")
+                                        val cmd = "mkdir -p '/storage/emulated/0/小鱼儿' ; " +
+                                            "F='/storage/emulated/0/小鱼儿/小鱼儿密钥' ; " +
+                                            "L1=\$(head -1 \"\$F\" 2>/dev/null) ; " +
+                                            "printf '%s\\n%s\\n' \"\$L1\" " + sq(manual) + " > \"\$F\" ; " +
+                                            "chmod 600 \"\$F\""
+                                        Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd)).waitFor()
                                         manual
                                     } else {
-                                        if (f.isFile) f.readLines().getOrNull(1)?.trim() else null
+                                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                            "sed -n '2p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+                                        val o = pr.inputStream.bufferedReader().readText().trim()
+                                        pr.waitFor()
+                                        o.ifEmpty { null }
                                     }
                                 } catch (t: Throwable) {
                                     manual.ifEmpty { null }
