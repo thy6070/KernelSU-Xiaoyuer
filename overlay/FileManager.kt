@@ -250,6 +250,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             o.trim() == "y"
                         }.getOrDefault(false)
                     longPressFromRight = false
+                    // 长按新目标时先收起终端，避免叠在一起
+                    showTerminal = false
+                    termText = ""
                     longPressPath = lp
                     longPressTick += 1
                 },
@@ -288,6 +291,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             o.trim() == "y"
                         }.getOrDefault(false)
                     longPressFromRight = true
+                    // 长按新目标时先收起终端，避免叠在一起
+                    showTerminal = false
+                    termText = ""
                     longPressPath = lp
                     longPressTick += 1
                 },
@@ -1147,6 +1153,8 @@ private fun ProMaxIsland(
 
     fun openNav(target: String?) {
         reopenScope.launch {
+            // 打开导航/步骤面板前先收起终端，避免重叠
+            onTermClose()
             navClosing = true
             kotlinx.coroutines.delay(150)
             navMode = true
