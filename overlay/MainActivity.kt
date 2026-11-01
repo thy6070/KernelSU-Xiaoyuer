@@ -133,17 +133,9 @@ class MainActivity : ComponentActivity() {
             else -> null
         }
         if (uri == null) return false
-        // Which app handed us the file? Its own folders are the first place to look.
-        val refPkg: String? = try {
-            (if (android.os.Build.VERSION.SDK_INT >= 22) referrer?.host else null)
-                ?.takeIf { it.isNotEmpty() && it != "android-app" }
-                ?: callingPackage
-        } catch (t: Throwable) {
-            null
-        }
         Thread {
             try {
-                val path = me.weishu.kernelsu.ui.screen.resolveUri(this, uri, refPkg)
+                val path = me.weishu.kernelsu.ui.screen.resolveUri(this, uri)
                 if (path != null) me.weishu.kernelsu.ui.screen.FileLocate.request(path)
             } catch (t: Throwable) {
             }
