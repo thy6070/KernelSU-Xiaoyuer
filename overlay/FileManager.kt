@@ -175,10 +175,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         if (appCtx.getSharedPreferences("yx_mode", 0).getBoolean("perf", false)) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
+                    // 只在守护没跑时才启动，避免和开机脚本重复起进程
                     Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
-                        "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
-                        "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
-                        "setsid sh /data/adb/xy_guard.sh >/dev/null 2>&1 &")).waitFor()
+                        "if ! pgrep -f 'xy_game.sh' >/dev/null 2>&1; then " +
+                        "  sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
+                        "  setsid sh /data/adb/xy_game.sh >/dev/null 2>&1 & " +
+                        "fi")).waitFor()
                 }
             }
         }
