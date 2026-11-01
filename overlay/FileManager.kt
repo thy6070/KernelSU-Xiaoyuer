@@ -3066,7 +3066,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "        lock_val 1024 \"\$d/uclamp.min\"",
                     "      done",
                     "      for f in /sys/devices/system/cpu/cpufreq/policy*/sugov_ext/target_loads; do",
-                    "        lock_val 35 \"\$f\"",
+                    "        lock_val 30 \"\$f\"",
                     "      done",
                     "      # 刷新率守护：被游戏/系统改回就重设；没有记录就重新探测",
                     "      MAXF=\$(cat /data/adb/xy_maxf 2>/dev/null)",
