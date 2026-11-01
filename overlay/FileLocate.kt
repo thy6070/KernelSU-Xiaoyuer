@@ -70,6 +70,52 @@ internal fun contentName(context: Context, uri: Uri): String? {
     return uri.lastPathSegment?.substringAfterLast('/')
 }
 
+/** Per-app candidate roots: private data dirs plus each app's public download folder. */
+internal fun appRoots(pkg: String): List<String> {
+    val base = mutableListOf(
+        "/storage/emulated/0/Android/data/$pkg",
+        "/storage/emulated/0/Android/media/$pkg"
+    )
+    val extra = when {
+        pkg.contains("xunlei") -> listOf(
+            "/storage/emulated/0/迅雷下载", "/storage/emulated/0/ThunderDownload",
+            "/storage/emulated/0/Thunder", "/storage/emulated/0/xunlei"
+        )
+        pkg.contains("baidu.netdisk") -> listOf(
+            "/storage/emulated/0/BaiduNetdisk", "/storage/emulated/0/百度网盘"
+        )
+        pkg.contains("alicloud") -> listOf(
+            "/storage/emulated/0/阿里云盘", "/storage/emulated/0/AliyunDrive", "/storage/emulated/0/alicloud"
+        )
+        pkg.contains("quark") -> listOf(
+            "/storage/emulated/0/Quark", "/storage/emulated/0/夸克", "/storage/emulated/0/QuarkDownloads"
+        )
+        pkg.contains("ucmobile") -> listOf(
+            "/storage/emulated/0/UCDownloads", "/storage/emulated/0/UC Downloads"
+        )
+        pkg.contains("tencent.mobileqq") -> listOf(
+            "/storage/emulated/0/tencent/QQfile_recv", "/storage/emulated/0/tencent"
+        )
+        pkg.contains("tencent.mm") -> listOf(
+            "/storage/emulated/0/tencent/MicroMsg/Download", "/storage/emulated/0/tencent"
+        )
+        pkg.contains("telegram") -> listOf(
+            "/storage/emulated/0/Telegram", "/storage/emulated/0/Android/media/org.telegram.messenger"
+        )
+        pkg.contains("mega") -> listOf("/storage/emulated/0/MEGA")
+        pkg.contains("onedrive") -> listOf("/storage/emulated/0/OneDrive")
+        pkg.contains("google.android.apps.docs") -> listOf("/storage/emulated/0/Google Drive")
+        pkg.contains("pikpak") -> listOf("/storage/emulated/0/PikPak", "/storage/emulated/0/pikpak")
+        pkg.contains("115") -> listOf("/storage/emulated/0/115", "/storage/emulated/0/115Downloads")
+        pkg.contains("lixian") || pkg.contains("xunlei") -> listOf("/storage/emulated/0/迅雷下载")
+        else -> emptyList()
+    }
+    base.addAll(extra)
+    // Public storage roots that are always worth a look
+    base.addAll(listOf("/storage/emulated/0/Download", "/storage/emulated/0/Downloads"))
+    return base
+}
+
 /** Resolve with fallbacks: provider path, then a name search across storage. */
 internal fun resolveUri(context: Context, uri: Uri, referrerPackage: String? = null): String? {
     val direct = contentPath(context, uri)
@@ -78,13 +124,8 @@ internal fun resolveUri(context: Context, uri: Uri, referrerPackage: String? = n
     val atRoot = java.io.File("/storage/emulated/0/" + name)
     if (atRoot.isFile) return atRoot.absolutePath
     val safe = name.replace("'", "")
-    // the app that handed us the file usually keeps it in its own folder
-    val fromApp = referrerPackage?.let { pkg ->
-        listOf(
-            "/storage/emulated/0/Android/data/$pkg",
-            "/storage/emulated/0/Android/media/$pkg"
-        )
-    } ?: emptyList()
+    // the app that handed us the file keeps it in its own folders
+    val fromApp = referrerPackage?.let { appRoots(it) } ?: emptyList()
     for (root in fromApp) {
         val hit = runCatching {
             Shell.cmd("find '$root' -maxdepth 7 -name '$safe' 2>/dev/null | head -n1")
