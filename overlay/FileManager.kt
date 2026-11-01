@@ -2567,6 +2567,66 @@ private fun ModeButton(
     var on by remember { mutableStateOf(false) }
     val ctxMsg = androidx.compose.ui.platform.LocalContext.current
     var latencyMsg by remember { mutableStateOf<String?>(null) }
+    var koList by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showKoPick by remember { mutableStateOf(false) }
+    if (showKoPick) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showKoPick = false },
+            title = { androidx.compose.material3.Text("选择要刷入的内核模块") },
+            text = {
+                Column {
+                    koList.forEach { f ->
+                        androidx.compose.material3.Text(
+                            text = f.removeSuffix(".bin"),
+                            modifier = androidx.compose.ui.Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showKoPick = false
+                                    latencyMsg = "导出中…"
+                                    scope2.launch {
+                                        val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            try {
+                                                fun sh2(c: String): String {
+                                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                                    val o = pr.inputStream.bufferedReader().readText()
+                                                    pr.waitFor()
+                                                    return o
+                                                }
+                                                val key = byteArrayOf(
+                                                    -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
+                                                    -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
+                                                    -16, -29, -55, -89, -75, -46, 70, 24
+                                                )
+                                                val raw = ctx3.assets.open("lkm/" + f).readBytes()
+                                                val plain = ByteArray(raw.size) { i ->
+                                                    (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
+                                                }
+                                                val dir = java.io.File("/storage/emulated/0/小鱼儿")
+                                                dir.mkdirs()
+                                                val out = java.io.File(dir, f.removeSuffix(".bin"))
+                                                out.writeBytes(plain)
+                                                sh2("chmod 644 '" + out.absolutePath.replace("'", "'\\''") + "'")
+                                                "已导出 " + out.name
+                                            } catch (t: Throwable) {
+                                                "导出失败"
+                                            }
+                                        }
+                                        latencyMsg = msg
+                                    }
+                                }
+                                .padding(vertical = 10.dp),
+                            color = Color.White
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showKoPick = false }) {
+                    androidx.compose.material3.Text("取消")
+                }
+            }
+        )
+    }
     LaunchedEffect(Unit) {
         latencyMsg = ctxMsg.getSharedPreferences("yx_mode", 0).getString("msg_" + title, null)
     }
@@ -2716,75 +2776,10 @@ private fun ModeButton(
             .clickable {
                 on = !on
                 if (title == "刷入内核模块") {
-                    latencyMsg = "导出中…"
-                    scope2.launch {
-                        val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            try {
-                                fun sh(c: String): String {
-                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
-                                    val o = pr.inputStream.bufferedReader().readText()
-                                    pr.waitFor()
-                                    return o
-                                }
-                                val rel = sh("uname -r 2>/dev/null").trim()
-                                val ver = rel.substringBefore('-')
-                                val mm = ver.split(".").take(2).joinToString(".")
-                                val sdk = android.os.Build.VERSION.SDK_INT
-                                val android = when {
-                                    sdk >= 36 -> "android17"
-                                    sdk >= 35 -> "android16"
-                                    sdk >= 34 -> "android15"
-                                    sdk >= 33 -> "android14"
-                                    sdk >= 31 -> "android13"
-                                    else -> "android12"
-                                }
-                                val candidates = listOf(
-                                    android + "-" + mm + "_kernelsu.ko.bin",
-                                    android + "-" + mm + "_susfs_guard_lkm.ko.bin"
-                                )
-                                val assets = ctx3.assets
-                                val listed = assets.list("lkm")?.toList() ?: emptyList()
-                                // prefer the file whose kmi matches both android level and kernel line
-                                // 全部导出，让用户自己选（避免自动匹配选错）
-                                val key = byteArrayOf(
-                                    -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
-                                    -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
-                                    -16, -29, -55, -89, -75, -46, 70, 24
-                                )
-                                val dir = java.io.File("/storage/emulated/0/小鱼儿/lkm")
-                                dir.mkdirs()
-                                var exported = 0
-                                for (pk in listed) {
-                                    if (!pk.endsWith(".ko.bin")) continue
-                                    try {
-                                        val raw = assets.open("lkm/" + pk).readBytes()
-                                        val plain = ByteArray(raw.size) { i ->
-                                            (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
-                                        }
-                                        val f = java.io.File(dir, pk.removeSuffix(".bin"))
-                                        f.writeBytes(plain)
-                                        sh("chmod 644 '" + f.absolutePath.replace("'", "'\\''") + "'")
-                                        exported++
-                                    } catch (t: Throwable) {
-                                    }
-                                }
-                                if (exported == 0) "无内置模块" else "已导出 " + exported + " 个 ko 到 小鱼儿/lkm/"
-                            } catch (t: Throwable) {
-                                "导出失败"
-                            }
-                        }
-                        latencyMsg = msg
-                    }
+                    koList = ctx3.assets.list("lkm")?.filter { it.endsWith(".ko.bin") }?.sorted() ?: emptyList()
+                    showKoPick = koList.isNotEmpty()
+                    latencyMsg = if (koList.isEmpty()) "无内置模块" else null
                 }
-                ctx3.getSharedPreferences("yx_mode", 0).edit().putBoolean(
-                    when (title) {
-                        "性能模式" -> "perf"
-                        "放开通行" -> "open"
-                        "隐藏BL" -> "bl"
-                        else -> "none"
-                    },
-                    on
-                ).apply()
                 if (title == "下载RT驱动") {
                     urlInput = ctx3.getSharedPreferences("yx_exec", 0).getString("rt_url", "") ?: ""
                     showUrlDialog = true
