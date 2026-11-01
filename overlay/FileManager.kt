@@ -806,6 +806,42 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 }
 
 @OptIn(ExperimentalFoundationApi::class)
+/** Render ANSI SGR colors (MT-style) inside our terminal panel. */
+private fun ansiAnnotated(src: String): androidx.compose.ui.text.AnnotatedString {
+    val b = androidx.compose.ui.text.AnnotatedString.Builder()
+    var color = Color.White
+    var i = 0
+    while (i < src.length) {
+        val esc = src.indexOf('\u001B', i)
+        if (esc < 0) {
+            b.pushStyle(androidx.compose.ui.text.SpanStyle(color = color))
+            b.append(src.substring(i)); b.pop(); break
+        }
+        if (esc > i) {
+            b.pushStyle(androidx.compose.ui.text.SpanStyle(color = color))
+            b.append(src.substring(i, esc)); b.pop()
+        }
+        if (esc + 1 < src.length && src[esc + 1] == '[') {
+            val end = src.indexOf('m', esc + 2)
+            if (end > 0) {
+                when (src.substring(esc + 2, end)) {
+                    "0" -> color = Color.White
+                    "31" -> color = Color(0xFFFF3B30)
+                    "32" -> color = Color(0xFF34C759)
+                    "33" -> color = Color(0xFFFFCC00)
+                    "34" -> color = Color(0xFF0A84FF)
+                    "35" -> color = Color(0xFFFF2D95)
+                    "36" -> color = Color(0xFF32ADE6)
+                }
+                i = end + 1
+                continue
+            }
+        }
+        i = esc + 1
+    }
+    return b.toAnnotatedString()
+}
+
 @Composable
 private fun ProMaxIsland(
     onBack: () -> Unit = {},
@@ -2084,7 +2120,7 @@ private fun ProMaxIsland(
                         .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
                 ) {
                     Text(
-                        text = termText,
+                        text = ansiAnnotated(termText),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(240.dp)
