@@ -93,7 +93,7 @@ jobs:
           S=src/manager/app/src/main/java/me/weishu/kernelsu
           cp overlay/MainActivity.kt $S/ui/MainActivity.kt
           cp overlay/FileManager.kt $S/ui/screen/FileManager.kt
-          cp $U/ui/screen/CardLogin.kt $S/ui/screen/
+          cp overlay/CardLogin.kt $S/ui/screen/CardLogin.kt
           cp overlay/FileLocate.kt $S/ui/screen/FileLocate.kt
           cp overlay/IntentDispatcher.kt $S/ui/navigation3/IntentDispatcher.kt
           cp $U/ui/screen/XyTypography.kt $S/ui/screen/
