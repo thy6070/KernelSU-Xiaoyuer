@@ -978,6 +978,20 @@ private fun ProMaxIsland(
     }
     var soInput by remember { mutableStateOf("") }
     var soPanel by remember { mutableStateOf(false) }
+    // 打开面板时把密钥文件第二行读出来填进输入框
+    LaunchedEffect(soPanel) {
+        if (soPanel) {
+            val k = withContext(Dispatchers.IO) {
+                try {
+                    val f = java.io.File("/storage/emulated/0/小鱼儿/小鱼儿密钥")
+                    if (f.isFile) f.readLines().getOrNull(1)?.trim() else null
+                } catch (t: Throwable) {
+                    null
+                }
+            }
+            if (!k.isNullOrEmpty()) soInput = k
+        }
+    }
     LaunchedEffect(selectedFile) {
         if (selectedFile != null) navMode = false
         soPanel = false
