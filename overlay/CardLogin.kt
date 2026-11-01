@@ -233,9 +233,7 @@ fun CardLoginScreen(onSuccess: () -> Unit) {
                                                 val safe = k.replace("'", "'\\''")
                                                 val cmd = "mkdir -p '/sdcard/小鱼儿' ; " +
                                                     "F='/sdcard/小鱼儿/小鱼儿密钥' ; " +
-                                                    "L2=\$(sed -n '2p' \"\$F\" 2>/dev/null) ; " +
-                                                    "printf '%s\\n%s\\n' '" + safe + "' \"\$L2\" > \"\$F\" ; " +
-                                                    "chmod 600 \"\$F\""
+                                                    "awk -v n=1 -v v='" + safe + "' 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}' \"\$F\" > /data/local/tmp/xy_kf3 && cat /data/local/tmp/xy_kf3 > \"\$F\" ; rm -f /data/local/tmp/xy_kf3 ; chmod 600 \"\$F\""
                                                 Shell.cmd(cmd).exec()
                                             }
                                         } catch (t: Throwable) {
