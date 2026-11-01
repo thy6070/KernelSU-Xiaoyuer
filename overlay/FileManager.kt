@@ -2548,7 +2548,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                 onDismiss()
                 onRunExec(it)
             })
-            ModeButton(Icons.Outlined.Build, "小鱼儿寄生")
+            ModeButton(Icons.Outlined.AcUnit, "小鱼儿寄生")
             ModeButton(Icons.Outlined.Folder, "执行此文件", onRun = {
                 onDismiss()
                 onRunExec(it)
