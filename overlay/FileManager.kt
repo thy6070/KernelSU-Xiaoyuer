@@ -2139,7 +2139,7 @@ private fun ProMaxIsland(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
-                            IslandActionButton("删除", Color(0xFFFF3B30)) { onDelete() }
+                            IslandActionButton("删除", Color(0xFFFF3B30)) { switchStep(12) }
                         }
                         Box(modifier = Modifier.weight(1f)) {
                             IslandActionButton(actionLabel, actionColor) {
