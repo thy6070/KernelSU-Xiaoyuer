@@ -77,41 +77,19 @@ internal fun appRoots(pkg: String): List<String> {
         "/storage/emulated/0/Android/media/$pkg"
     )
     val extra = when {
-        pkg.contains("xunlei") -> listOf(
-            "/storage/emulated/0/迅雷下载", "/storage/emulated/0/ThunderDownload",
-            "/storage/emulated/0/Thunder", "/storage/emulated/0/xunlei"
-        )
-        pkg.contains("baidu.netdisk") -> listOf(
-            "/storage/emulated/0/BaiduNetdisk", "/storage/emulated/0/百度网盘"
-        )
-        pkg.contains("alicloud") -> listOf(
-            "/storage/emulated/0/阿里云盘", "/storage/emulated/0/AliyunDrive", "/storage/emulated/0/alicloud"
-        )
-        pkg.contains("quark") -> listOf(
-            "/storage/emulated/0/Quark", "/storage/emulated/0/夸克", "/storage/emulated/0/QuarkDownloads"
-        )
-        pkg.contains("ucmobile") -> listOf(
-            "/storage/emulated/0/UCDownloads", "/storage/emulated/0/UC Downloads"
-        )
-        pkg.contains("tencent.mobileqq") -> listOf(
-            "/storage/emulated/0/tencent/QQfile_recv", "/storage/emulated/0/tencent"
-        )
-        pkg.contains("tencent.mm") -> listOf(
-            "/storage/emulated/0/tencent/MicroMsg/Download", "/storage/emulated/0/tencent"
-        )
-        pkg.contains("telegram") -> listOf(
-            "/storage/emulated/0/Telegram", "/storage/emulated/0/Android/media/org.telegram.messenger"
-        )
-        pkg.contains("mega") -> listOf("/storage/emulated/0/MEGA")
-        pkg.contains("onedrive") -> listOf("/storage/emulated/0/OneDrive")
-        pkg.contains("google.android.apps.docs") -> listOf("/storage/emulated/0/Google Drive")
-        pkg.contains("pikpak") -> listOf("/storage/emulated/0/PikPak", "/storage/emulated/0/pikpak")
-        pkg.contains("115") -> listOf("/storage/emulated/0/115", "/storage/emulated/0/115Downloads")
-        pkg.contains("lixian") || pkg.contains("xunlei") -> listOf("/storage/emulated/0/迅雷下载")
+        pkg.contains("xunlei") -> listOf("/storage/emulated/0/迅雷下载", "/storage/emulated/0/ThunderDownload", "/storage/emulated/0/Thunder")
+        pkg.contains("baidu.netdisk") -> listOf("/storage/emulated/0/BaiduNetdisk", "/storage/emulated/0/百度网盘")
+        pkg.contains("alicloud") -> listOf("/storage/emulated/0/阿里云盘", "/storage/emulated/0/AliyunDrive")
+        pkg.contains("quark") -> listOf("/storage/emulated/0/Quark", "/storage/emulated/0/夸克", "/storage/emulated/0/QuarkDownloads")
+        pkg.contains("ucmobile") -> listOf("/storage/emulated/0/UCDownloads", "/storage/emulated/0/UC Downloads")
+        pkg.contains("tencent.mobileqq") -> listOf("/storage/emulated/0/tencent/QQfile_recv")
+        pkg.contains("tencent.mm") -> listOf("/storage/emulated/0/tencent/MicroMsg/Download")
+        pkg.contains("telegram") -> listOf("/storage/emulated/0/Telegram")
+        pkg.contains("pikpak") -> listOf("/storage/emulated/0/PikPak")
+        pkg.contains("115") -> listOf("/storage/emulated/0/115")
         else -> emptyList()
     }
     base.addAll(extra)
-    // Public storage roots that are always worth a look
     base.addAll(listOf("/storage/emulated/0/Download", "/storage/emulated/0/Downloads"))
     return base
 }
