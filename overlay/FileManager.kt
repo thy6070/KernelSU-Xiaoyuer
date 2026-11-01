@@ -1155,8 +1155,9 @@ private fun ProMaxIsland(
 
     fun openNav(target: String?) {
         reopenScope.launch {
-            // 打开导航/步骤面板前先收起终端，避免重叠
+            // 打开导航/步骤面板前先收起终端和文件快捷条，避免叠层
             onTermClose()
+            onClearSelection()
             navClosing = true
             kotlinx.coroutines.delay(150)
             navMode = true
