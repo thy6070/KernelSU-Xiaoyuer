@@ -3406,7 +3406,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "      state=normal",
                     "    fi",
                     "  fi",
-                    "  sleep 2",
+                    "  sleep 1",
                     "done",
                     ""
                                     )
