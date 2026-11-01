@@ -2623,8 +2623,7 @@ private fun ModeButton(
                                     out.writeBytes(plain)
                                     val qp = "'" + out.absolutePath.replace("'", "'\\''") + "'"
                                     sh2("chmod 644 " + qp)
-                                    // 先卸载已加载的模块，避免 already-exists 导致验证失败
-                                    sh2("/data/adb/ksud unload 2>/dev/null")
+                                    // 与官方「使用本地 LKM」一致：直接 patch，不卸载、不校验
                                     val res = sh2("/data/adb/ksud boot-patch -m " + qp + " -f 2>&1")
                                     if (res.contains("Success", true) || res.contains("successfully", true)) {
                                         "已安装 " + out.name + "（重启生效）"
