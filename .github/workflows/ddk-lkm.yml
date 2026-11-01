@@ -65,7 +65,7 @@ jobs:
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_IS_PR_BUILD=1"
         fi
-        CONFIG_KSU=m CC=clang make $EXTRA_ARGS KCFLAGS="-mbranch-protection=standard"
+        CONFIG_KSU=m CC=clang make $EXTRA_ARGS KSU_VERSION=32713
         
         echo "=== Build completed ==="
 
