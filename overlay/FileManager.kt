@@ -1514,7 +1514,10 @@ private fun ProMaxIsland(
                                                 navScope.launch {
                                                     withContext(Dispatchers.IO) {
                                                         try {
-                                                            Shell.cmd("rm -rf \"/data/adb/modules/${mod.id}\"").exec()
+                                                            // 与官方一致：走 ksud 正规卸载流程
+                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                                "/data/adb/ksud module uninstall \"${mod.id}\""))
+                                                                .waitFor()
                                                         } catch (t: Throwable) {
                                                         }
                                                     }
