@@ -374,7 +374,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         onTermInput = { termInput = it },
         onTermRun = {
             val cmd = termInput
-            if (cmd.isNotBlank()) {
+            // 允许空输入（发送换行给等待中的脚本）
+            if (true) {
                 termInput = ""
                 val alive = activeProc
                 if (alive != null && alive.isAlive) {
