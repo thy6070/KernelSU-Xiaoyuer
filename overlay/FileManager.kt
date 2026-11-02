@@ -646,7 +646,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "export TERM=xterm-256color ; " +
                                     "BB=/data/adb/ksu/bin/busybox ; " +
-                                    "if [ -x \"$BB\" ]; then \"$BB\" script -q -c 'sh /data/local/tmp/xy_exec.sh' /dev/null 2>&1 ; " +
+                                    "if [ -x \"\$BB\" ]; then \"\$BB\" script -q -c 'sh /data/local/tmp/xy_exec.sh' /dev/null 2>&1 ; " +
                                     "else sh /data/local/tmp/xy_exec.sh 2>&1 ; fi ; " +
                                     "rm -f /data/local/tmp/xy_exec.sh"
                             }
