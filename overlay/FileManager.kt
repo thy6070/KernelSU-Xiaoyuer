@@ -645,7 +645,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 else -> "cp -f \"$p\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "export TERM=xterm-256color ; " +
-                                    "(stdbuf -oL -eL sh /data/local/tmp/xy_exec.sh 2>&1 || sh /data/local/tmp/xy_exec.sh 2>&1) ; " +
+                                    "BB=/data/adb/ksu/bin/busybox ; " +
+                                    "if [ -x \"$BB\" ]; then \"$BB\" script -q -c 'sh /data/local/tmp/xy_exec.sh' /dev/null 2>&1 ; " +
+                                    "else sh /data/local/tmp/xy_exec.sh 2>&1 ; fi ; " +
                                     "rm -f /data/local/tmp/xy_exec.sh"
                             }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
