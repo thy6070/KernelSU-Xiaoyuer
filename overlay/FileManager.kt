@@ -175,12 +175,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         if (appCtx.getSharedPreferences("yx_mode", 0).getBoolean("perf", false)) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
-                    // 只在守护没跑时才启动，避免和开机脚本重复起进程
                     Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
-                        "if ! pgrep -f 'xy_game.sh' >/dev/null 2>&1; then " +
-                        "  sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
-                        "  setsid sh /data/adb/xy_game.sh >/dev/null 2>&1 & " +
-                        "fi")).waitFor()
+                        "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
+                        "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
+                        "setsid sh /data/adb/xy_guard.sh >/dev/null 2>&1 &")).waitFor()
                 }
             }
         }
@@ -252,10 +250,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             o.trim() == "y"
                         }.getOrDefault(false)
                     longPressFromRight = false
-                    // 长按新目标时先收起终端和文件快捷条，避免叠层
+                    // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
                     termText = ""
-                    selectedFile = null
                     longPressPath = lp
                     longPressTick += 1
                 },
@@ -294,10 +291,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             o.trim() == "y"
                         }.getOrDefault(false)
                     longPressFromRight = true
-                    // 长按新目标时先收起终端和文件快捷条，避免叠层
+                    // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
                     termText = ""
-                    selectedFile = null
                     longPressPath = lp
                     longPressTick += 1
                 },
@@ -1157,9 +1153,8 @@ private fun ProMaxIsland(
 
     fun openNav(target: String?) {
         reopenScope.launch {
-            // 打开导航/步骤面板前先收起终端和文件快捷条，避免叠层
+            // 打开导航/步骤面板前先收起终端，避免重叠
             onTermClose()
-            onClearSelection()
             navClosing = true
             kotlinx.coroutines.delay(150)
             navMode = true
@@ -2567,6 +2562,15 @@ private fun ModeButton(
     var on by remember { mutableStateOf(false) }
     val ctxMsg = androidx.compose.ui.platform.LocalContext.current
     var latencyMsg by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        latencyMsg = ctxMsg.getSharedPreferences("yx_mode", 0).getString("msg_" + title, null)
+    }
+    LaunchedEffect(latencyMsg) {
+        val v = latencyMsg
+        if (v != null) {
+            ctxMsg.getSharedPreferences("yx_mode", 0).edit().putString("msg_" + title, v).apply()
+        }
+    }
     val ctx3 = androidx.compose.ui.platform.LocalContext.current
     val scope2 = rememberCoroutineScope()
     var execPath by remember { mutableStateOf<String?>(null) }
@@ -2706,6 +2710,74 @@ private fun ModeButton(
             .background(Color(0xE60E0E10))
             .clickable {
                 on = !on
+                if (title == "刷入内核模块") {
+                    latencyMsg = "导出中…"
+                    scope2.launch {
+                        val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                fun sh(c: String): String {
+                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                    val o = pr.inputStream.bufferedReader().readText()
+                                    pr.waitFor()
+                                    return o
+                                }
+                                val rel = sh("uname -r 2>/dev/null").trim()
+                                val ver = rel.substringBefore('-')
+                                val mm = ver.split(".").take(2).joinToString(".")
+                                val sdk = android.os.Build.VERSION.SDK_INT
+                                val android = when {
+                                    sdk >= 36 -> "android17"
+                                    sdk >= 35 -> "android16"
+                                    sdk >= 34 -> "android15"
+                                    sdk >= 33 -> "android14"
+                                    sdk >= 31 -> "android13"
+                                    else -> "android12"
+                                }
+                                val candidates = listOf(
+                                    android + "-" + mm + "_kernelsu.ko.bin",
+                                    android + "-" + mm + "_susfs_guard_lkm.ko.bin"
+                                )
+                                val assets = ctx3.assets
+                                val listed = assets.list("lkm")?.toList() ?: emptyList()
+                                // prefer the file whose kmi matches both android level and kernel line
+                                val pick = listed.firstOrNull { it.startsWith(android + "-" + mm) }
+                                    ?: listed.firstOrNull { it.startsWith(android) && it.contains(mm) }
+                                    ?: candidates.firstOrNull { it in listed }
+                                if (pick == null) {
+                                    "无匹配模块(" + android + "-" + mm + ")"
+                                } else {
+                                    val key = byteArrayOf(
+                                        -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
+                                        -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
+                                        -16, -29, -55, -89, -75, -46, 70, 24
+                                    )
+                                    val raw = assets.open("lkm/" + pick).readBytes()
+                                    val plain = ByteArray(raw.size) { i ->
+                                        (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
+                                    }
+                                    val dir = java.io.File("/storage/emulated/0/小鱼儿")
+                                    dir.mkdirs()
+                                    val out = java.io.File(dir, pick.removeSuffix(".bin"))
+                                    out.writeBytes(plain)
+                                    sh("chmod 644 '" + out.absolutePath.replace("'", "'\\''") + "'")
+                                    "已导出 " + out.name
+                                }
+                            } catch (t: Throwable) {
+                                "导出失败"
+                            }
+                        }
+                        latencyMsg = msg
+                    }
+                }
+                ctx3.getSharedPreferences("yx_mode", 0).edit().putBoolean(
+                    when (title) {
+                        "性能模式" -> "perf"
+                        "放开通行" -> "open"
+                        "隐藏BL" -> "bl"
+                        else -> "none"
+                    },
+                    on
+                ).apply()
                 if (title == "下载RT驱动") {
                     urlInput = ctx3.getSharedPreferences("yx_exec", 0).getString("rt_url", "") ?: ""
                     showUrlDialog = true
@@ -2878,7 +2950,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "  # MTK",
                     "  for z in /sys/class/thermal/thermal_zone*/; do",
                     "    n=\$(cat \"\$z/type\" 2>/dev/null)",
-                    "    case \"\$n\" in soc_max|soc_therm|soc-temp|bigcore_max|mtktscpu|soc_thermal|cpu-0-0-usr) t=\$(cat \"\$z/temp\" 2>/dev/null); [ -n \"\$t\" ] && echo \"\$t\" && return ;; esac",
+                    "    case \"\$n\" in soc_max) t=\$(cat \"\$z/temp\" 2>/dev/null); [ -n \"\$t\" ] && echo \"\$t\" && return ;; esac",
                     "  done",
                     "  # 高通 / 通用：类型含 soc / cpu / gpu 的最高温",
                     "  best=0",
@@ -2893,31 +2965,6 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "    esac",
                     "  done",
                     "  echo \"\$best\"",
-                    "}",
-                    "",
-                    "refresh_max() {",
-                    "  F=\"\$1\"",
-                    "  [ -n \"\$F\" ] || return",
-                    "  settings put system peak_refresh_rate \"\$F\" 2>/dev/null",
-                    "  settings put system min_refresh_rate \"\$F\" 2>/dev/null",
-                    "  # 小米/澎湃/部分 ROM 用这些键",
-                    "  settings put system user_refresh_rate \"\$F\" 2>/dev/null",
-                    "  settings put secure user_refresh_rate \"\$F\" 2>/dev/null",
-                    "  settings put secure peak_refresh_rate \"\$F\" 2>/dev/null",
-                    "  setprop persist.sys.miui_refresh_rate \"\$F\" 2>/dev/null",
-                    "  setprop persist.vendor.dfps.rate \"\$F\" 2>/dev/null",
-                    "  # SurfaceFlinger 直接切到刷新率最高的 mode（settings 无效的 ROM 靠这个）",
-                    "  MID=\$(/system/bin/dumpsys display 2>/dev/null | grep -oE \"DisplayMode\\{id=[0-9]+[^}]*peakRefreshRate=[0-9.]+\" | sed -E 's/.*id=([0-9]+).*peakRefreshRate=([0-9.]+).*/\\2 \\1/' | sort -rn | head -1 | awk '{print \$2}')",
-                    "  [ -n \"\$MID\" ] && /system/bin/service call SurfaceFlinger 1035 i32 \"\$MID\" >/dev/null 2>&1",
-                    "  [ -n \"\$MID\" ] && /system/bin/dumpsys SurfaceFlinger --set-active-mode \"\$MID\" >/dev/null 2>&1",
-                    "}",
-                    "",
-                    "refresh_get() {",
-                    "  for k in system/peak_refresh_rate system/min_refresh_rate system/user_refresh_rate secure/user_refresh_rate; do",
-                    "    v=\$(settings get \"\${k%%/*}\" \"\${k##*/}\" 2>/dev/null | cut -d. -f1)",
-                    "    [ -n \"\$v\" ] && [ \"\$v\" != \"null\" ] && { echo \"\$v\"; return; }",
-                    "  done",
-                    "  echo \"\"",
                     "}",
                     "",
                     "gpu_lock() {",
@@ -2953,25 +3000,6 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "      [ -n \"\$mx\" ] && chmod 0666 \"\$f\" 2>/dev/null && echo \"\$mx\" > \"\$f\" 2>/dev/null",
                     "    done",
                     "  done",
-                    "  # ---- 高通 kgsl devfreq：min=max（真正锁频）----",
-                    "  for d in /sys/class/kgsl/kgsl-3d0/devfreq /sys/class/kgsl/kgsl-3d1/devfreq; do",
-                    "    [ -d \"\$d\" ] || continue",
-                    "    mx=\$(cat \"\$d/max_freq\" 2>/dev/null); [ -n \"\$mx\" ] || continue",
-                    "    chmod 0666 \"\$d/min_freq\" \"\$d/max_freq\" \"\$d/governor\" 2>/dev/null",
-                    "    echo \"\$mx\" > \"\$d/max_freq\" 2>/dev/null",
-                    "    echo \"\$mx\" > \"\$d/min_freq\" 2>/dev/null",
-                    "    echo performance > \"\$d/governor\" 2>/dev/null",
-                    "  done",
-                    "  # ---- 内存带宽 DDR/busmon ----",
-                    "  for d in /sys/class/devfreq/*/; do",
-                    "    [ -d \"\$d\" ] || continue",
-                    "    b=\$(basename \"\$d\")",
-                    "    case \"\$b\" in *ddr*|*DDR*|*busmon*|*dvfsrc*|*bw*|*BW*|*memlat*|*cpubw*) ;; *) continue ;; esac",
-                    "    case \"\$b\" in *gpu*|*mali*|*kgsl-3d*) continue ;; esac",
-                    "    mx=\$(cat \"\$d/max_freq\" 2>/dev/null); [ -n \"\$mx\" ] && [ \"\$mx\" != \"0\" ] || continue",
-                    "    chmod 0666 \"\$d/min_freq\" 2>/dev/null",
-                    "    echo \"\$mx\" > \"\$d/min_freq\" 2>/dev/null",
-                    "  done",
                     "  # ---- 通用 devfreq：名字里带 gpu/mali/kgsl/adreno 的都锁最高 ----",
                     "  for d in /sys/class/devfreq/*; do",
                     "    [ -d \"\$d\" ] || continue",
@@ -3006,15 +3034,6 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "}",
                     "",
                     "apply_max() {",
-                    "  # ① 先把 scaling_max 提到硬件上限（否则下面的 min 85% 会被拒）",
-                    "  for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do",
-                    "    [ -f \"\$f\" ] || continue",
-                    "    b=\${f%/scaling_max_freq}",
-                    "    hw=\$(cat \"\$b/cpuinfo_max_freq\" 2>/dev/null)",
-                    "    [ -n \"\$hw\" ] || continue",
-                    "    cur=\$(cat \"\$f\" 2>/dev/null)",
-                    "    [ \"\$cur\" != \"\$hw\" ] && { chmod 0666 \"\$f\" 2>/dev/null; echo \"\$hw\" > \"\$f\" 2>/dev/null; }",
-                    "  done",
                     "  # Scene EP 极速：下限 40%（不钉死，让 sugov 自己爬到满）+ target_loads 30 + 立即升频",
                     "  for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq; do",
                     "    [ -f \"\$f\" ] || continue",
@@ -3024,7 +3043,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "    want=\$((mf * 85 / 100))",
                     "    # 写入后回读校验，最多重试 3 次（部分机型会重置或被 SELinux 拒绝）",
                     "    a=0",
-                    "    while [ \"\$a\" -lt 5 ]; do",
+                    "    while [ \"\$a\" -lt 3 ]; do",
                     "      cur=\$(cat \"\$f\" 2>/dev/null)",
                     "      [ \"\$cur\" = \"\$want\" ] && break",
                     "      chmod 0666 \"\$f\" 2>/dev/null",
@@ -3078,6 +3097,15 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "      }",
                     "    done",
                     "  done",
+                    "  # 关键：系统会把 scaling_max_freq 压在低档，先提到硬件上限，否则 min 85% 写不进去",
+                    "  for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do",
+                    "    [ -f \"\$f\" ] || continue",
+                    "    b=\${f%/scaling_max_freq}",
+                    "    hw=\$(cat \"\$b/cpuinfo_max_freq\" 2>/dev/null)",
+                    "    [ -n \"\$hw\" ] || continue",
+                    "    cur=\$(cat \"\$f\" 2>/dev/null)",
+                    "    [ \"\$cur\" != \"\$hw\" ] && { chmod 0666 \"\$f\" 2>/dev/null; echo \"\$hw\" > \"\$f\" 2>/dev/null; }",
+                    "  done",
                     "  # MTK cm_mgr：解除带宽封顶",
                     "  [ -f /sys/kernel/cm_mgr/dbg_cm_mgr ] && {",
                     "    echo \"cm_mgr_perf_enable 1\" > /sys/kernel/cm_mgr/dbg_cm_mgr 2>/dev/null",
@@ -3085,15 +3113,13 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "  }",
                     "  gpu_lock",
                     "  # 刷新率：自适应设备最高",
-                    "  MAXF=\$(/system/bin/dumpsys display 2>/dev/null | grep -oE \"fps=[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/dumpsys SurfaceFlinger 2>/dev/null | grep -oE \"refresh-rate *[:=] *[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get system user_refresh_rate 2>/dev/null | cut -d. -f1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get secure user_refresh_rate 2>/dev/null | cut -d. -f1)",
-                    "  [ \"\$MAXF\" = \"null\" ] && MAXF=\"\"",
+                    "  MAXF=\$(dumpsys display 2>/dev/null | grep -oE \"fps=[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "        [ -z \"\$MAXF\" ] && MAXF=\$(dumpsys SurfaceFlinger 2>/dev/null | grep -oE \"refresh-rate *[:=] *[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "        [ -z \"\$MAXF\" ] && MAXF=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
                     "  if [ -n \"\$MAXF\" ] && [ \"\$MAXF\" -ge 60 ] 2>/dev/null; then",
                     "    echo \"\$MAXF\" > /data/adb/xy_maxf 2>/dev/null",
-                    "    refresh_max \"\$MAXF\"",
+                    "    settings put system peak_refresh_rate \"\$MAXF\" 2>/dev/null",
+                    "    settings put system min_refresh_rate \"\$MAXF\" 2>/dev/null",
                     "  fi",
                     "}",
                     "",
@@ -3219,15 +3245,6 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "          [ \"\$pl\" != \"0\" ] && { chmod 0666 \"\$d/min_pwrlevel\" 2>/dev/null; echo 0 > \"\$d/min_pwrlevel\" 2>/dev/null; }",
                     "        fi",
                     "      done",
-                    "      # 先确保 scaling_max 没被压回（否则 min 会被拒）",
-                    "      for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do",
-                    "        [ -f \"\$f\" ] || continue",
-                    "        b=\${f%/scaling_max_freq}",
-                    "        hw=\$(cat \"\$b/cpuinfo_max_freq\" 2>/dev/null)",
-                    "        [ -n \"\$hw\" ] || continue",
-                    "        cur=\$(cat \"\$f\" 2>/dev/null)",
-                    "        [ \"\$cur\" != \"\$hw\" ] && { chmod 0666 \"\$f\" 2>/dev/null; echo \"\$hw\" > \"\$f\" 2>/dev/null; }",
-                    "      done",
                     "      # CPU 下限守护：系统可能改回，每轮核对（平板常见）",
                     "      for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq; do",
                     "        [ -f \"\$f\" ] || continue",
@@ -3249,17 +3266,17 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "      # 刷新率守护：被游戏/系统改回就重设；没有记录就重新探测",
                     "      MAXF=\$(cat /data/adb/xy_maxf 2>/dev/null)",
                     "      if [ -z \"\$MAXF\" ]; then",
-                    "        MAXF=\$(/system/bin/dumpsys display 2>/dev/null | grep -oE \"fps=[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/dumpsys SurfaceFlinger 2>/dev/null | grep -oE \"refresh-rate *[:=] *[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get system user_refresh_rate 2>/dev/null | cut -d. -f1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get secure user_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "        MAXF=\$(dumpsys display 2>/dev/null | grep -oE \"fps=[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "        [ -z \"\$MAXF\" ] && MAXF=\$(dumpsys SurfaceFlinger 2>/dev/null | grep -oE \"refresh-rate *[:=] *[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "        [ -z \"\$MAXF\" ] && MAXF=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
                     "        [ -n \"\$MAXF\" ] && [ \"\$MAXF\" -ge 60 ] 2>/dev/null && echo \"\$MAXF\" > /data/adb/xy_maxf",
                     "      fi",
                     "      if [ -n \"\$MAXF\" ] && [ \"\$MAXF\" -ge 60 ] 2>/dev/null; then",
-                    "        ccur=\$(refresh_get)",
-                    "        if [ \"\$ccur\" != \"\$MAXF\" ]; then",
-                    "          refresh_max \"\$MAXF\"",
+                    "        cpk=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "        cmn=\$(settings get system min_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "        if [ \"\$cpk\" != \"\$MAXF\" ] || [ \"\$cmn\" != \"\$MAXF\" ]; then",
+                    "          settings put system peak_refresh_rate \"\$MAXF\" 2>/dev/null",
+                    "          settings put system min_refresh_rate \"\$MAXF\" 2>/dev/null",
                     "        fi",
                     "      fi",
                     "      pid=\$(pidof \"\$pkg\" 2>/dev/null | awk '{print \$1}')",
@@ -3293,15 +3310,6 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "          [ \"\$pl\" != \"0\" ] && { chmod 0666 \"\$d/min_pwrlevel\" 2>/dev/null; echo 0 > \"\$d/min_pwrlevel\" 2>/dev/null; }",
                     "        fi",
                     "      done",
-                    "      # 先确保 scaling_max 没被压回（否则 min 会被拒）",
-                    "      for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do",
-                    "        [ -f \"\$f\" ] || continue",
-                    "        b=\${f%/scaling_max_freq}",
-                    "        hw=\$(cat \"\$b/cpuinfo_max_freq\" 2>/dev/null)",
-                    "        [ -n \"\$hw\" ] || continue",
-                    "        cur=\$(cat \"\$f\" 2>/dev/null)",
-                    "        [ \"\$cur\" != \"\$hw\" ] && { chmod 0666 \"\$f\" 2>/dev/null; echo \"\$hw\" > \"\$f\" 2>/dev/null; }",
-                    "      done",
                     "      # CPU 下限守护：系统可能改回，每轮核对（平板常见）",
                     "      for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq; do",
                     "        [ -f \"\$f\" ] || continue",
@@ -3323,17 +3331,17 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "      # 刷新率守护：被游戏/系统改回就重设；没有记录就重新探测",
                     "      MAXF=\$(cat /data/adb/xy_maxf 2>/dev/null)",
                     "      if [ -z \"\$MAXF\" ]; then",
-                    "        MAXF=\$(/system/bin/dumpsys display 2>/dev/null | grep -oE \"fps=[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/dumpsys SurfaceFlinger 2>/dev/null | grep -oE \"refresh-rate *[:=] *[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get system user_refresh_rate 2>/dev/null | cut -d. -f1)",
-                    "        [ -z \"\$MAXF\" ] && MAXF=\$(/system/bin/settings get secure user_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "        MAXF=\$(dumpsys display 2>/dev/null | grep -oE \"fps=[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "        [ -z \"\$MAXF\" ] && MAXF=\$(dumpsys SurfaceFlinger 2>/dev/null | grep -oE \"refresh-rate *[:=] *[0-9.]+\" | grep -oE \"[0-9]+\" | sort -n | tail -1)",
+                    "        [ -z \"\$MAXF\" ] && MAXF=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
                     "        [ -n \"\$MAXF\" ] && [ \"\$MAXF\" -ge 60 ] 2>/dev/null && echo \"\$MAXF\" > /data/adb/xy_maxf",
                     "      fi",
                     "      if [ -n \"\$MAXF\" ] && [ \"\$MAXF\" -ge 60 ] 2>/dev/null; then",
-                    "        ccur=\$(refresh_get)",
-                    "        if [ \"\$ccur\" != \"\$MAXF\" ]; then",
-                    "          refresh_max \"\$MAXF\"",
+                    "        cpk=\$(settings get system peak_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "        cmn=\$(settings get system min_refresh_rate 2>/dev/null | cut -d. -f1)",
+                    "        if [ \"\$cpk\" != \"\$MAXF\" ] || [ \"\$cmn\" != \"\$MAXF\" ]; then",
+                    "          settings put system peak_refresh_rate \"\$MAXF\" 2>/dev/null",
+                    "          settings put system min_refresh_rate \"\$MAXF\" 2>/dev/null",
                     "        fi",
                     "      fi",
                     "      pid=\$(pidof \"\$pkg\" 2>/dev/null | awk '{print \$1}')",
@@ -3351,7 +3359,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "      state=normal",
                     "    fi",
                     "  fi",
-                    "  sleep 1",
+                    "  sleep 2",
                     "done",
                     ""
                                     )
