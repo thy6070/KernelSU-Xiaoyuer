@@ -56,6 +56,14 @@ jobs:
           cargo build --package ksuinit --target=aarch64-linux-android --release
           mkdir -p userspace/ksud/bin/aarch64
           cp target/aarch64-linux-android/release/ksuinit userspace/ksud/bin/aarch64/
+      - uses: actions/checkout@v4
+        with:
+          path: self
+      - name: Copy lkm ko into ksud assets
+        run: |
+          mkdir -p src/userspace/ksud/bin/aarch64
+          cp self/manager/app/src/main/assets/lkm/*.ko src/userspace/ksud/bin/aarch64/ 2>/dev/null || true
+          ls -l src/userspace/ksud/bin/aarch64/ | head
       - name: Build ksud
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
