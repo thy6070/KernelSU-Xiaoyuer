@@ -658,10 +658,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             pb.environment()["TMPDIR"] = "/data/local/tmp"
                             val proc = pb.start()
                             withContext(Dispatchers.Main) { activeProc = proc }
-                            proc.inputStream.bufferedReader().useLines { seq ->
-                                seq.forEach { line ->
+                            val inp = proc.inputStream
+                            val buf = ByteArray(4096)
+                            while (true) {
+                                val n = inp.read(buf)
+                                if (n < 0) break
+                                if (n > 0) {
+                                    val chunk = String(buf, 0, n)
                                     withContext(Dispatchers.Main) {
-                                        termText = termText + line + "\n"
+                                        termText = termText + chunk
                                     }
                                 }
                             }
