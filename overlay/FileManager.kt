@@ -638,6 +638,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "cp -f " + shq(p) + " /data/local/tmp/xy_install.apk ; " +
                                         "chmod 644 /data/local/tmp/xy_install.apk ; " +
                                         "pm install -r /data/local/tmp/xy_install.apk"
+                                lower.endsWith(".zip") -> {
+                                    // 模块 zip：走官方 ksud（/data/adb/ksud 优先）
+                                    val ksudZip = if (java.io.File("/data/adb/ksud").canExecute()) "/data/adb/ksud"
+                                        else appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
+                                    "cp -f " + shq(p) + " /data/local/tmp/xy_mod.zip 2>/dev/null ; " +
+                                        "chmod 644 /data/local/tmp/xy_mod.zip ; " +
+                                        "'" + ksudZip + "' module install /data/local/tmp/xy_mod.zip 2>&1"
+                                }
                                 lower.endsWith(".so") -> {
                                     val key = soKey.trim()
                                     "cp -f \"$p\" /data/local/tmp/xy_exec.so 2>/dev/null ; " +
@@ -650,8 +658,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     // 自动转码（GBK → UTF-8），否则乱码/语法错
                                     val src = java.io.File(p)
                                     val dst = java.io.File(appCtx.cacheDir, "xy_src.sh")
+                                    // /data 等目录 app 无权限读 → 先用 root 复制到缓存（可读）
+                                    if (!src.canRead()) {
+                                        try {
+                                            su("cp -f " + shq(p) + " " + shq(dst.absolutePath) + " ; chmod 644 " + shq(dst.absolutePath))
+                                        } catch (e: Throwable) { }
+                                    }
                                     try {
-                                        val raw = src.readBytes()
+                                        val raw = if (src.canRead()) src.readBytes() else dst.readBytes()
                                         val dec = java.nio.charset.CharsetDecoder::class.java
                                         fun strict(cs: java.nio.charset.Charset): String {
                                             val d = cs.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
@@ -3562,7 +3576,8 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "",
                     "state=normal",
                     "pkg=\"\"",
-                    "ALL_PKGS=\"com.miui.gamebooster com.miui.gameturbo com.miui.newhome com.miui.gamebox com.miui.gamebar com.xiaomi.gamecenter com.xiaomi.gamecenter.sdk com.xiaomi.migameservice com.miui.securitycenter com.miui.powerkeeper com.miui.securityadd com.miui.analytics com.miui.cleanmaster com.miui.battery com.miui.castallshare com.xiaomi.miplay_client com.xiaomi.mirror com.miui.voiceassist com.xiaomi.aiasst.service com.miui.notes com.coloros.gamespace com.oplus.games com.oplus.gamespace com.oneplus.gamespace com.realme.gamespace com.realme.gameassistant com.heytap.gameassistant com.oppo.gamebox com.coloros.gamespaceui com.oplus.gamespaceui com.oplus.gamebox com.coloros.gamebar com.coloros.secureguard com.oplus.battery com.oplus.athena com.coloros.oppoguardelf com.oplus.safecenter com.coloros.safecenter com.coloros.healthcheck com.oplus.healthcheck com.lenovo.gameassistant com.zui.gameassistant com.zui.gamespace com.lenovo.gamespace com.lenovo.gamebar com.motorola.gameassistant com.motorola.gamemode com.zui.safecenter com.lenovo.safecenter com.motorola.safecenter com.vivo.game com.vivo.gamewatch com.iqoo.gameassistant com.vivo.abe com.vivo.pem com.vivo.battery com.iqoo.secure com.blackshark.gameassistant com.redmagic.gameassistant com.blackshark.safecenter com.nubia.safecenter com.nubia.gameassistant com.oplus.screenrecorder com.coloros.screenrecorder com.oplus.cast com.coloros.cast com.oplus.voiceassist com.coloros.breeno com.heytap.breeno com.oplus.note com.coloros.note com.vivo.smartmirror com.vivo.voiceassist com.vivo.jovi com.vivo.notes com.vivo.gamecube com.xiaomi.joyose com.miui.joyose com.motorola.screenrecorder com.motorola.voice com.motorola.notes com.zui.notes com.miui.cloudservice com.miui.cloudbackup com.miui.gallery com.miui.msa com.xiaomi.mipicks com.miui.personalassistant com.android.printspooler com.xiaomi.smarthome com.miui.weather2 com.coloros.cloud com.oplus.cloud com.coloros.gallery3d com.oplus.ads com.coloros.assistantscreen com.vivo.easyshare com.vivo.gallery com.vivo.ads com.vivo.assistant com.vivo.weather2 com.mediatek.mtklogger com.mediatek.batterywarning com.mediatek.dm com.mediatek.ims com.mediatek.mtklogger.framework com.mediatek.timeshift.compute com.qualcomm.qti.qms.service.telemetry com.qualcomm.qti.qcolor com.qualcomm.qti.perfd vendor.qti.perfd1.0 com.qualcomm.qti.qms.service.performance\"",
+                    "ALL_PKGS=\"com.miui.gamebooster com.miui.gameturbo com.miui.newhome com.miui.gamebox com.miui.gamebar com.xiaomi.gamecenter com.xiaomi.gamecenter.sdk com.xiaomi.migameservice com.miui.securitycenter com.miui.powerkeeper com.miui.securityadd com.miui.analytics com.miui.cleanmaster com.miui.battery com.miui.castallshare com.xiaomi.miplay_client com.xiaomi.mirror com.miui.voiceassist com.xiaomi.aiasst.service com.miui.voiceassistoverlay com.miui.voicetrigger com.miui.notes \\",
+                    "    com.miui.miplay com.miui.smarteverything com.miui.devicemesh com.xiaomi.miplay com.coloros.gamespace com.oplus.games com.oplus.gamespace com.oneplus.gamespace com.realme.gamespace com.realme.gameassistant com.heytap.gameassistant com.oppo.gamebox com.coloros.gamespaceui com.oplus.gamespaceui com.oplus.gamebox com.coloros.gamebar com.coloros.secureguard com.oplus.battery com.oplus.athena com.coloros.oppoguardelf com.oplus.safecenter com.coloros.safecenter com.coloros.healthcheck com.oplus.healthcheck com.lenovo.gameassistant com.zui.gameassistant com.zui.gamespace com.lenovo.gamespace com.lenovo.gamebar com.motorola.gameassistant com.motorola.gamemode com.zui.safecenter com.lenovo.safecenter com.motorola.safecenter com.vivo.game com.vivo.gamewatch com.iqoo.gameassistant com.vivo.abe com.vivo.pem com.vivo.battery com.iqoo.secure com.blackshark.gameassistant com.redmagic.gameassistant com.blackshark.safecenter com.nubia.safecenter com.nubia.gameassistant com.oplus.screenrecorder com.coloros.screenrecorder com.oplus.cast com.coloros.cast com.oplus.voiceassist com.coloros.breeno com.heytap.breeno com.oplus.note com.coloros.note com.vivo.smartmirror com.vivo.voiceassist com.vivo.jovi com.vivo.notes com.vivo.gamecube com.xiaomi.joyose com.miui.joyose com.motorola.screenrecorder com.motorola.voice com.motorola.notes com.zui.notes com.miui.cloudservice com.miui.cloudbackup com.miui.gallery com.miui.msa com.xiaomi.mipicks com.miui.personalassistant com.android.printspooler com.xiaomi.smarthome com.miui.weather2 com.coloros.cloud com.oplus.cloud com.coloros.gallery3d com.oplus.ads com.coloros.assistantscreen com.vivo.easyshare com.vivo.gallery com.vivo.ads com.vivo.assistant com.vivo.weather2 com.mediatek.mtklogger com.mediatek.batterywarning com.mediatek.dm com.mediatek.ims com.mediatek.mtklogger.framework com.mediatek.timeshift.compute com.qualcomm.qti.qms.service.telemetry com.qualcomm.qti.qcolor com.qualcomm.qti.perfd vendor.qti.perfd1.0 com.qualcomm.qti.qms.service.performance\"",
                     "# 启动时先恢复一次（清理上次异常退出的残留禁用）",
                     "restore_default",
                     "# 非游戏状态兜底恢复的包列表",
