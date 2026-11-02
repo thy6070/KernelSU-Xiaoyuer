@@ -95,6 +95,7 @@ jobs:
           cp overlay/FileManager.kt $S/ui/screen/FileManager.kt
           cp overlay/CardLogin.kt $S/ui/screen/CardLogin.kt
           cp overlay/FileLocate.kt $S/ui/screen/FileLocate.kt
+          cp overlay/InstallMaterial.kt $S/ui/screen/install/InstallMaterial.kt
           cp overlay/IntentDispatcher.kt $S/ui/navigation3/IntentDispatcher.kt
           cp $U/ui/screen/XyTypography.kt $S/ui/screen/
           cp $U/ui/navigation3/Routes.kt $S/ui/navigation3/
