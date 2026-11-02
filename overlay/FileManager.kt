@@ -3237,6 +3237,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "    com.miui.gamebooster com.miui.gameturbo com.miui.newhome com.miui.gamebox com.miui.gamebar \\",
                     "    com.xiaomi.gamecenter com.xiaomi.gamecenter.sdk com.xiaomi.migameservice \\",
                     "    com.miui.securitycenter com.miui.powerkeeper com.miui.securityadd com.miui.analytics com.miui.cleanmaster com.miui.battery \\",
+                    "    com.miui.castallshare com.xiaomi.miplay_client com.xiaomi.mirror com.miui.voiceassist com.xiaomi.aiasst.service com.miui.notes \\",
                     "    com.coloros.gamespace com.oplus.games com.oplus.gamespace com.oneplus.gamespace \\",
                     "    com.realme.gamespace com.realme.gameassistant com.heytap.gameassistant com.oppo.gamebox \\",
                     "    com.coloros.gamespaceui com.oplus.gamespaceui com.oplus.gamebox com.coloros.gamebar \\",
