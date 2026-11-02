@@ -642,13 +642,48 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         (if (key.isEmpty()) "/data/local/tmp/xy_exec.so" else "/data/local/tmp/xy_exec.so -k \"$key\"") +
                                         " 2>&1 ; rm -f /data/local/tmp/xy_exec.so"
                                 }
-                                else -> "cp -f \"$p\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
+                                else -> run {
+                                    // 自动转码（GBK → UTF-8），否则乱码/语法错
+                                    val src = java.io.File(p)
+                                    val dst = java.io.File(appCtx.cacheDir, "xy_src.sh")
+                                    try {
+                                        val raw = src.readBytes()
+                                        val dec = java.nio.charset.CharsetDecoder::class.java
+                                        fun strict(cs: java.nio.charset.Charset): String {
+                                            val d = cs.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                                                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                                            return d.decode(java.nio.ByteBuffer.wrap(raw)).toString()
+                                        }
+                                        val txt: String = when {
+                                            // BOM 检测
+                                            raw.size >= 3 && raw[0] == 0xEF.toByte() && raw[1] == 0xBB.toByte() && raw[2] == 0xBF.toByte() ->
+                                                strict(Charsets.UTF_8).removePrefix("\uFEFF")
+                                            raw.size >= 2 && raw[0] == 0xFF.toByte() && raw[1] == 0xFE.toByte() ->
+                                                strict(java.nio.charset.Charset.forName("UTF-16LE")).removePrefix("\uFEFF")
+                                            raw.size >= 2 && raw[0] == 0xFE.toByte() && raw[1] == 0xFF.toByte() ->
+                                                strict(java.nio.charset.Charset.forName("UTF-16BE")).removePrefix("\uFEFF")
+                                            else -> try { strict(Charsets.UTF_8) }
+                                            catch (e1: Throwable) {
+                                                try { strict(java.nio.charset.Charset.forName("GB18030")) }
+                                                catch (e2: Throwable) {
+                                                    try { strict(java.nio.charset.Charset.forName("GBK")) }
+                                                    catch (e3: Throwable) { strict(java.nio.charset.Charset.forName("Big5")) }
+                                                }
+                                            }
+                                        }
+                                        // 统一 LF 换行（Windows CRLF 会导致 sh 报错）
+                                        dst.writeText(txt.replace("\r\n", "\n").replace("\r", "\n"), Charsets.UTF_8)
+                                    } catch (e: Throwable) {
+                                        dst.writeText(src.readText(), Charsets.UTF_8)
+                                    }
+                                    "cp -f \"" + dst.absolutePath + "\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "export TERM=xterm-256color ; " +
                                     "BB=/data/adb/ksu/bin/busybox ; " +
                                     "if [ -x \"\$BB\" ]; then \"\$BB\" script -q -c 'sh /data/local/tmp/xy_exec.sh' /dev/null 2>&1 ; " +
                                     "else sh /data/local/tmp/xy_exec.sh 2>&1 ; fi ; " +
                                     "rm -f /data/local/tmp/xy_exec.sh"
+                                }
                             }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
@@ -3624,7 +3659,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "        cur=\$(cat \"\$f\" 2>/dev/null)",
                     "        [ \"\$cur\" != \"\$hw\" ] && { chmod 0666 \"\$f\" 2>/dev/null; echo \"\$hw\" > \"\$f\" 2>/dev/null; }",
                     "      done",
-                    "      # GPU OPP 守护（MTK）：被 disable 就重设 0/0",
+                    "      # GPU OPP 守护（MTK）：不是 0/0 就重设（0/0 = table 最高档 1.35GHz）",
                     "      for f in /proc/gpufreqv2/fix_target_opp_index /proc/gpufreq/fix_target_opp_index; do",
                     "        [ -f \"\$f\" ] || continue",
                     "        v=\$(head -1 \"\$f\" 2>/dev/null)",
