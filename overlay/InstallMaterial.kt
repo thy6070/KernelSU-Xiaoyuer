@@ -1,5 +1,11 @@
 package me.weishu.kernelsu.ui.screen.install
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import mutableStateOf
+import remember
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.foundation.clickable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -251,15 +257,15 @@ private fun SelectInstallMethod(
         )
         // ===== 小鱼儿寄生：选内置 ko 直接刷入 =====
         val parasiteCtx = androidx.compose.ui.platform.LocalContext.current
-        var parasiteList by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<String>>(emptyList()) }
-        var parasiteOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-        var parasiteSel by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-        var parasiteMsg by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-        val parasiteScope = androidx.compose.runtime.rememberCoroutineScope()
+        var parasiteList by remember { mutableStateOf<List<String>>(emptyList()) }
+        var parasiteOpen by remember { mutableStateOf(false) }
+        var parasiteSel by remember { mutableStateOf<String?>(null) }
+        var parasiteMsg by remember { mutableStateOf<String?>(null) }
+        val parasiteScope = rememberCoroutineScope()
         SegmentedListItem(
             leadingContent = {
                 Icon(
-                    androidx.compose.material.icons.Icons.Outlined.Folder,
+                    Icons.Outlined.Folder,
                     null
                 )
             },
@@ -268,7 +274,7 @@ private fun SelectInstallMethod(
                 Text(parasiteMsg ?: "选择内置 ko 直接刷入")
             },
             trailingContent = {
-                Icon(androidx.compose.material.icons.Icons.Outlined.Folder, null)
+                Icon(Icons.Outlined.Folder, null)
             },
             onClick = {
                 parasiteList = parasiteCtx.assets.list("lkm")
