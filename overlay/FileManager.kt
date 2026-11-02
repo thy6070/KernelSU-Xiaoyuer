@@ -550,7 +550,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     termText = ""
                     runMessage = null
                     showTerminal = true
-                    val ksud = appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
+                    // 优先用系统 ksud（/data/adb/ksud，一定可执行）；APK 内 libksud.so 作后备
+                    val ksud = if (java.io.File("/data/adb/ksud").canExecute())
+                        "/data/adb/ksud"
+                    else
+                        appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
                     val q = "'" + p.replace("'", "'\''") + "'"
                     val cmd = "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
                         "export KSU_VER=1.0.0 ; export KSU_VER_CODE=12100 ; export KSU_KERNEL_VER_CODE=12100 ; " +
