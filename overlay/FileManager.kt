@@ -2548,7 +2548,6 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                 onDismiss()
                 onRunExec(it)
             })
-            ModeButton(Icons.Outlined.AcUnit, "小鱼儿寄生")
             ModeButton(Icons.Outlined.Folder, "执行此文件", onRun = {
                 onDismiss()
                 onRunExec(it)
@@ -2568,121 +2567,8 @@ private fun ModeButton(
     var on by remember { mutableStateOf(false) }
     val ctxMsg = androidx.compose.ui.platform.LocalContext.current
     var latencyMsg by remember { mutableStateOf<String?>(null) }
-    var koList by remember { mutableStateOf<List<String>>(emptyList()) }
-    var showKoPick by remember { mutableStateOf(false) }
     val ctx3 = androidx.compose.ui.platform.LocalContext.current
     val scope2 = rememberCoroutineScope()
-    var selectedKo by remember { mutableStateOf<String?>(null) }
-    if (showKoPick) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showKoPick = false },
-            title = { androidx.compose.material3.Text("选择要刷入的内核模块") },
-            text = {
-                Column {
-                    koList.forEach { f ->
-                        val chosen = f == selectedKo
-                        androidx.compose.material3.Text(
-                            text = (if (chosen) "● " else "○ ") + f.removeSuffix(".bin"),
-                            modifier = androidx.compose.ui.Modifier
-                                .fillMaxWidth()
-                                .clickable { selectedKo = f }
-                                .padding(vertical = 10.dp),
-                            color = if (chosen) Color(0xFF0A84FF) else Color.White
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(
-                    enabled = selectedKo != null,
-                    onClick = {
-                        val f = selectedKo ?: return@TextButton
-                        showKoPick = false
-                        latencyMsg = "安装中…"
-                        scope2.launch {
-                            val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                try {
-                                    fun sh2(c: String): String {
-                                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
-                                        val o = pr.inputStream.bufferedReader().readText()
-                                        pr.waitFor()
-                                        return o
-                                    }
-                                    val raw = ctx3.assets.open("lkm/" + f).readBytes()
-                                    val plain = if (f.endsWith(".ko.bin")) {
-                                        val key = byteArrayOf(
-                                            -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
-                                            -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
-                                            -16, -29, -55, -89, -75, -46, 70, 24
-                                        )
-                                        ByteArray(raw.size) { i ->
-                                            (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
-                                        }
-                                    } else raw
-                                    val dir = java.io.File("/storage/emulated/0/小鱼儿")
-                                    dir.mkdirs()
-                                    val out = java.io.File(dir, f.removeSuffix(".bin"))
-                                    out.writeBytes(plain)
-                                    val qp = "'" + out.absolutePath.replace("'", "'\\''") + "'"
-                                    sh2("chmod 644 " + qp)
-                                    // 与官方「使用本地 LKM」一致：直接 patch，不卸载、不校验
-                                    val res = sh2("/data/adb/ksud boot-patch -m " + qp + " -f 2>&1")
-                                    if (res.contains("Success", true) || res.contains("successfully", true)) {
-                                        "已安装 " + out.name + "（重启生效）"
-                                    } else {
-                                        "安装结果：" + res.takeLast(200).trim()
-                                    }
-                                } catch (t: Throwable) {
-                                    "安装失败：" + (t.message ?: "")
-                                }
-                            }
-                            latencyMsg = msg
-                            selectedKo = null
-                        }
-                    }
-                ) { androidx.compose.material3.Text("确认") }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showKoPick = false; selectedKo = null }) {
-                    androidx.compose.material3.Text("取消")
-                }
-            }
-        )
-    }
-    var execPath by remember { mutableStateOf<String?>(null) }
-    var showPathDialog by remember { mutableStateOf(false) }
-    var showKeyDialog by remember { mutableStateOf(false) }
-    var showUrlDialog by remember { mutableStateOf(false) }
-    var urlInput by remember { mutableStateOf("") }
-    var pathInput by remember { mutableStateOf("") }
-    var keyInput by remember { mutableStateOf("") }
-    suspend fun refreshLatency() {
-        latencyMsg = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                try {
-                    fun measure(p: String): Double {
-                        var best = Double.MAX_VALUE
-                        for (r in 0 until 3) {
-                            val iter = 8000
-                            val t0 = System.nanoTime()
-                            for (i in 0 until iter) {
-                                try {
-                                    android.system.Os.stat(p)
-                                } catch (e: Throwable) {
-                                }
-                            }
-                            val per = (System.nanoTime() - t0).toDouble() / iter
-                            if (per < best) best = per
-                        }
-                        return best
-                    }
-                    val den = (measure("/data/system") + measure("/data/misc")) / 2.0
-                    val mod = measure("/data/adb/modules")
-                    if (mod - den > 500.0) "会拉闸" else "不会拉闸"
-                } catch (t: Throwable) {
-                    null
-                }
-            }
-    }
     LaunchedEffect(title) {
         if (title == "性能模式") {
             val remembered = ctx3.getSharedPreferences("yx_mode", 0).getBoolean("perf", false)
@@ -2786,11 +2672,6 @@ private fun ModeButton(
             .background(Color(0xE60E0E10))
             .clickable {
                 on = !on
-                if (title == "小鱼儿寄生" || title == "刷入内核模块") {
-                    koList = ctx3.assets.list("lkm")?.filter { it.endsWith(".ko") || it.endsWith(".ko.bin") }?.sorted() ?: emptyList()
-                    showKoPick = koList.isNotEmpty()
-                    latencyMsg = if (koList.isEmpty()) "无内置模块" else null
-                }
                 if (title == "下载RT驱动") {
                     urlInput = ctx3.getSharedPreferences("yx_exec", 0).getString("rt_url", "") ?: ""
                     showUrlDialog = true
