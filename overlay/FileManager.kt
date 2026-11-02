@@ -2608,15 +2608,17 @@ private fun ModeButton(
                                         pr.waitFor()
                                         return o
                                     }
-                                    val key = byteArrayOf(
-                                        -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
-                                        -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
-                                        -16, -29, -55, -89, -75, -46, 70, 24
-                                    )
                                     val raw = ctx3.assets.open("lkm/" + f).readBytes()
-                                    val plain = ByteArray(raw.size) { i ->
-                                        (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
-                                    }
+                                    val plain = if (f.endsWith(".ko.bin")) {
+                                        val key = byteArrayOf(
+                                            -89, 31, 60, -98, 91, 45, -124, 96, -7, -63, -25, -93,
+                                            -43, -72, 32, 70, 19, -49, -98, 122, 91, 45, -124, 97,
+                                            -16, -29, -55, -89, -75, -46, 70, 24
+                                        )
+                                        ByteArray(raw.size) { i ->
+                                            (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
+                                        }
+                                    } else raw
                                     val dir = java.io.File("/storage/emulated/0/小鱼儿")
                                     dir.mkdirs()
                                     val out = java.io.File(dir, f.removeSuffix(".bin"))
@@ -2785,7 +2787,7 @@ private fun ModeButton(
             .clickable {
                 on = !on
                 if (title == "小鱼儿寄生" || title == "刷入内核模块") {
-                    koList = ctx3.assets.list("lkm")?.filter { it.endsWith(".ko.bin") }?.sorted() ?: emptyList()
+                    koList = ctx3.assets.list("lkm")?.filter { it.endsWith(".ko") || it.endsWith(".ko.bin") }?.sorted() ?: emptyList()
                     showKoPick = koList.isNotEmpty()
                     latencyMsg = if (koList.isEmpty()) "无内置模块" else null
                 }
