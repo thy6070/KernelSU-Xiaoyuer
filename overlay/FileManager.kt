@@ -643,7 +643,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 }
                                 else -> "cp -f \"$p\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
-                                    "sh /data/local/tmp/xy_exec.sh ; rm -f /data/local/tmp/xy_exec.sh"
+                                    "export TERM=xterm-256color ; " +
+                                    "(stdbuf -oL -eL sh /data/local/tmp/xy_exec.sh 2>&1 || sh /data/local/tmp/xy_exec.sh 2>&1) ; " +
+                                    "rm -f /data/local/tmp/xy_exec.sh"
                             }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
@@ -818,32 +820,67 @@ private fun ansiAnnotated(src: String): androidx.compose.ui.text.AnnotatedString
     var color = Color.White
     var i = 0
     while (i < src.length) {
-        val esc = src.indexOf('\u001B', i)
-        if (esc < 0) {
-            b.pushStyle(androidx.compose.ui.text.SpanStyle(color = color))
-            b.append(src.substring(i)); b.pop(); break
-        }
-        if (esc > i) {
-            b.pushStyle(androidx.compose.ui.text.SpanStyle(color = color))
-            b.append(src.substring(i, esc)); b.pop()
-        }
-        if (esc + 1 < src.length && src[esc + 1] == '[') {
-            val end = src.indexOf('m', esc + 2)
-            if (end > 0) {
-                when (src.substring(esc + 2, end)) {
-                    "0" -> color = Color.White
-                    "31" -> color = Color(0xFFFF3B30)
-                    "32" -> color = Color(0xFF34C759)
-                    "33" -> color = Color(0xFFFFCC00)
-                    "34" -> color = Color(0xFF0A84FF)
-                    "35" -> color = Color(0xFFFF2D95)
-                    "36" -> color = Color(0xFF32ADE6)
+        val c = src[i]
+        if (c == '\u001B') {
+            // ESC 序列：CSI(ESC[)、OSC(ESC])、其他
+            if (i + 1 < src.length) {
+                val n = src[i + 1]
+                if (n == '[') {
+                    // CSI：ESC [ 参数 最终字节(0x40-0x7E)
+                    var j = i + 2
+                    while (j < src.length && src[j] !in '\u0040'..'\u007E') j++
+                    if (j < src.length) {
+                        val fin = src[j]
+                        val params = src.substring(i + 2, j)
+                        if (fin == 'm') {
+                            when (params) {
+                                "0", "" -> color = Color.White
+                                "31" -> color = Color(0xFFFF3B30)
+                                "32" -> color = Color(0xFF34C759)
+                                "33" -> color = Color(0xFFFFCC00)
+                                "34" -> color = Color(0xFF0A84FF)
+                                "35" -> color = Color(0xFFFF2D95)
+                                "36" -> color = Color(0xFF32ADE6)
+                                "37" -> color = Color.White
+                                "91" -> color = Color(0xFFFF6961)
+                                "92" -> color = Color(0xFF34C759)
+                                "93" -> color = Color(0xFFFFD60A)
+                                "94" -> color = Color(0xFF0A84FF)
+                                "95" -> color = Color(0xFFFF2D95)
+                                "96" -> color = Color(0xFF32ADE6)
+                            }
+                        }
+                        i = j + 1
+                        continue
+                    }
+                    i = src.length
+                    continue
+                } else if (n == ']') {
+                    // OSC：ESC ] ... BEL 或 ESC \
+                    var j = i + 2
+                    while (j < src.length) {
+                        if (src[j] == '\u0007') { j++; break }
+                        if (src[j] == '\u001B' && j + 1 < src.length && src[j + 1] == '\\') { j += 2; break }
+                        j++
+                    }
+                    i = j
+                    continue
+                } else {
+                    // 其他 ESC 序列（2 字符）
+                    i += 2
+                    continue
                 }
-                i = end + 1
-                continue
             }
+            i++
+            continue
         }
-        i = esc + 1
+        if (c == '\r') { i++; continue }   // 回车忽略
+        // 普通字符（按当前颜色）
+        val runStart = i
+        while (i < src.length && src[i] != '\u001B' && src[i] != '\r') i++
+        b.pushStyle(androidx.compose.ui.text.SpanStyle(color = color))
+        b.append(src.substring(runStart, i))
+        b.pop()
     }
     return b.toAnnotatedString()
 }
