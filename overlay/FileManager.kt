@@ -633,6 +633,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         try {
                             val dir = p.substringBeforeLast('/', "/")
                             val file = p.substringAfterLast('/')
+                            // 诊断：输出分支判断
+                            val _dbg = "p=" + p + " lower=" + lower + " isZip=" + lower.endsWith(".zip") + " isSh=" + lower.endsWith(".sh") + "\n"
+                            run { }
                             val cmd = when {
                                 lower.endsWith(".apk") ->
                                     "cp -f " + shq(p) + " /data/local/tmp/xy_install.apk ; " +
@@ -706,6 +709,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "rm -f /data/local/tmp/xy_exec.sh"
                                 }
                             }
+                            withContext(Dispatchers.Main) { termText = termText + "\n[debug] " + _dbg }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
                             pb.redirectErrorStream(true)
                             pb.directory(java.io.File("/data/local/tmp"))
