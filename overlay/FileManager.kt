@@ -661,11 +661,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     // /data 等目录 app 无权限读 → 先用 root 复制到缓存（可读）
                                     if (!src.canRead()) {
                                         try {
-                                            su("cp -f " + shq(p) + " " + shq(dst.absolutePath) + " ; chmod 644 " + shq(dst.absolutePath))
+                                            val cp = ProcessBuilder(suBin(), "-c",
+                                                "cp -f " + shq(p) + " " + shq(dst.absolutePath + ".raw") + " ; chmod 644 " + shq(dst.absolutePath + ".raw"))
+                                            cp.redirectErrorStream(true); cp.start().waitFor()
                                         } catch (e: Throwable) { }
                                     }
                                     try {
-                                        val raw = if (src.canRead()) src.readBytes() else dst.readBytes()
+                                        val rawFile = if (src.canRead()) src else java.io.File(dst.absolutePath + ".raw")
+                                        val raw = rawFile.readBytes()
                                         val dec = java.nio.charset.CharsetDecoder::class.java
                                         fun strict(cs: java.nio.charset.Charset): String {
                                             val d = cs.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
