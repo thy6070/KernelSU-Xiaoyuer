@@ -2569,6 +2569,40 @@ private fun ModeButton(
     var latencyMsg by remember { mutableStateOf<String?>(null) }
     val ctx3 = androidx.compose.ui.platform.LocalContext.current
     val scope2 = rememberCoroutineScope()
+    var execPath by remember { mutableStateOf<String?>(null) }
+    var showPathDialog by remember { mutableStateOf(false) }
+    var showKeyDialog by remember { mutableStateOf(false) }
+    var showUrlDialog by remember { mutableStateOf(false) }
+    var urlInput by remember { mutableStateOf("") }
+    var pathInput by remember { mutableStateOf("") }
+    var keyInput by remember { mutableStateOf("") }
+    suspend fun refreshLatency() {
+        latencyMsg = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    fun measure(p: String): Double {
+                        var best = Double.MAX_VALUE
+                        for (r in 0 until 3) {
+                            val iter = 8000
+                            val t0 = System.nanoTime()
+                            for (i in 0 until iter) {
+                                try {
+                                    android.system.Os.stat(p)
+                                } catch (e: Throwable) {
+                                }
+                            }
+                            val per = (System.nanoTime() - t0).toDouble() / iter
+                            if (per < best) best = per
+                        }
+                        return best
+                    }
+                    val den = (measure("/data/system") + measure("/data/misc")) / 2.0
+                    val mod = measure("/data/adb/modules")
+                    if (mod - den > 500.0) "会拉闸" else "不会拉闸"
+                } catch (t: Throwable) {
+                    null
+                }
+            }
+    }
     LaunchedEffect(title) {
         if (title == "性能模式") {
             val remembered = ctx3.getSharedPreferences("yx_mode", 0).getBoolean("perf", false)
