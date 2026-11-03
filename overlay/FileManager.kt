@@ -1325,10 +1325,11 @@ private fun ProMaxIsland(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Image(
-                painter = painterResource(id = me.weishu.kernelsu.R.mipmap.mod_icon),
+            Icon(
+                imageVector = Icons.Outlined.Layers,
                 contentDescription = null,
-                modifier = Modifier.size(30.dp)
+                tint = Color.White,
+                modifier = Modifier.size(26.dp)
             )
         }
 
@@ -1398,7 +1399,7 @@ private fun ProMaxIsland(
                 Image(
                     painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
                     contentDescription = null,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
                 )
                 if (extractDone) {
                     Text(
