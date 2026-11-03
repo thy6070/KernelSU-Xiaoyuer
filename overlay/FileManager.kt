@@ -4020,7 +4020,12 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "    done",
                     "  fi",
                     "",
-                    "  sleep 1",
+                    "  # 游戏时 0.3 秒循环（更频繁重写，接近 Scene 的毫秒级）",
+                    "  if [ \"\$state\" = \"game\" ]; then",
+                    "    sleep 0.3",
+                    "  else",
+                    "    sleep 1",
+                    "  fi",
                     "done",
                     ""
                                     )
