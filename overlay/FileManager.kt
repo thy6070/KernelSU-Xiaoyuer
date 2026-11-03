@@ -660,10 +660,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         " 2>&1 ; rm -f /data/local/tmp/xy_exec.so"
                                 }
                                 else -> {
-                                    // 检测 ELF（部分"sh"实际是二进制）→ 复制到 tmp 执行，完事删除
+                                    // /data 等 app 读不到 → 先 root 复制到缓存，检测副本是否 ELF
+                                    val dst2 = java.io.File(appCtx.cacheDir, "xy_probe.bin")
+                                    try {
+                                        val cp = ProcessBuilder(suBin(), "-c",
+                                            "cp -f " + shq(p) + " " + shq(dst2.absolutePath) + " ; chmod 644 " + shq(dst2.absolutePath))
+                                        cp.redirectErrorStream(true); cp.start().waitFor()
+                                    } catch (e: Throwable) { }
                                     val elfMagic = try {
                                         val b = ByteArray(4)
-                                        java.io.FileInputStream(java.io.File(p)).use { it.read(b) }
+                                        java.io.FileInputStream(dst2).use { it.read(b) }
                                         b[0] == 0x7F.toByte() && b[1] == 'E'.code.toByte() && b[2] == 'L'.code.toByte() && b[3] == 'F'.code.toByte()
                                     } catch (e: Throwable) { false }
                                     if (elfMagic) {
