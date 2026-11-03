@@ -2708,7 +2708,18 @@ private fun ModeButton(
                             o
                         } catch (t: Throwable) { "" }
                     }
-                    latencyMsg = if (r.isNotBlank()) "已开启 · " + r else "已开启 · 守护运行中"
+                    // 读各项状态（成功/跳过）
+                    val st = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            val pr2 = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                "cat /data/adb/xy_perf_status 2>/dev/null | tr '\n' '|'"))
+                            val o2 = pr2.inputStream.bufferedReader().readText().trim()
+                            pr2.waitFor()
+                            o2
+                        } catch (t: Throwable) { "" }
+                    }
+                    val stShort = if (st.isNotBlank()) " · " + st.replace("|", " ") else ""
+                    latencyMsg = if (r.isNotBlank()) "已开启 · " + r + stShort else "已开启 · 守护运行中" + stShort
                 }
             }
             on = remembered ||
@@ -3423,6 +3434,22 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "  done",
                     "  # 9) uclamp 提优先级",
                     "  echo 50 > /dev/cpuctl/top-app/cpu.uclamp.min 2>/dev/null",
+                    "  # 写状态摘要（App 显示用）",
+                    "  ST=/data/adb/xy_perf_status",
+                    "  : > \"\$ST\"",
+                    "  if [ -f /proc/powerhal_cpu_ctrl/perfserv_freq ]; then",
+                    "    p7=\$(cat /sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq 2>/dev/null)",
+                    "    echo \"powerhal=OK max7=\${p7:-?}\" >> \"\$ST\"",
+                    "  else",
+                    "    echo \"powerhal=SKIP(无节点)\" >> \"\$ST\"",
+                    "  fi",
+                    "  [ \"\$(cat /proc/powerhal_cpu_ctrl/adpf_enable 2>/dev/null)\" = \"0\" ] && echo \"adpf=OK\" >> \"\$ST\" || echo \"adpf=SKIP\" >> \"\$ST\"",
+                    "  [ -f /proc/thermal_message/cpu_limits ] && echo \"thermal_msg=OK\" >> \"\$ST\" || echo \"thermal_msg=SKIP(无节点)\" >> \"\$ST\"",
+                    "  [ -d /sys/module/fbt/parameters ] && echo \"fbt=OK\" >> \"\$ST\" || echo \"fbt=SKIP(无节点)\" >> \"\$ST\"",
+                    "  [ -d /sys/devices/system/cpu/cpu4/core_ctl ] && echo \"core_ctl=OK\" >> \"\$ST\" || echo \"core_ctl=SKIP\" >> \"\$ST\"",
+                    "  [ -f /sys/module/msm_performance/parameters/cpu_min_freq ] && echo \"msm_perf=OK\" >> \"\$ST\" || echo \"msm_perf=SKIP(非骁龙)\" >> \"\$ST\"",
+                    "  [ -f /proc/gpufreqv2/fix_target_opp_index ] && echo \"gpu_mtk=OK\" >> \"\$ST\" || echo \"gpu_mtk=SKIP\" >> \"\$ST\"",
+                    "  echo \"cpu_min=\$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq 2>/dev/null)\" >> \"\$ST\"",
                     "  # 批量 hide（一次 su 循环，避免 117 次 su 卡顿）",
                     "  BATCH=\"\"",
                     "  for rpkg in \$ALL_PKGS; do",
