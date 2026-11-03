@@ -1328,8 +1328,8 @@ private fun ProMaxIsland(
             Icon(
                 imageVector = Icons.Outlined.Layers,
                 contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(30.dp)
+                tint = Color.Black,
+                modifier = Modifier.size(22.dp)
             )
         }
 
@@ -1399,7 +1399,7 @@ private fun ProMaxIsland(
                 Image(
                     painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
                     contentDescription = null,
-                    modifier = Modifier.size(26.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                    modifier = Modifier.size(26.dp)
                 )
                 if (extractDone) {
                     Text(
