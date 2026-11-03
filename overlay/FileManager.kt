@@ -660,21 +660,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         " 2>&1 ; rm -f /data/local/tmp/xy_exec.so"
                                 }
                                 else -> {
-                                    // 检测是否 ELF（部分"sh"实际是二进制）→ 直接执行
-                                    val isElf = try {
-                                        val h = java.io.File(p).inputStream().use { it.read(ByteArray(4)); it }
-                                        false
-                                    } catch (e: Throwable) { false }
+                                    // 检测 ELF（部分"sh"实际是二进制）→ 复制到 tmp 执行，完事删除
                                     val elfMagic = try {
                                         val b = ByteArray(4)
-                                        val f = java.io.File(p)
-                                        java.io.FileInputStream(f).use { it.read(b) }
+                                        java.io.FileInputStream(java.io.File(p)).use { it.read(b) }
                                         b[0] == 0x7F.toByte() && b[1] == 'E'.code.toByte() && b[2] == 'L'.code.toByte() && b[3] == 'F'.code.toByte()
                                     } catch (e: Throwable) { false }
                                     if (elfMagic) {
-                                        "chmod 755 " + shq(p) + " 2>/dev/null ; export TERM=xterm-256color ; " + shq(p) + " 2>&1"
+                                        "cp -f " + shq(p) + " /data/local/tmp/xy_exec.so 2>/dev/null ; " +
+                                            "chmod 755 /data/local/tmp/xy_exec.so 2>/dev/null ; " +
+                                            "export TERM=xterm-256color ; /data/local/tmp/xy_exec.so 2>&1 ; " +
+                                            "rm -f /data/local/tmp/xy_exec.so"
                                     } else {
-                                        "export TERM=xterm-256color ; sh " + shq(p) + " 2>&1"
+                                        "cp -f " + shq(p) + " /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
+                                            "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
+                                            "export TERM=xterm-256color ; sh /data/local/tmp/xy_exec.sh 2>&1 ; " +
+                                            "rm -f /data/local/tmp/xy_exec.sh"
                                     }
                                 }
                             }
