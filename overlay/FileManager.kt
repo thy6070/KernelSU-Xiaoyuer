@@ -646,13 +646,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     // 用 shell 判断（root 能查 /data/adb）；app 的 canExecute 会误判
                                     val libKsud = appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
                                     val ksudZip = "/data/adb/ksud"
-                                    "cp -f " + shq(p) + " /data/local/tmp/xy_mod.zip 2>/dev/null ; " +
-                                        "chmod 644 /data/local/tmp/xy_mod.zip ; " +
-                                        "KSUD=\"" + ksudZip + "\" ; [ -x \"\$KSUD\" ] || KSUD=\"" + libKsud + "\" ; " +
-                                        "echo \"[info] ksud=\$KSUD\" ; " +
-                                        "\"\$KSUD\" module install /data/local/tmp/xy_mod.zip 2>&1 || " +
-                                        "echo \"[error] ksud failed rc=$?\" ; " +
-                                        "ls -l /data/local/tmp/xy_mod.zip"
+                                    // KSU 原版方式：直接对原 zip 执行（不复制）
+                                    "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                                        "\"/data/adb/ksud\" module install " + shq(p) + " 2>&1 || " +
+                                        "echo \"[error] rc=$?\""
                                 }
                                 lower.endsWith(".so") -> {
                                     val key = soKey.trim()
@@ -662,59 +659,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         (if (key.isEmpty()) "/data/local/tmp/xy_exec.so" else "/data/local/tmp/xy_exec.so -k \"$key\"") +
                                         " 2>&1 ; rm -f /data/local/tmp/xy_exec.so"
                                 }
-                                else -> run {
-                                    // 自动转码（GBK → UTF-8），否则乱码/语法错
-                                    val src = java.io.File(p)
-                                    val dst = java.io.File(appCtx.cacheDir, "xy_src.sh")
-                                    // /data 等目录 app 无权限读 → 先用 root 复制到缓存（可读）
-                                    if (!src.canRead()) {
-                                        try {
-                                            val cp = ProcessBuilder(suBin(), "-c",
-                                                "cp -f " + shq(p) + " " + shq(dst.absolutePath + ".raw") + " ; chmod 644 " + shq(dst.absolutePath + ".raw"))
-                                            cp.redirectErrorStream(true); cp.start().waitFor()
-                                        } catch (e: Throwable) { }
-                                    }
-                                    try {
-                                        val rawFile = if (src.canRead()) src else java.io.File(dst.absolutePath + ".raw")
-                                        val raw = rawFile.readBytes()
-                                        val dec = java.nio.charset.CharsetDecoder::class.java
-                                        fun strict(cs: java.nio.charset.Charset): String {
-                                            val d = cs.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
-                                                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
-                                            return d.decode(java.nio.ByteBuffer.wrap(raw)).toString()
-                                        }
-                                        val txt: String = when {
-                                            // BOM 检测
-                                            raw.size >= 3 && raw[0] == 0xEF.toByte() && raw[1] == 0xBB.toByte() && raw[2] == 0xBF.toByte() ->
-                                                strict(Charsets.UTF_8).removePrefix("\uFEFF")
-                                            raw.size >= 2 && raw[0] == 0xFF.toByte() && raw[1] == 0xFE.toByte() ->
-                                                strict(java.nio.charset.Charset.forName("UTF-16LE")).removePrefix("\uFEFF")
-                                            raw.size >= 2 && raw[0] == 0xFE.toByte() && raw[1] == 0xFF.toByte() ->
-                                                strict(java.nio.charset.Charset.forName("UTF-16BE")).removePrefix("\uFEFF")
-                                            else -> try { strict(Charsets.UTF_8) }
-                                            catch (e1: Throwable) {
-                                                try { strict(java.nio.charset.Charset.forName("GB18030")) }
-                                                catch (e2: Throwable) {
-                                                    try { strict(java.nio.charset.Charset.forName("GBK")) }
-                                                    catch (e3: Throwable) { strict(java.nio.charset.Charset.forName("Big5")) }
-                                                }
-                                            }
-                                        }
-                                        // 统一 LF 换行（Windows CRLF 会导致 sh 报错）
-                                        dst.writeText(txt.replace("\r\n", "\n").replace("\r", "\n"), Charsets.UTF_8)
-                                    } catch (e: Throwable) {
-                                        // 转码失败：删掉 dst，直接执行原文件（和 MT 一样，GBK 不影响 sh 语法）
-                                        dst.delete()
-                                    }
-                                    "SRC=\"" + (if (dst.exists()) dst.absolutePath else p) + "\" ; " +
-                                    "cp -f \"\$SRC\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
-                                    "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
-                                    "export TERM=xterm-256color ; " +
-                                    "BB=/data/adb/ksu/bin/busybox ; " +
-                                    "if [ -x \"\$BB\" ]; then \"\$BB\" script -q -c 'sh /data/local/tmp/xy_exec.sh' /dev/null 2>&1 ; " +
-                                    "else sh /data/local/tmp/xy_exec.sh 2>&1 ; fi ; " +
-                                    "rm -f /data/local/tmp/xy_exec.sh"
-                                }
+                                else -> "export TERM=xterm-256color ; sh " + shq(p) + " 2>&1"
                             }
                             withContext(Dispatchers.Main) { termText = termText + "\n[debug] " + _dbg }
                             val pb = ProcessBuilder(suBin(), "-c", cmd)
