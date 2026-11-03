@@ -1325,10 +1325,11 @@ private fun ProMaxIsland(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Image(
-                painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
+            Icon(
+                imageVector = Icons.Outlined.Layers,
                 contentDescription = null,
-                modifier = Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                tint = Color.White,
+                modifier = Modifier.size(30.dp)
             )
         }
 
