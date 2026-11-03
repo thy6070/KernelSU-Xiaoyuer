@@ -1328,7 +1328,7 @@ private fun ProMaxIsland(
             Image(
                 painter = painterResource(id = me.weishu.kernelsu.R.mipmap.mod_icon),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(30.dp)
             )
         }
 
