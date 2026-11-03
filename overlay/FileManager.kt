@@ -2888,6 +2888,30 @@ private fun ModeButton(
                     val path = execPath
                     if (path.isNullOrBlank()) {
                         latencyMsg = "暂无设置"
+                    } else if (path.endsWith(".zip")) {
+                        // zip = 模块 → ksud 安装（不是 sh 执行）
+                        val qz = "'" + path.replace("'", "'\''") + "'"
+                        val cmd = "ZID=$(unzip -p " + qz + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
+                            "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
+                            "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                            "\"/data/adb/ksud\" module install " + qz + " 2>&1 ; " +
+                            "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then echo \"[OK] \$ZID installed\" ; else echo \"[FAIL]\" ; fi"
+                        latencyMsg = "安装模块…"
+                        scope2.launch {
+                            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd))
+                                    val o = pr.inputStream.bufferedReader().readText()
+                                    pr.waitFor()
+                                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        termText = o
+                                        latencyMsg = "已执行"
+                                    }
+                                } catch (t: Throwable) {
+                                    withContext(kotlinx.coroutines.Dispatchers.Main) { latencyMsg = "安装失败: " + (t.message ?: "") }
+                                }
+                            }
+                        }
                     } else if (path.endsWith(".so")) {
                         keyInput = ""
                         showKeyDialog = true
@@ -3406,13 +3430,11 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "      ALLMIN=\"\$ALLMIN \$hmin\"",
                     "      ALLMAX=\"\$ALLMAX \$hmax\"",
                     "    done",
-                    "    if [ \"\$CURCNT\" -gt 15 ] 2>/dev/null; then",
-                    "      # 新格式（每核）：按 CPU 数循环 min max",
+                    "    if [ \"\$CURCNT\" -gt 10 ] 2>/dev/null; then",
+                    "      # 新格式（每核）：按 nproc 写（每核 min max）",
                     "      PH=\"\"",
                     "      for c in /sys/devices/system/cpu/cpu[0-9]*/; do",
                     "        [ -d \"\$c\" ] || continue",
-                    "        nm=\$(basename \"\$c\")",
-                    "        idx=\${nm#cpu}",
                     "        f=\"\$c/cpufreq\"",
                     "        hmin=\$(cat \"\$f/cpuinfo_min_freq\" 2>/dev/null)",
                     "        hmax=\$(cat \"\$f/cpuinfo_max_freq\" 2>/dev/null)",
