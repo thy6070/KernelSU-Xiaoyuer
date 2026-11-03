@@ -550,16 +550,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     termText = ""
                     runMessage = null
                     showTerminal = true
-                    // 优先用系统 ksud（/data/adb/ksud，一定可执行）；APK 内 libksud.so 作后备
-                    val ksud = "/data/adb/ksud"
+                    // 和 KSU 管理器一致：读 id → 清理残留 → ksud 原版安装 → 验证
                     val q = "'" + p.replace("'", "'\''") + "'"
-                    // 用真实版本号（与 KSU 管理器一致）；假版本会被模块拒绝
-                    val cmd = "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
-                        "KSU_V=$(/data/adb/ksud --version 2>/dev/null | head -1 | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1) ; " +
-                        "export KSU_VER=\${KSU_V:-3.3.1} ; " +
-                        "export KSU_VER_CODE=32713 ; export KSU_KERNEL_VER_CODE=32713 ; " +
-                        "cp -f " + q + " /data/local/tmp/xy_mod.zip 2>/dev/null ; " +
-                        "'" + ksud + "' module install /data/local/tmp/xy_mod.zip 2>&1"
+                    val cmd = "ZID=$(unzip -p " + q + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
+                        "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
+                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                        "\"/data/adb/ksud\" module install " + q + " 2>&1 ; " +
+                        "echo '--- verify:' ; " +
+                        "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then " +
+                        "echo \"[OK] \$ZID installed\" ; else echo \"[FAIL] \$ZID incomplete\" ; fi"
                     try {
                         val bb = listOf(
                             "/data/adb/ksu/bin/busybox",
