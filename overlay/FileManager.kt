@@ -175,7 +175,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         if (appCtx.getSharedPreferences("yx_mode", 0).getBoolean("perf", false)) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
-                    Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                    Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                         "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
                         "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
                         "setsid sh /data/adb/xy_guard.sh >/dev/null 2>&1 &")).waitFor()
@@ -243,7 +243,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
                         runCatching {
                             val pr = Runtime.getRuntime().exec(
-                                arrayOf(suBin(), "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
+                                arrayOf(suBin(), "--mount-master", "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
                             )
                             val o = pr.inputStream.bufferedReader().readText()
                             pr.waitFor()
@@ -284,7 +284,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
                         runCatching {
                             val pr = Runtime.getRuntime().exec(
-                                arrayOf(suBin(), "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
+                                arrayOf(suBin(), "--mount-master", "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
                             )
                             val o = pr.inputStream.bufferedReader().readText()
                             pr.waitFor()
@@ -334,7 +334,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
                             "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
                             "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
-                        ProcessBuilder(suBin(), "-c", cmd).redirectErrorStream(true).start().waitFor()
+                        ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
                     } catch (t: Throwable) {
                     }
                 }
@@ -454,7 +454,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             var ok = true
                             if (cmd.isNotEmpty()) {
-                                val proc = ProcessBuilder(suBin(), "-c", cmd)
+                                val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
                                     .redirectErrorStream(true).start()
                                 val txt = proc.inputStream.bufferedReader().readText()
                                 proc.waitFor()
@@ -472,7 +472,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 }
                                 runCatching {
                                     ProcessBuilder(
-                                        suBin(), "-c",
+                                        suBin(), "--mount-master", "-c",
                                         "cp " + q(srcPath) + " " + q(dest.absolutePath) +
                                             " ; chmod 644 " + q(dest.absolutePath)
                                     ).redirectErrorStream(true).start().waitFor()
@@ -569,7 +569,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         ).firstOrNull { java.io.File(it).isFile }
                         // 用数组形式（不经过 shell 引号拼接，避免嵌套单引号破坏）
                         withContext(Dispatchers.IO) {
-                            val pb = ProcessBuilder(suBin(), "-c", cmd + " 2>&1")
+                            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", cmd + " 2>&1")
                             pb.redirectErrorStream(true)
                             val proc = pb.start()
                             activeProc = proc
@@ -664,7 +664,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     // /data 等 app 读不到 → 先 root 复制到缓存，检测副本是否 ELF
                                     val dst2 = java.io.File(appCtx.cacheDir, "xy_probe.bin")
                                     try {
-                                        val cp = ProcessBuilder(suBin(), "-c",
+                                        val cp = ProcessBuilder(suBin(), "--mount-master", "-c",
                                             "cp -f " + shq(p) + " " + shq(dst2.absolutePath) + " ; chmod 644 " + shq(dst2.absolutePath))
                                         cp.redirectErrorStream(true); cp.start().waitFor()
                                     } catch (e: Throwable) { }
@@ -687,7 +687,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 }
                             }
                             withContext(Dispatchers.Main) { termText = termText + "\n[debug] " + _dbg }
-                            val pb = ProcessBuilder(suBin(), "-c", cmd)
+                            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
                             pb.redirectErrorStream(true)
                             pb.directory(java.io.File("/data/local/tmp"))
                             pb.environment()["PATH"] = "/system/bin:/system/xbin:/sbin:/vendor/bin"
@@ -761,7 +761,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "cd " + q3(java.io.File(path).parent ?: "/") + " 2>/dev/null; " +
                                         "chmod 755 " + q3(path) + " 2>/dev/null; " +
                                         "sh " + q3(path) + " 2>&1"
-                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd))
+                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
                                     activeProc = pr
                                     pr.inputStream.bufferedReader().useLines { ls ->
                                         ls.forEach { line ->
@@ -1097,11 +1097,11 @@ private fun ProMaxIsland(
             runCatching {
                 val prefs = bootCtx.getSharedPreferences("yx_mode", 0)
                 if (prefs.getBoolean("perf", false)) {
-                    Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                    Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                         "sh /data/adb/service.d/xy_perf.sh >/dev/null 2>&1")).waitFor()
                 }
                 if (prefs.getBoolean("open", false)) {
-                    Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                    Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                         "sh /data/adb/service.d/xy_open_access.sh >/dev/null 2>&1")).waitFor()
                 }
             }
@@ -1114,7 +1114,7 @@ private fun ProMaxIsland(
         if (soPanel) {
             val k = withContext(Dispatchers.IO) {
                 try {
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                         "sed -n '2p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
                     val o = pr.inputStream.bufferedReader().readText().trim()
                     pr.waitFor()
@@ -1486,7 +1486,7 @@ private fun ProMaxIsland(
                                     softReboot = navCtx.getSharedPreferences("settings", 0).getBoolean("soft_reboot", false)
                                     try {
                                         fun q(c: String): String {
-                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
                                             val o = pr.inputStream.bufferedReader().readText()
                                             pr.waitFor()
                                             return o
@@ -1501,7 +1501,7 @@ private fun ProMaxIsland(
                                 navScope.launch {
                                     withContext(Dispatchers.IO) {
                                         try {
-                                            Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                                 "/data/adb/ksud feature set $name ${if (v) 1 else 0}; /data/adb/ksud feature save")).waitFor()
                                         } catch (t: Throwable) {
                                         }
@@ -1671,7 +1671,7 @@ private fun ProMaxIsland(
                                                     withContext(Dispatchers.IO) {
                                                         try {
                                                             // 与官方一致：走 ksud 正规卸载流程
-                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                                                 "/data/adb/ksud module uninstall \"${mod.id}\""))
                                                                 .waitFor()
                                                         } catch (t: Throwable) {
@@ -1690,7 +1690,7 @@ private fun ProMaxIsland(
                                                 navScope.launch {
                                                     val hasWeb = withContext(Dispatchers.IO) {
                                                         try {
-                                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                                                 "test -d \"/data/adb/modules/${mod.id}/webroot\" && echo yes"))
                                                             val o = pr.inputStream.bufferedReader().readText()
                                                             pr.waitFor()
@@ -1717,7 +1717,7 @@ private fun ProMaxIsland(
                                                     } else {
                                                         withContext(Dispatchers.IO) {
                                                             try {
-                                                                Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                                Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                                                     "sh \"/data/adb/modules/${mod.id}/action.sh\" 2>/dev/null")).waitFor()
                                                             } catch (t: Throwable) {
                                                             }
@@ -2327,10 +2327,10 @@ private fun ProMaxIsland(
                                         val cmd = "F='/storage/emulated/0/小鱼儿/小鱼儿密钥' ; mkdir -p '/storage/emulated/0/小鱼儿' ; " +
                                             "[ -f \"\$F\" ] || : > \"\$F\" ; " +
                                             "awk -v n=2 -v v=" + sq(manual) + " 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}' \"\$F\" > /data/local/tmp/xy_kf2 && cat /data/local/tmp/xy_kf2 > \"\$F\" ; rm -f /data/local/tmp/xy_kf2 ; chmod 600 \"\$F\""
-                                        Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd)).waitFor()
+                                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd)).waitFor()
                                         manual
                                     } else {
-                                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                             "sed -n '2p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
                                         val o = pr.inputStream.bufferedReader().readText().trim()
                                         pr.waitFor()
@@ -2694,7 +2694,7 @@ private fun ModeButton(
                 scope2.launch {
                     val r = withContext(kotlinx.coroutines.Dispatchers.IO) {
                         try {
-                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                 "sh /data/adb/service.d/xy_perf.sh on >/dev/null 2>&1; " +
                                 "kill \$(cat /data/local/tmp/xy_guard.pid 2>/dev/null) 2>/dev/null; sleep 0.3; " +
                                 "setsid sh /data/adb/xy_guard.sh >/dev/null 2>&1 & sleep 3; " +
@@ -2707,7 +2707,7 @@ private fun ModeButton(
                     // 读各项状态（成功/跳过）
                     val st = withContext(kotlinx.coroutines.Dispatchers.IO) {
                         try {
-                            val pr2 = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                            val pr2 = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                 "cat /data/adb/xy_perf_status 2>/dev/null | tr '\n' '|'"))
                             val o2 = pr2.inputStream.bufferedReader().readText().trim()
                             pr2.waitFor()
@@ -2722,7 +2722,7 @@ private fun ModeButton(
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val pr = Runtime.getRuntime().exec(
-                        arrayOf(suBin(), "-c", "[ -f /data/adb/service.d/xy_perf.sh ] && echo y || echo n")
+                        arrayOf(suBin(), "--mount-master", "-c", "[ -f /data/adb/service.d/xy_perf.sh ] && echo y || echo n")
                     )
                     val o = pr.inputStream.bufferedReader().readText()
                     pr.waitFor()
@@ -2736,7 +2736,7 @@ private fun ModeButton(
             execPath = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val lineNo = when (slot) { "path" -> 3; "path2" -> 4; "path3" -> 5; else -> 3 }
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                         "sed -n '" + lineNo + "p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
                     val o = pr.inputStream.bufferedReader().readText().trim()
                     pr.waitFor()
@@ -2751,7 +2751,7 @@ private fun ModeButton(
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     fun q(c: String): String {
-                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
                         val o = pr.inputStream.bufferedReader().readText()
                         pr.waitFor()
                         return o
@@ -2770,7 +2770,7 @@ private fun ModeButton(
                 scope2.launch {
                     withContext(kotlinx.coroutines.Dispatchers.IO) {
                         runCatching {
-                            Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                 "sh /data/adb/service.d/xy_open_access.sh >/dev/null 2>&1")).waitFor()
                         }
                     }
@@ -2780,7 +2780,7 @@ private fun ModeButton(
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val pr = Runtime.getRuntime().exec(
-                        arrayOf(suBin(), "-c", "[ -f /data/adb/service.d/xy_open_access.sh ] && echo y || echo n")
+                        arrayOf(suBin(), "--mount-master", "-c", "[ -f /data/adb/service.d/xy_open_access.sh ] && echo y || echo n")
                     )
                     val o = pr.inputStream.bufferedReader().readText()
                     pr.waitFor()
@@ -2807,7 +2807,7 @@ private fun ModeButton(
                         val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
                             try {
                                 fun sh(c: String): String {
-                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
                                     val o = pr.inputStream.bufferedReader().readText()
                                     pr.waitFor()
                                     return o
@@ -2896,7 +2896,7 @@ private fun ModeButton(
                         scope2.launch {
                             withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
-                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd))
+                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
                                     val o = pr.inputStream.bufferedReader().readText()
                                     pr.waitFor()
                                     withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -2916,7 +2916,7 @@ private fun ModeButton(
                             val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
                                     fun su2(c: String): String {
-                                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
                                         val o = pr.inputStream.bufferedReader().readText()
                                         pr.waitFor()
                                         return o
@@ -2941,7 +2941,7 @@ private fun ModeButton(
                         val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
                             try {
                                 fun su(c: String): String {
-                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
                                     val out = p.inputStream.bufferedReader().readText()
                                     p.waitFor()
                                     return out
@@ -3009,7 +3009,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                         val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
                             try {
                                 fun su(c: String): String {
-                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
                                     val out = p.inputStream.bufferedReader().readText()
                                     p.waitFor()
                                     return out
@@ -4101,7 +4101,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "done",
                     ""
                                     )
-                                    su("cat > /data/adb/xy_game.sh <<'XYEOF'\n" + gameLines.joinToString("\n") + "\nXYEOF\nchmod 755 /data/adb/xy_game.sh")
+                                    su("rm -f /data/adb/xy_game.off; cat > /data/adb/xy_game.sh <<'XYEOF'\n" + gameLines.joinToString("\n") + "\nXYEOF\nchmod 755 /data/adb/xy_game.sh")
                                     val checkLines = listOf(
                     "#!/system/bin/sh",
                     "OK=0; BAD=0",
@@ -4173,7 +4173,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                         withContext(kotlinx.coroutines.Dispatchers.IO) {
                             try {
                                 fun su(c: String): String {
-                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", c))
+                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
                                     val out = p.inputStream.bufferedReader().readText()
                                     p.waitFor()
                                     return out
@@ -4347,7 +4347,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                         zip.outputStream().use { out -> input.copyTo(out) }
                                     }
                                     val pr = ProcessBuilder(
-                                        suBin(), "-c",
+                                        suBin(), "--mount-master", "-c",
                                         "cd '/storage/emulated/0/小鱼儿' && " +
                                             "(unzip -o -q rtdrv.zip 2>/dev/null || busybox unzip -o rtdrv.zip 2>/dev/null || tar -xf rtdrv.zip) ; " +
                                             "chmod 644 /storage/emulated/0/小鱼儿/*.sh 2>/dev/null ; ls /storage/emulated/0/小鱼儿/*.sh 2>/dev/null | wc -l"
@@ -4405,7 +4405,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                 val cmd = "F='/storage/emulated/0/小鱼儿/小鱼儿密钥' ; mkdir -p '/storage/emulated/0/小鱼儿' ; " +
                                     "[ -f \"\$F\" ] || : > \"\$F\" ; " +
                                     awk + " \"\$F\" > /data/local/tmp/xy_kf && cat /data/local/tmp/xy_kf > \"\$F\" ; rm -f /data/local/tmp/xy_kf ; chmod 600 \"\$F\""
-                                Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd)).waitFor()
+                                Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd)).waitFor()
                             } catch (t: Throwable) {
                             }
                         }
@@ -4447,7 +4447,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                         scope2.launch {
                             val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
-                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                         "export HOME=/data/local/tmp; export TMPDIR=/data/local/tmp; " +
                                             "cd '" + java.io.File(p2).parent + "' 2>/dev/null; " +
                                             "chmod 755 '" + p2.replace("'", "'\\''") + "' 2>/dev/null; " +
@@ -4696,7 +4696,7 @@ private fun loadApkIcon(ctx: Context, path: String): ImageBitmap? {
 private fun copyOutForIcon(src: String, dest: String) {
     try {
         val p = Runtime.getRuntime().exec(
-            arrayOf(suBin(), "-c", "cp " + shq(src) + " " + shq(dest) + " && chmod 644 " + shq(dest))
+            arrayOf(suBin(), "--mount-master", "-c", "cp " + shq(src) + " " + shq(dest) + " && chmod 644 " + shq(dest))
         )
         p.waitFor()
     } catch (t: Throwable) {
@@ -4770,7 +4770,7 @@ internal fun suBin(): String {
 /** Runs a root command with a bounded wait so a hidden grant dialog cannot stall the UI. */
 internal fun suNow(cmd: String, timeoutMs: Long = 20000L): String {
     return try {
-        val pr = ProcessBuilder(suBin(), "-c", cmd).redirectErrorStream(true).start()
+        val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
         val done = java.util.concurrent.Executors.newSingleThreadExecutor().submit<Boolean> {
             pr.waitFor(); true
         }.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
