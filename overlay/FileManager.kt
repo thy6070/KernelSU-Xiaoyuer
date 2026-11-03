@@ -551,10 +551,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     runMessage = null
                     showTerminal = true
                     // 优先用系统 ksud（/data/adb/ksud，一定可执行）；APK 内 libksud.so 作后备
-                    val ksud = if (java.io.File("/data/adb/ksud").canExecute())
-                        "/data/adb/ksud"
-                    else
-                        appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
+                    val ksud = "/data/adb/ksud"
                     val q = "'" + p.replace("'", "'\''") + "'"
                     val cmd = "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
                         "export KSU_VER=1.0.0 ; export KSU_VER_CODE=12100 ; export KSU_KERNEL_VER_CODE=12100 ; " +
@@ -643,12 +640,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "pm install -r /data/local/tmp/xy_install.apk"
                                 lower.endsWith(".zip") -> {
                                     // 模块 zip：走官方 ksud（/data/adb/ksud 优先）
-                                    val ksudZip = if (java.io.File("/data/adb/ksud").canExecute()) "/data/adb/ksud"
-                                        else appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
+                                    // 用 shell 判断（root 能查 /data/adb）；app 的 canExecute 会误判
+                                    val libKsud = appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
+                                    val ksudZip = "/data/adb/ksud"
                                     "cp -f " + shq(p) + " /data/local/tmp/xy_mod.zip 2>/dev/null ; " +
                                         "chmod 644 /data/local/tmp/xy_mod.zip ; " +
-                                        "echo \"[info] ksud=$ksudZip\" ; " +
-                                        "\"" + ksudZip + "\" module install /data/local/tmp/xy_mod.zip 2>&1 || " +
+                                        "KSUD=\"" + ksudZip + "\" ; [ -x \"\$KSUD\" ] || KSUD=\"" + libKsud + "\" ; " +
+                                        "echo \"[info] ksud=\$KSUD\" ; " +
+                                        "\"\$KSUD\" module install /data/local/tmp/xy_mod.zip 2>&1 || " +
                                         "echo \"[error] ksud failed rc=$?\" ; " +
                                         "ls -l /data/local/tmp/xy_mod.zip"
                                 }
