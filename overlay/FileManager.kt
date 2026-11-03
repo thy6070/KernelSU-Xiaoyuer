@@ -701,14 +701,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         // 统一 LF 换行（Windows CRLF 会导致 sh 报错）
                                         dst.writeText(txt.replace("\r\n", "\n").replace("\r", "\n"), Charsets.UTF_8)
                                     } catch (e: Throwable) {
-                                        // 兜底：强制 UTF-8（替换无效字节，至少不乱码）
-                                        try {
-                                            val rf = java.io.File(dst.absolutePath + ".raw")
-                                            val raw2 = if (rf.exists()) rf.readBytes() else java.io.File(p).readBytes()
-                                            dst.writeText(String(raw2, Charsets.UTF_8), Charsets.UTF_8)
-                                        } catch (e2: Throwable) { }
+                                        // 转码失败：删掉 dst，直接执行原文件（和 MT 一样，GBK 不影响 sh 语法）
+                                        dst.delete()
                                     }
-                                    "cp -f \"" + dst.absolutePath + "\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
+                                    "SRC=\"" + (if (dst.exists()) dst.absolutePath else p) + "\" ; " +
+                                    "cp -f \"\$SRC\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "export TERM=xterm-256color ; " +
                                     "BB=/data/adb/ksu/bin/busybox ; " +
