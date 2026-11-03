@@ -556,7 +556,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 用真实版本号（与 KSU 管理器一致）；假版本会被模块拒绝
                     val cmd = "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
                         "KSU_V=$(/data/adb/ksud --version 2>/dev/null | head -1 | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1) ; " +
-                        "export KSU_VER=${KSU_V:-3.3.1} ; " +
+                        "export KSU_VER=\${KSU_V:-3.3.1} ; " +
                         "export KSU_VER_CODE=32713 ; export KSU_KERNEL_VER_CODE=32713 ; " +
                         "cp -f " + q + " /data/local/tmp/xy_mod.zip 2>/dev/null ; " +
                         "'" + ksud + "' module install /data/local/tmp/xy_mod.zip 2>&1"
