@@ -146,7 +146,7 @@ jobs:
           cd src/manager
           chmod +x gradlew
           set -o pipefail
-          ./gradlew :app:assembleRelease -x lint 2>&1 | tail -120
+          ./gradlew clean :app:assembleRelease -x lint 2>&1 | tail -120
 
       - name: Download ksud
         uses: actions/download-artifact@v4
