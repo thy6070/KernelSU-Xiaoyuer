@@ -647,7 +647,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         else appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
                                     "cp -f " + shq(p) + " /data/local/tmp/xy_mod.zip 2>/dev/null ; " +
                                         "chmod 644 /data/local/tmp/xy_mod.zip ; " +
-                                        "'" + ksudZip + "' module install /data/local/tmp/xy_mod.zip 2>&1"
+                                        "echo \"[info] ksud=$ksudZip\" ; " +
+                                        "\"" + ksudZip + "\" module install /data/local/tmp/xy_mod.zip 2>&1 || " +
+                                        "echo \"[error] ksud failed rc=$?\" ; " +
+                                        "ls -l /data/local/tmp/xy_mod.zip"
                                 }
                                 lower.endsWith(".so") -> {
                                     val key = soKey.trim()
@@ -698,7 +701,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         // 统一 LF 换行（Windows CRLF 会导致 sh 报错）
                                         dst.writeText(txt.replace("\r\n", "\n").replace("\r", "\n"), Charsets.UTF_8)
                                     } catch (e: Throwable) {
-                                        dst.writeText(src.readText(), Charsets.UTF_8)
+                                        // 兜底：强制 UTF-8（替换无效字节，至少不乱码）
+                                        try {
+                                            val rf = java.io.File(dst.absolutePath + ".raw")
+                                            val raw2 = if (rf.exists()) rf.readBytes() else java.io.File(p).readBytes()
+                                            dst.writeText(String(raw2, Charsets.UTF_8), Charsets.UTF_8)
+                                        } catch (e2: Throwable) { }
                                     }
                                     "cp -f \"" + dst.absolutePath + "\" /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
                                     "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
