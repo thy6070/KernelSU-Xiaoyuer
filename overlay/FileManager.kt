@@ -2902,8 +2902,7 @@ private fun ModeButton(
                                     val o = pr.inputStream.bufferedReader().readText()
                                     pr.waitFor()
                                     withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                        termText = o
-                                        latencyMsg = "已执行"
+                                        latencyMsg = o.take(200).replace("\n", " ")
                                     }
                                 } catch (t: Throwable) {
                                     withContext(kotlinx.coroutines.Dispatchers.Main) { latencyMsg = "安装失败: " + (t.message ?: "") }
