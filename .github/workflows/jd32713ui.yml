@@ -113,7 +113,7 @@ jobs:
           cp old/manager/app/src/main/res/xml/file_paths.xml src/manager/app/src/main/res/xml/
           for d in hdpi mdpi xhdpi xxhdpi xxxhdpi; do
             mkdir -p src/manager/app/src/main/res/mipmap-$d
-            cp old/manager/app/src/main/res/mipmap-$d/ic_modules_foreground.png src/manager/app/src/main/res/mipmap-$d/
+            cp old/manager/app/src/main/res/mipmap-$d/ic_modules_foreground.jpg src/manager/app/src/main/res/mipmap-$d/
           done
           mkdir -p src/manager/app/src/main/res/xml src/manager/app/src/main/res/drawable-nodpi
           cp old/kernel/feature/selinux_hide.c src/kernel/feature/
@@ -124,7 +124,7 @@ jobs:
           cp manager/app/build.gradle.kts src/manager/app/build.gradle.kts
           cp manager/app/src/main/AndroidManifest.xml src/manager/app/src/main/AndroidManifest.xml
           cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
-          cp manager/app/src/main/res/drawable-nodpi/ic_zysu.png src/manager/app/src/main/res/drawable-nodpi/ic_zysu.png
+          cp manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg src/manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg
           mkdir -p src/manager/app/src/main/assets
           cp -r manager/app/src/main/assets/. src/manager/app/src/main/assets/ 2>/dev/null || true
 
