@@ -567,11 +567,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             "/system/xbin/busybox",
                             "/data/adb/modules/busybox-ndk/system/bin/busybox"
                         ).firstOrNull { java.io.File(it).isFile }
-                        val qq = { s: String -> "'" + s.replace("'", "'\''") + "'" }
-                        // 照原版：直接执行（不用 busybox script）；输出仍逐行喂给灵动岛终端
-                        val wrapped = cmd + " 2>&1"
+                        // 用数组形式（不经过 shell 引号拼接，避免嵌套单引号破坏）
                         withContext(Dispatchers.IO) {
-                            val pb = ProcessBuilder("/system/bin/sh", "-c", "su -c " + qq(wrapped))
+                            val pb = ProcessBuilder(suBin(), "-c", cmd + " 2>&1")
                             pb.redirectErrorStream(true)
                             val proc = pb.start()
                             activeProc = proc
