@@ -113,7 +113,7 @@ jobs:
           cp old/manager/app/src/main/res/xml/file_paths.xml src/manager/app/src/main/res/xml/
           for d in hdpi mdpi xhdpi xxhdpi xxxhdpi; do
             mkdir -p src/manager/app/src/main/res/mipmap-$d
-            cp old/manager/app/src/main/res/mipmap-$d/ic_modules_foreground.jpg src/manager/app/src/main/res/mipmap-$d/
+            cp manager/app/src/main/res/mipmap-$d/ic_modules_foreground.jpg src/manager/app/src/main/res/mipmap-$d/ 2>/dev/null || cp old/manager/app/src/main/res/mipmap-$d/ic_modules_foreground.png src/manager/app/src/main/res/mipmap-$d/ 2>/dev/null || true
           done
           mkdir -p src/manager/app/src/main/res/xml src/manager/app/src/main/res/drawable-nodpi
           cp old/kernel/feature/selinux_hide.c src/kernel/feature/
