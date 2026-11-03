@@ -646,10 +646,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     // 用 shell 判断（root 能查 /data/adb）；app 的 canExecute 会误判
                                     val libKsud = appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
                                     val ksudZip = "/data/adb/ksud"
-                                    // KSU 原版方式：直接对原 zip 执行（不复制）
-                                    "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
-                                        "\"/data/adb/ksud\" module install " + shq(p) + " 2>&1 || " +
-                                        "echo \"[error] rc=$?\""
+                                    // 1) 从 zip 读模块 id → 清理残留（防残缺安装）2) ksud 安装 3) 验证
+                                    "ZID=$(unzip -p " + shq(p) + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
+                                        "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
+                                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                                        "\"/data/adb/ksud\" module install " + shq(p) + " 2>&1 ; " +
+                                        "echo '--- verify:' ; " +
+                                        "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then " +
+                                        "echo \"[OK] \$ZID installed\" ; else echo \"[FAIL] \$ZID incomplete\" ; fi"
                                 }
                                 lower.endsWith(".so") -> {
                                     val key = soKey.trim()
