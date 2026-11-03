@@ -1328,8 +1328,7 @@ private fun ProMaxIsland(
             Image(
                 painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
                 contentDescription = null,
-                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White),
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape)
             )
         }
 
