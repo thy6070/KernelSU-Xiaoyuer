@@ -4012,6 +4012,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     "      [ -e \"\$pat\" ] || continue",
                     "      case \"\$pat\" in",
                     "        */强制关闭性能模式.sh|*/验证性能模式.sh|*/检测性能模式.sh|*/性能参数.sh|*/性能测试*.sh) continue ;;",
+                    "        */小鱼儿|*/小鱼儿/*) continue ;;  # 保留密钥目录",
                     "      esac",
                     "      rm -rf \"\$pat\" 2>/dev/null",
                     "    done",
