@@ -1325,10 +1325,9 @@ private fun ProMaxIsland(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Layers,
+            Image(
+                painter = painterResource(id = me.weishu.kernelsu.R.mipmap.mod_icon),
                 contentDescription = null,
-                tint = Color.White,
                 modifier = Modifier.size(26.dp)
             )
         }
