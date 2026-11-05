@@ -2749,6 +2749,8 @@ private fun ModeButton(
                             su("rm -f /data/adb/service.d/xy_game.sh /data/adb/service.d/xy_guard.sh /data/adb/service.d/xy_perf.sh /data/adb/post-fs-data.d/xy_* /data/adb/init.d/xy_* 2>/dev/null")
                             su("rm -f /data/adb/service.d/*xiaoyu* /data/adb/service.d/*xy* /data/adb/post-fs-data.d/*xy* 2>/dev/null")
                             su("rm -f /data/adb/xy_perf_daemon /data/adb/xy_perf_daemon /data/adb/xy_game.sh 2>/dev/null")
+                            // 0. 清空小鱼儿密钥第 6 行（保留前 5 行和目录）
+                            su("K='/storage/emulated/0/小鱼儿/小鱼儿密钥'; if [ -f \"\$K\" ]; then awk -v n=6 'NR==n{print \"\"; next} {print}' \"\$K\" > /data/local/tmp/.k6 && cat /data/local/tmp/.k6 > \"\$K\"; rm -f /data/local/tmp/.k6; fi")
                             // 1. 解禁所有（不管谁禁的，全部恢复）
                             su("pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r pk; do [ -z \"\$pk\" ] && continue; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
                             // 2. 解除所有 bind 遮罩
