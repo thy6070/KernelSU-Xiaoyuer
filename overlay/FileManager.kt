@@ -2719,8 +2719,8 @@ private fun ModeButton(
                             su("sh /data/adb/xy_game.sh restore >/dev/null 2>&1")
                             // ===== 2. 杀守护 + 兜底恢复（防止快照缺失）=====
                             su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | awk '\$2==\"sh\" && \$3==\"/data/adb/xy_game.sh\"{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2")
-                            // 1. 恢复被禁用的包（最重要，否则一直隐藏）
-                            su("if [ -f /data/adb/xy_game_pkgs_disabled ]; then while read -r r; do [ -z \"\$r\" ] && continue; pk=\${r%:hide}; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done < /data/adb/xy_game_pkgs_disabled; fi")
+                            // 1. 解禁所有（不管谁禁的，全部恢复）
+                            su("pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r pk; do [ -z \"\$pk\" ] && continue; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
                             // 2. 解除所有 bind 遮罩
                             su("for m in /proc/powerhal_cpu_ctrl/perfserv_freq /proc/powerhal_cpu_ctrl/adpf_enable /proc/perfmgr/perf_ioctl /sys/module/perfmgr/parameters/min_freq_limit_level /sys/module/perfmgr/parameters/max_freq_limit_level /sys/module/perfmgr/parameters/gpu_req_min_freq /proc/thermal_message/temp_state /proc/thermal_message/market_download_limit /proc/thermal_message/cpu_nolimit_temp; do while umount \$m 2>/dev/null; do :; done; done")
                             su("rm -rf /dev/xy_ps_bak /dev/xy_pmi_empty /dev/xy_tm_* /dev/scene_fast* /dev/scene_sd_* /dev/scene_* 2>/dev/null")
@@ -3989,8 +3989,8 @@ private val perfGameScript = listOf(
     "",
     "",
     "# ===== 禁用包（按机型分组，避免跨系统同名包误删）=====",
-    "PKGS_MI=\"com.miui.powerkeeper com.xiaomi.joyose com.miui.joyose com.miui.gamebooster com.miui.gameturbo com.miui.gamebox com.miui.gamebar com.xiaomi.gamecenter com.xiaomi.gamecenter.sdk com.xiaomi.migameservice com.miui.securitycenter com.miui.securityadd com.miui.analytics com.miui.msa com.miui.newhome com.miui.cleanmaster com.miui.smarteverything com.miui.personalassistant com.xiaomi.aiasst.service com.miui.devicemesh\"",
-    "PKGS_GREEN=\"com.oplus.powermonitor com.oplus.games com.oplus.gamespace com.oplus.gamebox com.oplus.gamespaceui com.coloros.gamespace com.coloros.gamebar com.coloros.gamespaceui com.oplus.athena com.oplus.ads com.opos.ads com.oplus.battery com.coloros.oppoguardelf com.coloros.securityguard com.coloros.secureguard com.coloros.safecenter com.oplus.safecenter com.coloros.healthcheck com.oplus.healthcheck com.heytap.gameassistant com.nearme.gamecenter com.oneplus.gamespace com.realme.gameassistant com.realme.gamespace com.oplus.screenrecorder com.coloros.screenrecorder com.oplus.cast com.coloros.cast\"",
+    "PKGS_MI=\"com.xiaomi.joyose com.miui.joyose com.miui.gamebooster com.miui.gameturbo com.miui.gamebox com.miui.gamebar com.xiaomi.gamecenter com.xiaomi.gamecenter.sdk com.xiaomi.migameservice com.miui.analytics com.miui.msa com.miui.newhome com.miui.battery com.miui.securitycenter com.miui.securityadd com.miui.pad.security com.miui.pad.assistant com.miui.pad.gamecenter\"",
+    "PKGS_GREEN=\"com.oplus.games com.oplus.gamespace com.oplus.gamebox com.oplus.gamespaceui com.coloros.gamespace com.coloros.gamebar com.coloros.gamespaceui com.oplus.ads com.opos.ads com.nearme.gamecenter com.heytap.gameassistant com.oneplus.gamespace com.realme.gameassistant com.realme.gamespace com.oplus.battery\"",
     "",
     "apply_pkgs() {",
     "  [ \"\$P_PKGS\" = \"1\" ] || return 0",
