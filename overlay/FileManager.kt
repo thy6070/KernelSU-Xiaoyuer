@@ -2727,16 +2727,19 @@ private fun ModeButton(
                         }
                         if (enabling) {
                             // 先把脚本写到 /sdcard（App 有权限），再 cp 过去（短命令，不会超长）
-                            try {
-                                java.io.File("/sdcard/xy_game_v13.sh").writeText(perfGameScript.joinToString("\n"))
-                            } catch (t: Throwable) { }
-                            val r1 = su("rm -f /data/adb/xy_game.off; cp -f /sdcard/xy_game_v13.sh /data/adb/xy_perf_daemon 2>/dev/null || cat /sdcard/xy_game_v13.sh > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon; ls -l /data/adb/xy_perf_daemon 2>/dev/null | awk '{print \$5}'")
+                            // 写 App 私有目录（无需存储权限），再 cp 到 /data/adb
+                            val scriptFile = java.io.File(ctx3.filesDir, "xy_game_daemon.sh")
+                            try { scriptFile.writeText(perfGameScript.joinToString("\n")) } catch (t: Throwable) { }
+                            val sp = scriptFile.absolutePath.replace("'", "'\\''")
+                            val r1 = su("rm -f /data/adb/xy_game.off; cat '" + sp + "' > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon; ls -l /data/adb/xy_perf_daemon 2>/dev/null | awk '{print \$5}'")
                             val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon|xy_game\\.sh' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 & sleep 1.5; ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon' | grep -v grep | wc -l")
                             if (r2.trim() == "0" || r2.trim().isEmpty()) "已开启（但守护未启动，请检查）" else "已开启"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
-                            try { java.io.File("/sdcard/xy_game_v13.sh").writeText(perfGameScript.joinToString("\n")) } catch (t: Throwable) { }
-                            su("cp -f /sdcard/xy_game_v13.sh /data/adb/xy_perf_daemon 2>/dev/null || cat /sdcard/xy_game_v13.sh > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon")
+                            val sf2 = java.io.File(ctx3.filesDir, "xy_game_daemon.sh")
+                            try { sf2.writeText(perfGameScript.joinToString("\n")) } catch (t: Throwable) { }
+                            val sp2 = sf2.absolutePath.replace("'", "'\\''")
+                            su("cat '" + sp2 + "' > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon")
                             su("sh /data/adb/xy_perf_daemon restore >/dev/null 2>&1")
                             // ===== 2. 杀守护 + 兜底恢复（防止快照缺失）=====
                             su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon|xy_game\\.sh' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2")
