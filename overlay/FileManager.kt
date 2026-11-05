@@ -2686,7 +2686,10 @@ private fun ModeButton(
                 }
             }
     }
-    LaunchedEffect(title) {
+    // 首次进入跳过，只有用户点击（on 变化）才执行
+    var modeFirstRun by remember { mutableStateOf(true) }
+    LaunchedEffect(title, on) {
+        if (modeFirstRun) { modeFirstRun = false; return@LaunchedEffect }
         if (title == "性能模式") {
             val enabling = on
             // 未适配机型：不开启（脚本也有兜底）
@@ -2746,7 +2749,6 @@ private fun ModeButton(
                             // 11. 恢复小米温控配置（如果之前备份过）
                             su("if [ -d /data/adb/xy_thermal_cfg_bak ] && [ -d /data/vendor/thermal/config ]; then cp -rf /data/adb/xy_thermal_cfg_bak/. /data/vendor/thermal/config/ 2>/dev/null; fi")
                             "已关闭（全部恢复 + 清理残留）"
-                            "已关闭（已恢复）"
                         }
                     } catch (t: Throwable) {
                         "操作失败"
@@ -2754,7 +2756,6 @@ private fun ModeButton(
                 }
                 latencyMsg = msg
             }
-            on = !on
         }
         if (title == "执行此文件" || title == "刷入驱动") {
             execPath = withContext(kotlinx.coroutines.Dispatchers.IO) {
