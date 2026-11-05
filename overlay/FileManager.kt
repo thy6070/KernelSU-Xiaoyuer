@@ -2642,7 +2642,7 @@ private fun ModeButton(
         val st = withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                    "P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\\$P\" ] && kill -0 \"\\$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
+                    "P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
                 val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor(); o
             }.getOrDefault("0")
         }
