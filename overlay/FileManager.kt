@@ -2652,6 +2652,19 @@ private fun ModeButton(
     slot: String = "path"
 ) {
     var on by remember { mutableStateOf(false) }
+    var onInitDone by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val st = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                    "P=$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"$P\" ] && kill -0 \"$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
+                val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor(); o
+            }.getOrDefault("0")
+        }
+        val running = st.trim() == "1"
+        if (running != on) on = running
+        onInitDone = true
+    }
     val ctxMsg = androidx.compose.ui.platform.LocalContext.current
     var latencyMsg by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -2702,6 +2715,7 @@ private fun ModeButton(
     // 首次进入跳过，只有用户点击（on 变化）才执行
     var modeFirstRun by remember { mutableStateOf(true) }
     LaunchedEffect(title, on) {
+        if (!onInitDone) return@LaunchedEffect
         if (modeFirstRun) { modeFirstRun = false; return@LaunchedEffect }
         if (title == "性能模式") {
             val enabling = on
