@@ -2789,15 +2789,21 @@ private fun ModeButton(
                             su("rm -f /data/adb/service.d/xy_game.sh /data/adb/service.d/xy_guard.sh /data/adb/service.d/xy_perf.sh /data/adb/service.d/xy_open_access.sh 2>/dev/null")
                             su("rm -f /data/adb/xy_perf_daemon /data/adb/xy_perf_daemon /data/adb/xy_game.sh 2>/dev/null")
                             // 1. 解禁所有（不管谁禁的，全部恢复）
-                            su("pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r pk; do [ -z \"\$pk\" ] && continue; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
+                            su("for pk in \\$(pm list packages 2>/dev/null | sed 's/^package://'); do ST=\\$(dumpsys package \"\\$pk\" 2>/dev/null | grep -oE 'hidden=(true|false)' | head -1); EN=\\$(dumpsys package \"\\$pk\" 2>/dev/null | grep -oE 'enabled=[0-9]' | head -1); if [ \"\\$ST\" = 'hidden=true' ] || [ \"\\$EN\" = 'enabled=0' ]; then pm unhide \"\\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\\$pk\" >/dev/null 2>&1; fi; done")
                             // 1.5 清理旧版本性能模式残留（小鱼儿1.7 / perf_ultimate / jisu_mode 等）
                             //     ★ 保护 /storage/emulated/0/小鱼儿 目录
                             su("rm -rf /data/adb/perf_ultimate /data/adb/perf_bind /data/adb/jisu_mode /sdcard/小鱼儿1.7 /sdcard/小鱼儿性能模式.sh /sdcard/小鱼儿性能.sh /data/local/tmp/jisu_mode 2>/dev/null")
+                            // 1.6 恢复 GED boost / force / DDR / 温控模拟温度
+                            su("for k in boost_gpu_enable ged_smart_boost ged_boost_enable; do [ -f /sys/module/ged/parameters/\$k ] && echo 0 > /sys/module/ged/parameters/\$k 2>/dev/null; done")
+                            su("for k in force_clk_on force_bus_on force_rail_on; do [ -f /sys/class/kgsl/kgsl-3d0/\$k ] && echo 0 > /sys/class/kgsl/kgsl-3d0/\$k 2>/dev/null; done")
+                            su("for L in /sys/devices/system/cpu/bus_dcvs/DDR /sys/devices/system/cpu/bus_dcvs/DDRQOS /sys/devices/system/cpu/bus_dcvs/LLCC /sys/devices/system/cpu/bus_dcvs/L3; do [ -d \"\$L\" ] && { cat \"\$L/hw_min_freq\" 2>/dev/null > \"\$L/boost_freq\" 2>/dev/null; }; done")
+                            su("for z in /sys/class/thermal/thermal_zone*/; do [ -d \"\$z\" ] && echo 0 > \"\$z/emul_temp\" 2>/dev/null; done")
                             // 1.7 恢复新增优化项（KSM/L3/DDR/sched_boost）
                             su("echo 1 > /sys/kernel/mm/ksm/run 2>/dev/null; echo 0 > /proc/sys/walt/sched_boost 2>/dev/null; echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; echo 0 > /proc/sys/kernel/softlockup_panic 2>/dev/null")
                             su("for L in /sys/devices/system/cpu/bus_dcvs/L3 /sys/devices/system/cpu/bus_dcvs/DDR; do [ -d \"\$L\" ] && { cat \"\$L/hw_min_freq\" 2>/dev/null > \"\$L/boost_freq\" 2>/dev/null; }; done")
                             // 2. 解除所有 bind 遮罩
                             su("for m in /proc/powerhal_cpu_ctrl/perfserv_freq /proc/powerhal_cpu_ctrl/adpf_enable /proc/perfmgr/perf_ioctl /sys/module/perfmgr/parameters/min_freq_limit_level /sys/module/perfmgr/parameters/max_freq_limit_level /sys/module/perfmgr/parameters/gpu_req_min_freq /proc/thermal_message/temp_state /proc/thermal_message/market_download_limit /proc/thermal_message/cpu_nolimit_temp; do while umount \$m 2>/dev/null; do :; done; done")
+                            su("for m in /system/product/etc/displayconfig/*thermal*.xml /system/vendor/etc/thermal/*thermal*fps*.xml; do [ -e \"\$m\" ] && { while umount \"\$m\" 2>/dev/null; do :; done; }; done; rm -f /data/local/tmp/xy_empty")
                             su("rm -rf /dev/xy_ps_bak /dev/xy_pmi_empty /dev/xy_tm_* /dev/scene_fast* /dev/scene_sd_* /dev/scene_* 2>/dev/null")
                             // 3. 恢复 CPU 频率 + governor
                             su("for p in /sys/devices/system/cpu/cpufreq/policy[0-9]*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); mn=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); [ -n \"\$hw\" ] && { chmod 0666 \$p/scaling_max_freq \$p/scaling_min_freq \$p/scaling_governor 2>/dev/null; echo \$hw > \$p/scaling_max_freq 2>/dev/null; [ -n \"\$mn\" ] && echo \$mn > \$p/scaling_min_freq 2>/dev/null; av=\$(cat \$p/scaling_available_governors 2>/dev/null); case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null;; *walt*) echo walt > \$p/scaling_governor 2>/dev/null;; *schedutil*) echo schedutil > \$p/scaling_governor 2>/dev/null;; esac; }; done")
@@ -3778,21 +3784,21 @@ private val perfGameScript = listOf(
     "    op_ace5|mtk_d9400)   # 一加Ace5 天玑9400（全拉满：max=hw，GED 不限）",
     "      P_MAXPCT=\"100,100,100\"; P_MAXABS=\"\"; P_MIN=\"hw_min\"; P_GOV=\"performance\"; P_TL=\"keep\"; P_UP=\"10\"; P_DOWN=\"5000\"",
     "      P_CPSET=\"0-3,0-5,0-5,0-7\"; P_GPU=\"disabled\"; P_GPOUP=\"1066000\"; P_PS=\"clear\"",
-    "      P_THM=\"shell\"; P_CORE=\"4/4/1,3/3/0,1/1/0\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"",
+    "      P_THM=\"shell\"; P_CORE=\"4/4/1,3/3/1,1/1/1\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"",
     "      P_HZ=\"120\"; P_BIND=\"1\"; P_PKGS=\"1\"; P_PKGSET=\"green\" ;;",
     "    mi_pad8pro|sd_8elite)    # 小米平板8 Pro 骁龙8Elite（全拉满版：max=hw，GPU 不限）",
     "      P_MAXPCT=\"100,100,100,100\"; P_MAXABS=\"2918400,4320000,4320000,4320000\"; P_MINABS=\"\"",
     "      P_HIS=\"1152000,1401600\"",
     "      P_TLSTR=\"75 1689600:80 2400000:90|75 2246400:80 2841600:85 3513600:90\"",
     "      P_GOV=\"performance\"; P_UP=\"2000\"; P_DOWN=\"5000\"; P_MIN=\"max\"",
-    "      P_CPSET=\"0-1,0-4,0-4,0-7\"; P_GPU=\"mod125\"; P_GPUMX=\"0\"; P_PS=\"keep\"",
-    "      P_THM=\"tmsg\"; P_CORE_CPU=\"6:6/6/0\"; P_UCLAMP=\"1024\"; P_TAP=\"0\"; P_WALT=\"1\"",
+    "      P_CPSET=\"0-3,0-5,0-7,0-7\"; P_GPU=\"mod125\"; P_GPUMX=\"0\"; P_PS=\"keep\"",
+    "      P_THM=\"tmsg\"; P_CORE_CPU=\"6:6/6/1\"; P_UCLAMP=\"1024\"; P_TAP=\"0\"; P_WALT=\"1\"",
     "      P_HZ=\"144\"; P_BIND=\"1\"; P_PKGS=\"1\"; P_PKGSET=\"mi\" ;;",
     "    redmi_kpad|mtk_d9400p)   # 红米K Pad 天玑9400+（全拉满）",
     "      P_MAXPCT=\"100,100,100\"; P_MAXABS=\"\"; P_MIN=\"max\"",
     "      P_GOV=\"performance\"; P_TL=\"keep\"; P_UP=\"10\"; P_DOWN=\"5000\"",
     "      P_CPSET=\"0-3,0-5,0-5,0-7\"; P_GPU=\"disabled\"; P_GPOUP=\"1612000\"; P_PS=\"clear\"",
-    "      P_THM=\"shell\"; P_CORE=\"4/4/1,3/3/0,1/1/0\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"",
+    "      P_THM=\"shell\"; P_CORE=\"4/4/1,3/3/1,1/1/1\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"",
     "      P_HZ=\"max\"; P_BIND=\"1\"; P_PKGSET=\"mi\" ;;",
     "    mi_pad6pro|sd_8gen1)     # 小米平板6 Pro 骁龙8Gen1（23046RP50C 实测 Scene 极速）",
     "      P_MAXPCT=\"100,100,100\"; P_MAXABS=\"\"",
@@ -3801,7 +3807,7 @@ private val perfGameScript = listOf(
     "      P_TLSTR=\"10 1664837:-6|10 2569875:0|10 2587265:0 2703984:-6\"",
     "      P_GOV=\"performance\"; P_UP=\"0\"; P_DOWN=\"1000\"",
     "      P_CPSET=\"0-3,0-3,0-5,0-7\"; P_GPU=\"mod125\"; P_GPUMX=\"0\"; P_PS=\"keep\"",
-    "      P_THM=\"tmsg\"; P_CORE_CPU=\"0:4/4/0,4:3/3/0,7:1/1/0\"; P_UCLAMP=\"1024\"",
+    "      P_THM=\"tmsg\"; P_CORE_CPU=\"0:4/4/1,4:3/3/1,7:1/1/1\"; P_UCLAMP=\"1024\"",
     "      P_HZ=\"max\"; P_BIND=\"1\"; P_PKGSET=\"mi\" ;;",
     "    mi_pad8gen4|sd_8gen4)    # 小米平板8 骁龙8Gen4（全拉满：max=hw/perf/GPU温控解除）",
     "      P_MAXPCT=\"100,100,100,100\"; P_MAXABS=\"\"",
@@ -3810,7 +3816,7 @@ private val perfGameScript = listOf(
     "      P_TLSTR=\"-6 1594376:-13 1916794:-19|-6 1793780:-13 2271414:-19|0|0\"",
     "      P_GOV=\"performance\"; P_RATE=\"10\"",
     "      P_CPSET=\"0-3,0-5,0-7,0-7\"; P_GPU=\"mod125\"; P_GPUMX=\"0\"; P_GPUMN=\"0\"; P_PS=\"keep\"",
-    "      P_THM=\"tmsg\"; P_CORE_CPU=\"0:1/2/0,2:3/3/0,5:0/2/1,7:0/1/1\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"; P_WALT=\"1\"",
+    "      P_THM=\"tmsg\"; P_CORE_CPU=\"0:1/2/1,2:3/3/1,5:2/2/1,7:1/1/1\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"; P_WALT=\"1\"",
     "      P_HZ=\"120\"; P_BIND=\"1\"; P_PKGSET=\"mi\" ;;",
     "    *)                       # 未知设备：最保守",
     "      P_MAXPCT=\"100\"; P_MIN=\"hw_min\"; P_GOV=\"auto\"; P_TL=\"keep\"; P_RATE=\"keep\"",
@@ -3963,12 +3969,27 @@ private val perfGameScript = listOf(
     "",
     "apply_gpu() {",
     "  case \"\$P_GPU\" in",
-    "    disabled) for f in /proc/gpufreqv2/fix_target_opp_index /proc/gpufreq/fix_target_opp_index; do W \"\$f\" -1; done ;;",
+    "    disabled) for f in /proc/gpufreqv2/fix_target_opp_index /proc/gpufreq/fix_target_opp_index; do W \"\$f\" -1; done",
+    "              # GED boost 拉满（MTK GPU 提频）",
+    "              W /sys/module/ged/parameters/boost_gpu_enable 1",
+    "              W /sys/module/ged/parameters/ged_smart_boost 1",
+    "              W /sys/module/ged/parameters/ged_boost_enable 1 ;;",
     "    mod100)   for f in /proc/gpufreqv2/fix_target_opp_index /proc/gpufreq/fix_target_opp_index; do W \"\$f\" -1; done",
     "              W /sys/class/kgsl/kgsl-3d0/devfreq/governor msm-adreno-tz",
+    "              W /sys/class/kgsl/kgsl-3d0/min_pwrlevel 0",
+    "              W /sys/class/kgsl/kgsl-3d0/max_pwrlevel 0",
+    "              W /sys/class/kgsl/kgsl-3d0/force_clk_on 1",
+    "              W /sys/class/kgsl/kgsl-3d0/force_bus_on 1",
+    "              W /sys/class/kgsl/kgsl-3d0/force_rail_on 1",
     "              W /sys/class/kgsl/kgsl-3d0/devfreq/mod_percent 100",
     "              [ \"\$P_GPUMX\" != \"0\" ] && W /sys/class/kgsl/kgsl-3d0/devfreq/max_freq \"\$P_GPUMX\" ;;",
     "    mod125)   W /sys/class/kgsl/kgsl-3d0/devfreq/governor msm-adreno-tz",
+    "              # 强制 GPU 满血（不降频/不掉电）",
+    "              W /sys/class/kgsl/kgsl-3d0/min_pwrlevel 0",
+    "              W /sys/class/kgsl/kgsl-3d0/max_pwrlevel 0",
+    "              W /sys/class/kgsl/kgsl-3d0/force_clk_on 1",
+    "              W /sys/class/kgsl/kgsl-3d0/force_bus_on 1",
+    "              W /sys/class/kgsl/kgsl-3d0/force_rail_on 1",
     "              W /sys/class/kgsl/kgsl-3d0/devfreq/mod_percent 125",
     "              [ \"\$P_GPUMX\" != \"0\" ] && W /sys/class/kgsl/kgsl-3d0/devfreq/max_freq \"\$P_GPUMX\"",
     "              [ -n \"\$P_GPUMN\" ] && [ \"\$P_GPUMN\" != \"0\" ] && W /sys/class/kgsl/kgsl-3d0/devfreq/min_freq \"\$P_GPUMN\" ;;",
@@ -4030,6 +4051,14 @@ private val perfGameScript = listOf(
     "      done ;;",
     "    both|hard) for z in /sys/class/thermal/thermal_zone*/mode; do W \"\$z\" disabled; done ;;",
     "    tmsg)",
+    "      # 温控/锁帧配置空文件占位（仿 Scene [模块]温控移除）",
+    "      for f in /system/product/etc/displayconfig/*thermal*.xml \\",
+    "               /system/vendor/etc/thermal/*thermal*fps*.xml \\",
+    "               /system/vendor/etc/thermal/thermallevel_to_fps.xml; do",
+    "        [ -f \"\$f\" ] || continue",
+    "        [ -f /data/local/tmp/xy_empty ] || : > /data/local/tmp/xy_empty",
+    "        mount --bind /data/local/tmp/xy_empty \"\$f\" 2>/dev/null",
+    "      done",
     "      for base in /proc/thermal_message /sys/class/thermal/thermal_message /sys/devices/virtual/thermal/thermal_message; do",
     "        [ -d \"\$base\" ] || continue",
     "        for f in temp_state market_download_limit cpu_nolimit_temp; do",
@@ -4211,6 +4240,19 @@ private val perfGameScript = listOf(
     "  [ -f /sys/class/kgsl/kgsl-3d0/devfreq/min_freq ] && echo \"gpu|minfreq|\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" >> \"\$SNAP\"",
     "  [ -f /proc/gpufreqv2/fix_target_opp_index ] && echo \"gpu|opp|\$(head -1 /proc/gpufreqv2/fix_target_opp_index 2>/dev/null)\" >> \"\$SNAP\"",
     "  [ -f /sys/module/ged/parameters/gpu_cust_upbound_freq ] && echo \"gpu|ged|\$(cat /sys/module/ged/parameters/gpu_cust_upbound_freq 2>/dev/null)\" >> \"\$SNAP\"",
+    "  # GED boost 状态",
+    "  for k in boost_gpu_enable ged_smart_boost ged_boost_enable; do",
+    "    [ -f \"/sys/module/ged/parameters/\$k\" ] && echo \"ged|\$k|\$(cat /sys/module/ged/parameters/\$k 2>/dev/null)\" >> \"\$SNAP\"",
+    "  done",
+    "  # 骁龙 force 节点",
+    "  for k in force_clk_on force_bus_on force_rail_on min_pwrlevel max_pwrlevel; do",
+    "    [ -f \"/sys/class/kgsl/kgsl-3d0/\$k\" ] && echo \"kgsl|\$k|\$(cat /sys/class/kgsl/kgsl-3d0/\$k 2>/dev/null)\" >> \"\$SNAP\"",
+    "  done",
+    "  # DDR/DDRQOS/LLCC/L3",
+    "  for bus in DDR DDRQOS LLCC L3; do",
+    "    B=\"/sys/devices/system/cpu/bus_dcvs/\$bus\"",
+    "    [ -f \"\$B/boost_freq\" ] && echo \"bus|\$bus|\$(cat \"\$B/boost_freq\" 2>/dev/null)\" >> \"\$SNAP\"",
+    "  done",
     "  echo \"hz|peak|\$(settings get system peak_refresh_rate 2>/dev/null)\" >> \"\$SNAP\"",
     "  echo \"hz|min|\$(settings get system min_refresh_rate 2>/dev/null)\" >> \"\$SNAP\"",
     "  [ -f /proc/powerhal_cpu_ctrl/perfserv_freq ] && echo \"ph|perfserv|\$(cat /proc/powerhal_cpu_ctrl/perfserv_freq 2>/dev/null)\" >> \"\$SNAP\"",
@@ -4274,6 +4316,16 @@ private val perfGameScript = listOf(
     "        ;;",
     "      pm)",
     "        [ -f /sys/module/perfmgr/parameters/perfmgr_enable ] && echo \"\$b\" > /sys/module/perfmgr/parameters/perfmgr_enable 2>/dev/null",
+    "        ;;",
+    "      ged)",
+    "        [ -f \"/sys/module/ged/parameters/\$a\" ] && echo \"\$b\" > \"/sys/module/ged/parameters/\$a\" 2>/dev/null",
+    "        ;;",
+    "      kgsl)",
+    "        [ -f \"/sys/class/kgsl/kgsl-3d0/\$a\" ] && echo \"\$b\" > \"/sys/class/kgsl/kgsl-3d0/\$a\" 2>/dev/null",
+    "        ;;",
+    "      bus)",
+    "        B=\"/sys/devices/system/cpu/bus_dcvs/\$a\"",
+    "        [ -f \"\$B/boost_freq\" ] && echo \"\$b\" > \"\$B/boost_freq\" 2>/dev/null",
     "        ;;",
     "      uclamp)",
     "        case \"\$a\" in",
