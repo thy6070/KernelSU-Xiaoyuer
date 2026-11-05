@@ -2734,21 +2734,21 @@ private fun ModeButton(
                                 scriptFile.writeText(perfGameScript.joinToString("\n"))
                             } catch (t: Throwable) { }
                             val sp = scriptFile.absolutePath.replace("'", "'\\''")
-                            val r1 = su("rm -f /data/adb/xy_game.off; cat '" + sp + "' > /data/adb/性能模式; chmod 755 /data/adb/性能模式; ls -l /data/adb/性能模式 2>/dev/null | awk '{print \$5}'")
-                            val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E '性能模式|xy_perf_daemon|xy_game' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/性能模式 >/dev/null 2>&1 & sleep 2; P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else echo 0; fi")
+                            val r1 = su("rm -f /data/adb/xy_game.off; cat '" + sp + "' > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon; ls -l /data/adb/xy_perf_daemon 2>/dev/null | awk '{print \$5}'")
+                            val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E '性能模式|xy_perf_daemon|xy_game' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 & sleep 2; P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else echo 0; fi")
                             if (r2.trim() == "1") "已开启" else "已开启（守护未确认，请重启App再看）"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
                             val sf2 = java.io.File(ctx3.filesDir, "xy_game_daemon.sh")
                             try { sf2.writeText(perfGameScript.joinToString("\n")) } catch (t: Throwable) { }
                             val sp2 = sf2.absolutePath.replace("'", "'\\''")
-                            su("cat '" + sp2 + "' > /data/adb/性能模式; chmod 755 /data/adb/性能模式")
-                            su("sh /data/adb/性能模式 restore >/dev/null 2>&1")
+                            su("cat '" + sp2 + "' > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon")
+                            su("sh /data/adb/xy_perf_daemon restore >/dev/null 2>&1")
                             // ===== 2. 杀所有旧进程（任何名字）+ 删所有旧版本自启 =====
                             su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E '性能模式|xy_perf_daemon|xy_game|xy_guard|xy_perf|perf_bind|jisu_mode' | grep -v grep | grep -v 'sh -c' | grep -v '恢复原样' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3")
                             su("rm -f /data/adb/service.d/xy_game.sh /data/adb/service.d/xy_guard.sh /data/adb/service.d/xy_perf.sh /data/adb/post-fs-data.d/xy_* /data/adb/init.d/xy_* 2>/dev/null")
                             su("rm -f /data/adb/service.d/*xiaoyu* /data/adb/service.d/*xy* /data/adb/post-fs-data.d/*xy* 2>/dev/null")
-                            su("rm -f /data/adb/性能模式 /data/adb/xy_perf_daemon /data/adb/xy_game.sh 2>/dev/null")
+                            su("rm -f /data/adb/xy_perf_daemon /data/adb/xy_perf_daemon /data/adb/xy_game.sh 2>/dev/null")
                             // 1. 解禁所有（不管谁禁的，全部恢复）
                             su("pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r pk; do [ -z \"\$pk\" ] && continue; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
                             // 2. 解除所有 bind 遮罩
