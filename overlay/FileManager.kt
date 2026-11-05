@@ -2595,33 +2595,19 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
             modifier = Modifier.width(300.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 小字：只有"配置已生效（守护在跑）"才显示机型名；否则显示未开启/未适配
+            // 小字：直接读 /storage/emulated/0/小鱼儿/小鱼儿密钥 第 6 行（脚本开启时写入机型名）
             var devLabel by androidx.compose.runtime.remember {
-                androidx.compose.runtime.mutableStateOf("检查中…")
+                androidx.compose.runtime.mutableStateOf("")
             }
             androidx.compose.runtime.LaunchedEffect(Unit) {
-                run {
-                    devLabel = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        try {
-                            val pr = Runtime.getRuntime().exec(arrayOf("getprop", "ro.product.model"))
-                            val m = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
-                            val name = when (m) {
-                                "PLF110", "PKG110" -> "一加 Ace5 竞速版"
-                                "25091RP04C", "25091RP04", "25091RP0" -> "小米平板8 Pro"
-                                "25097RP43C", "25097RP4C", "25097RP4D" -> "小米平板8"
-                                else -> null
-                            }
-                            if (name == null) {
-                                "未适配此机型"
-                            } else {
-                                val p2 = Runtime.getRuntime().exec(arrayOf("su", "--mount-master", "-c",
-                                    "P=$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"$P\" ] && kill -0 \"$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
-                                val n = p2.inputStream.bufferedReader().readText().trim().toIntOrNull() ?: 0
-                                p2.waitFor()
-                                if (n > 0) "已开启 · $name" else "未开启（$name）"
-                            }
-                        } catch (t: Throwable) { "未适配此机型" }
-                    }
+                devLabel = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                            "sed -n '6p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+                        val v = pr.inputStream.bufferedReader().readText().trim()
+                        pr.waitFor()
+                        if (v.isEmpty()) "未适配此机型" else v
+                    } catch (t: Throwable) { "未适配此机型" }
                 }
             }
             ModeButton(Icons.Outlined.DarkMode, "放开通行")
@@ -3781,11 +3767,28 @@ private val perfGameScript = listOf(
     "      P_HZ=\"keep\"; P_BIND=\"1\" ;;",
     "  esac",
     "}",
+    "# 机型名称 → 写进 /storage/emulated/0/小鱼儿/小鱼儿密钥 第 6 行（只覆盖第 6 行，前 5 行保留）",
+    "KEYF=/storage/emulated/0/小鱼儿/小鱼儿密钥",
+    "case \"\$PROFILE\" in",
+    "  op_ace5)     NAME=\"一加 Ace5 竞速版\" ;;",
+    "  mi_pad8pro)  NAME=\"小米平板8 Pro\" ;;",
+    "  mi_pad8gen4) NAME=\"小米平板8\" ;;",
+    "  *)           NAME=\"未适配此机型\" ;;",
+    "esac",
+    "mkdir -p /storage/emulated/0/小鱼儿 2>/dev/null",
+    "if [ -f \"\$KEYF\" ]; then",
+    "  awk -v n=6 -v v=\"\$NAME\" 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}' \"\$KEYF\" > /data/local/tmp/.key6 2>/dev/null && cat /data/local/tmp/.key6 > \"\$KEYF\" 2>/dev/null && rm -f /data/local/tmp/.key6",
+    "else",
+    "  printf '\\n\\n\\n\\n\\n%s\\n' \"\$NAME\" > \"\$KEYF\" 2>/dev/null",
+    "fi",
+    "chmod 600 \"\$KEYF\" 2>/dev/null",
+    "",
     "# 只支持已实测的机型：识别不到就不开启",
     "case \"\$PROFILE\" in",
-    "  op_ace5|mi_pad8pro|mtk_d9400|sd_8elite) : ;;",
+    "  op_ace5|mi_pad8pro|mi_pad8gen4) : ;;",
     "  *)",
     "    echo \"  [未适配] 机型 \$MODEL（\$SOCKEY）没有配置，不开启性能模式\"",
+    "    echo \"  已写入第6行: \$NAME\"",
     "    exit 0 ;;",
     "esac",
     "",
