@@ -2789,7 +2789,7 @@ private fun ModeButton(
                             su("rm -f /data/adb/service.d/xy_game.sh /data/adb/service.d/xy_guard.sh /data/adb/service.d/xy_perf.sh /data/adb/service.d/xy_open_access.sh 2>/dev/null")
                             su("rm -f /data/adb/xy_perf_daemon /data/adb/xy_perf_daemon /data/adb/xy_game.sh 2>/dev/null")
                             // 1. 解禁所有（不管谁禁的，全部恢复）
-                            su("for pk in \\$(pm list packages 2>/dev/null | sed 's/^package://'); do ST=\\$(dumpsys package \"\\$pk\" 2>/dev/null | grep -oE 'hidden=(true|false)' | head -1); EN=\\$(dumpsys package \"\\$pk\" 2>/dev/null | grep -oE 'enabled=[0-9]' | head -1); if [ \"\\$ST\" = 'hidden=true' ] || [ \"\\$EN\" = 'enabled=0' ]; then pm unhide \"\\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\\$pk\" >/dev/null 2>&1; fi; done")
+                            su("pm list packages 2>/dev/null | sed 's/^package://' | while read pk; do pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
                             // 1.5 清理旧版本性能模式残留（小鱼儿1.7 / perf_ultimate / jisu_mode 等）
                             //     ★ 保护 /storage/emulated/0/小鱼儿 目录
                             su("rm -rf /data/adb/perf_ultimate /data/adb/perf_bind /data/adb/jisu_mode /sdcard/小鱼儿1.7 /sdcard/小鱼儿性能模式.sh /sdcard/小鱼儿性能.sh /data/local/tmp/jisu_mode 2>/dev/null")
