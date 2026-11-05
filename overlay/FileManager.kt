@@ -2665,12 +2665,13 @@ private fun ModeButton(
         on = running
         onInitDone = true
     }
+    var execPath by remember { mutableStateOf<String?>(null) }
     val ctxMsg = androidx.compose.ui.platform.LocalContext.current
     var latencyMsg by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         latencyMsg = ctxMsg.getSharedPreferences("yx_mode", 0).getString("msg_" + title, null)
         // 进界面就读取"执行此文件"的路径（不用点击）
-        if (title == "执行此文件" || title == "刷入驱动") {
+        if (title == "执行此文件") {
             execPath = withContext(kotlinx.coroutines.Dispatchers.IO) { loadExecPath(slot) }
         }
     }
@@ -2682,7 +2683,6 @@ private fun ModeButton(
     }
     val ctx3 = androidx.compose.ui.platform.LocalContext.current
     val scope2 = rememberCoroutineScope()
-    var execPath by remember { mutableStateOf<String?>(null) }
     var showPathDialog by remember { mutableStateOf(false) }
     var showKeyDialog by remember { mutableStateOf(false) }
     var showUrlDialog by remember { mutableStateOf(false) }
@@ -2805,7 +2805,7 @@ private fun ModeButton(
                 latencyMsg = msg
             }
         }
-        if (title == "执行此文件" || title == "刷入驱动") {
+        if (title == "执行此文件") {
             // 点击时也刷新一次（保险）
             execPath = withContext(kotlinx.coroutines.Dispatchers.IO) { loadExecPath(slot) }
         }
@@ -3174,7 +3174,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
             )
             Text(
                 text = subtitle ?: (execPath ?: latencyMsg)
-                    ?: (if (title == "执行此文件" || title == "刷入驱动") (execPath ?: "暂无设置") else ""),
+                    ?: (if (title == "执行此文件") (execPath ?: "暂无设置") else ""),
                 color = Color(0x66FFFFFF),
                 fontSize = 9.sp,
                 maxLines = 1,
@@ -3182,7 +3182,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 6.dp)
                     .then(
-                        if (title == "执行此文件" || title == "刷入驱动") {
+                        if (title == "执行此文件") {
                             Modifier.clickable {
                                 pathInput = execPath ?: ""
                                 showPathDialog = true
@@ -3763,13 +3763,12 @@ private val perfGameScript = listOf(
     "      P_CPSET=\"0-1,0-4,0-4,0-7\"; P_GPU=\"mod100\"; P_GPUMX=\"0\"; P_PS=\"keep\"",
     "      P_THM=\"tmsg\"; P_CORE_CPU=\"6:2/2/0\"; P_UCLAMP=\"1024\"; P_TAP=\"0\"; P_WALT=\"1\"",
     "      P_HZ=\"144\"; P_BIND=\"1\"; P_PKGS=\"1\"; P_PKGSET=\"mi\" ;;",
-    "    redmi_kpad|sd_8elite)    # 红米K Pad 天玑9400+（25079RPDCC 实测 Scene 极速模式）",
-    "      P_MAXPCT=\"75,85,86\"; P_MAXABS=\"1800000,2800000,3200000\"",
-    "      P_MINABS=\"339000,622000,798000\"",
-    "      P_GOV=\"sugov_ext\"; P_UP=\"1000\"; P_DOWN=\"1000\"; P_TL=\"keep\"",
-    "      P_CPSET=\"0-3,0-5,0-5,0-7\"; P_GPU=\"disabled\"; P_GPOUP=\"1378000\"; P_PS=\"clear\"",
-    "      P_THM=\"off\"; P_CORE_CPU=\"0:4/4/1,4:3/3/0,7:1/1/0\"; P_UCLAMP=\"0\"",
-    "      P_HZ=\"keep\"; P_BIND=\"1\"; P_PKGSET=\"\" ;;",
+    "    redmi_kpad|mtk_d9400p)   # 红米K Pad 天玑9400+（全拉满）",
+    "      P_MAXPCT=\"100,100,100\"; P_MAXABS=\"\"; P_MIN=\"hw_min\"",
+    "      P_GOV=\"performance\"; P_TL=\"keep\"; P_UP=\"10\"; P_DOWN=\"5000\"",
+    "      P_CPSET=\"0-3,0-5,0-5,0-7\"; P_GPU=\"disabled\"; P_GPOUP=\"1612000\"; P_PS=\"clear\"",
+    "      P_THM=\"shell\"; P_CORE=\"4/4/1,3/3/0,1/1/0\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"",
+    "      P_HZ=\"max\"; P_BIND=\"1\"; P_PKGSET=\"mi\" ;;",
     "    mi_pad8gen4|sd_8gen4)    # 小米平板8 骁龙8Gen4（全拉满：max=hw/perf/GPU温控解除）",
     "      P_MAXPCT=\"100,100,100,100\"; P_MAXABS=\"\"",
     "      P_MIN=\"max\"",
