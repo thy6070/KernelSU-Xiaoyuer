@@ -2615,7 +2615,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                                 "未适配此机型"
                             } else {
                                 val p2 = Runtime.getRuntime().exec(arrayOf("su", "--mount-master", "-c",
-                                    "ps -A -o ARGS 2>/dev/null | grep -c '^sh /data/adb/xy_game.sh$'"))
+                                    "ps -A -o ARGS 2>/dev/null | grep -c 'xy_perf_daemon'"))
                                 val n = p2.inputStream.bufferedReader().readText().trim().toIntOrNull() ?: 0
                                 p2.waitFor()
                                 if (n > 0) name else "未开启（$name）"
@@ -2730,16 +2730,16 @@ private fun ModeButton(
                             try {
                                 java.io.File("/sdcard/xy_game_v13.sh").writeText(perfGameScript.joinToString("\n"))
                             } catch (t: Throwable) { }
-                            val r1 = su("rm -f /data/adb/xy_game.off; cp -f /sdcard/xy_game_v13.sh /data/adb/xy_game.sh 2>/dev/null || cat /sdcard/xy_game_v13.sh > /data/adb/xy_game.sh; chmod 755 /data/adb/xy_game.sh; ls -l /data/adb/xy_game.sh 2>/dev/null | awk '{print \$5}'")
-                            val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | awk '\$2==\"sh\" && \$3==\"/data/adb/xy_game.sh\"{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/xy_game.sh >/dev/null 2>&1 & sleep 1; ps -A -o PID,ARGS 2>/dev/null | awk '\$2==\"sh\" && \$3==\"/data/adb/xy_game.sh\"{print \$1}' | wc -l")
+                            val r1 = su("rm -f /data/adb/xy_game.off; cp -f /sdcard/xy_game_v13.sh /data/adb/xy_perf_daemon 2>/dev/null || cat /sdcard/xy_game_v13.sh > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon; ls -l /data/adb/xy_perf_daemon 2>/dev/null | awk '{print \$5}'")
+                            val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon|xy_game\\.sh' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 & sleep 1.5; ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon' | grep -v grep | wc -l")
                             if (r2.trim() == "0" || r2.trim().isEmpty()) "已开启（但守护未启动，请检查）" else "已开启"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
                             try { java.io.File("/sdcard/xy_game_v13.sh").writeText(perfGameScript.joinToString("\n")) } catch (t: Throwable) { }
-                            su("cp -f /sdcard/xy_game_v13.sh /data/adb/xy_game.sh 2>/dev/null || cat /sdcard/xy_game_v13.sh > /data/adb/xy_game.sh; chmod 755 /data/adb/xy_game.sh")
-                            su("sh /data/adb/xy_game.sh restore >/dev/null 2>&1")
+                            su("cp -f /sdcard/xy_game_v13.sh /data/adb/xy_perf_daemon 2>/dev/null || cat /sdcard/xy_game_v13.sh > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon")
+                            su("sh /data/adb/xy_perf_daemon restore >/dev/null 2>&1")
                             // ===== 2. 杀守护 + 兜底恢复（防止快照缺失）=====
-                            su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | awk '\$2==\"sh\" && \$3==\"/data/adb/xy_game.sh\"{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2")
+                            su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon|xy_game\\.sh' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2")
                             // 1. 解禁所有（不管谁禁的，全部恢复）
                             su("pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r pk; do [ -z \"\$pk\" ] && continue; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
                             // 2. 解除所有 bind 遮罩
@@ -3675,7 +3675,7 @@ private val perfGameScript = listOf(
     "  _old=\$(cat \"\$PIDFILE\" 2>/dev/null)",
     "  [ -n \"\$_old\" ] && [ \"\$_old\" != \"\$\$\" ] && kill -9 \"\$_old\" 2>/dev/null",
     "fi",
-    "for old in \$(ps -A -o PID,ARGS 2>/dev/null | grep -F 'xy_game.sh' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do",
+    "for old in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon|xy_game\\.sh' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do",
     "  [ \"\$old\" != \"\$\$\" ] && [ \"\$old\" != \"\$PPID\" ] && kill -9 \"\$old\" 2>/dev/null",
     "done",
     "sleep 0.3",
