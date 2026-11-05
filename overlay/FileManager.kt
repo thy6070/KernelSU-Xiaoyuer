@@ -2674,6 +2674,18 @@ private fun ModeButton(
         if (title == "执行此文件") {
             execPath = withContext(kotlinx.coroutines.Dispatchers.IO) { loadExecPath(slot) }
         }
+        // 进界面就检测"放开通行"状态（不用点击）
+        if (title == "放开通行") {
+            val ex = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                        "[ -f /data/adb/service.d/xy_open_access.sh ] && echo 1 || echo 0"))
+                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
+                    o == "1"
+                }.getOrDefault(false)
+            }
+            on = ex
+        }
     }
     LaunchedEffect(latencyMsg) {
         val v = latencyMsg
