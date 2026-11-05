@@ -3825,7 +3825,7 @@ private val perfGameScript = listOf(
     "",
     "# 只支持已实测的机型：识别不到就不开启",
     "case \"\$PROFILE\" in",
-    "  op_ace5|mi_pad8pro|mi_pad8gen4) : ;;",
+    "  op_ace5|mi_pad8pro|mi_pad8gen4|redmi_kpad|mi_pad6pro) : ;;",
     "  *)",
     "    echo \"  [未适配] 机型 \$MODEL（\$SOCKEY）没有配置，不开启性能模式\"",
     "    echo \"  已写入第6行: \$NAME\"",
