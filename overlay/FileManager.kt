@@ -2615,7 +2615,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                                 "未适配此机型"
                             } else {
                                 val p2 = Runtime.getRuntime().exec(arrayOf("su", "--mount-master", "-c",
-                                    "ps -A -o ARGS 2>/dev/null | grep -c '性能模式'"))
+                                    "P=$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"$P\" ] && kill -0 \"$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
                                 val n = p2.inputStream.bufferedReader().readText().trim().toIntOrNull() ?: 0
                                 p2.waitFor()
                                 if (n > 0) name else "未开启（$name）"
@@ -2729,11 +2729,14 @@ private fun ModeButton(
                             // 先把脚本写到 /sdcard（App 有权限），再 cp 过去（短命令，不会超长）
                             // 写 App 私有目录（无需存储权限），再 cp 到 /data/adb
                             val scriptFile = java.io.File(ctx3.filesDir, "xy_game_daemon.sh")
-                            try { scriptFile.writeText(perfGameScript.joinToString("\n")) } catch (t: Throwable) { }
+                            try {
+                                scriptFile.parentFile?.mkdirs()
+                                scriptFile.writeText(perfGameScript.joinToString("\n"))
+                            } catch (t: Throwable) { }
                             val sp = scriptFile.absolutePath.replace("'", "'\\''")
                             val r1 = su("rm -f /data/adb/xy_game.off; cat '" + sp + "' > /data/adb/性能模式; chmod 755 /data/adb/性能模式; ls -l /data/adb/性能模式 2>/dev/null | awk '{print \$5}'")
-                            val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E '性能模式|xy_perf_daemon|xy_game\\.sh' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/性能模式 >/dev/null 2>&1 & sleep 1.5; ps -A -o PID,ARGS 2>/dev/null | grep -E '性能模式' | grep -v grep | wc -l")
-                            if (r2.trim() == "0" || r2.trim().isEmpty()) "已开启（但守护未启动，请检查）" else "已开启"
+                            val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E '性能模式|xy_perf_daemon|xy_game' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/性能模式 >/dev/null 2>&1 & sleep 2; P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else echo 0; fi")
+                            if (r2.trim() == "1") "已开启" else "已开启（守护未确认，请重启App再看）"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
                             val sf2 = java.io.File(ctx3.filesDir, "xy_game_daemon.sh")
