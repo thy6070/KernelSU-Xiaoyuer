@@ -2595,22 +2595,35 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
             modifier = Modifier.width(300.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 自动识别机型：只支持 一加Ace5竞速版 / 小米平板8 Pro
-            val devLabel = androidx.compose.runtime.remember {
-                runCatching {
-                    val pr = Runtime.getRuntime().exec(arrayOf("getprop", "ro.product.model"))
-                    val m = pr.inputStream.bufferedReader().readText().trim()
-                    pr.waitFor()
-                    val mk = runCatching {
-                        val p2 = Runtime.getRuntime().exec(arrayOf("getprop", "ro.product.marketname"))
-                        val v = p2.inputStream.bufferedReader().readText().trim(); p2.waitFor(); v
-                    }.getOrDefault("")
-                    when (m) {
-                        "PLF110", "PKG110" -> "一加 Ace5 竞速版"
-                        "25091RP04C", "25091RP04", "25091RP0" -> "小米平板8 Pro"
-                        else -> "未适配此机型"
+            // 小字：只有"配置已生效（守护在跑）"才显示机型名；否则显示未开启/未适配
+            var devLabel by androidx.compose.runtime.remember {
+                androidx.compose.runtime.mutableStateOf("检查中…")
+            }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                while (true) {
+                    devLabel = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            val pr = Runtime.getRuntime().exec(arrayOf("getprop", "ro.product.model"))
+                            val m = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
+                            val name = when (m) {
+                                "PLF110", "PKG110" -> "一加 Ace5 竞速版"
+                                "25091RP04C", "25091RP04", "25091RP0" -> "小米平板8 Pro"
+                                "25097RP43C", "25097RP4C", "25097RP4D" -> "小米平板8"
+                                else -> null
+                            }
+                            if (name == null) {
+                                "未适配此机型"
+                            } else {
+                                val p2 = Runtime.getRuntime().exec(arrayOf("su", "--mount-master", "-c",
+                                    "ps -A -o ARGS 2>/dev/null | grep -c '^sh /data/adb/xy_game.sh$'"))
+                                val n = p2.inputStream.bufferedReader().readText().trim().toIntOrNull() ?: 0
+                                p2.waitFor()
+                                if (n > 0) name else "未开启（$name）"
+                            }
+                        } catch (t: Throwable) { "未适配此机型" }
                     }
-                }.getOrDefault("未适配此机型")
+                    kotlinx.coroutines.delay(2000)
+                }
             }
             ModeButton(Icons.Outlined.DarkMode, "放开通行")
             ModeButton(Icons.Outlined.AcUnit, "性能模式", subtitle = devLabel)
