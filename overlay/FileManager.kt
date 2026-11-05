@@ -2642,7 +2642,7 @@ private fun ModeButton(
         val st = withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                    "P=$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"$P\" ] && kill -0 \"$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
+                    "P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\\$P\" ] && kill -0 \"\\$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
                 val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor(); o
             }.getOrDefault("0")
         }
@@ -2753,7 +2753,7 @@ private fun ModeButton(
                             su("pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r pk; do [ -z \"\$pk\" ] && continue; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
                             // 1.5 清理旧版本性能模式残留（小鱼儿1.7 / perf_ultimate / jisu_mode 等）
                             //     ★ 保护 /storage/emulated/0/小鱼儿 目录
-                            su("find /sdcard /data/adb /data/local/tmp -maxdepth 3 \\\( -path '/storage/emulated/0/小鱼儿' -o -path '*/小鱼儿/小鱼儿密钥' \\\) -prune -o \\\\( -iname '*小鱼儿*1*' -o -iname '*小鱼儿*性能*' -o -iname 'perf_ultimate*' -o -iname 'perf_bind*' -o -iname 'jisu_mode*' -o -iname '小鱼儿性能*' \\\\) -print 2>/dev/null | while read -r f; do rm -rf \"\\$f\" 2>/dev/null; done")
+                            su("rm -rf /data/adb/perf_ultimate /data/adb/perf_bind /data/adb/jisu_mode /sdcard/小鱼儿1.7 /sdcard/小鱼儿性能模式.sh /sdcard/小鱼儿性能.sh /data/local/tmp/jisu_mode 2>/dev/null")
                             // 2. 解除所有 bind 遮罩
                             su("for m in /proc/powerhal_cpu_ctrl/perfserv_freq /proc/powerhal_cpu_ctrl/adpf_enable /proc/perfmgr/perf_ioctl /sys/module/perfmgr/parameters/min_freq_limit_level /sys/module/perfmgr/parameters/max_freq_limit_level /sys/module/perfmgr/parameters/gpu_req_min_freq /proc/thermal_message/temp_state /proc/thermal_message/market_download_limit /proc/thermal_message/cpu_nolimit_temp; do while umount \$m 2>/dev/null; do :; done; done")
                             su("rm -rf /dev/xy_ps_bak /dev/xy_pmi_empty /dev/xy_tm_* /dev/scene_fast* /dev/scene_sd_* /dev/scene_* 2>/dev/null")
