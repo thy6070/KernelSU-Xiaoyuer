@@ -2734,9 +2734,9 @@ private fun ModeButton(
                             } catch (t: Throwable) { }
                             val sp = scriptFile.absolutePath.replace("'", "'\\''")
                             val r1 = su("rm -f /data/adb/xy_game.off; cat '" + sp + "' > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon; ls -l /data/adb/xy_perf_daemon 2>/dev/null | awk '{print \$5}'")
-                            // 开启：不杀旧进程；已经在跑就直接返回
-                            val r2 = su("P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 & sleep 2; P2=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P2\" ] && kill -0 \"\$P2\" 2>/dev/null; then echo 1; else echo 0; fi; fi")
-                            if (r2.trim() == "1") "已开启" else "已开启（守护未确认，请重启App再看）"
+                            // 开启：直接启动（脚本内部会单例处理，并自动识别机型+写第6行+配置）
+                            su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2; setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 &")
+                            "已开启"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
                             val sf2 = java.io.File(ctx3.filesDir, "xy_game_daemon.sh")
@@ -2751,6 +2751,9 @@ private fun ModeButton(
                             su("rm -f /data/adb/xy_perf_daemon /data/adb/xy_perf_daemon /data/adb/xy_game.sh 2>/dev/null")
                             // 1. 解禁所有（不管谁禁的，全部恢复）
                             su("pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r pk; do [ -z \"\$pk\" ] && continue; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
+                            // 1.5 清理旧版本性能模式残留（小鱼儿1.7 / perf_ultimate / jisu_mode 等）
+                            //     ★ 保护 /storage/emulated/0/小鱼儿 目录
+                            su("find /sdcard /data/adb /data/local/tmp -maxdepth 3 \\\( -path '/storage/emulated/0/小鱼儿' -o -path '*/小鱼儿/小鱼儿密钥' \\\) -prune -o \\\\( -iname '*小鱼儿*1*' -o -iname '*小鱼儿*性能*' -o -iname 'perf_ultimate*' -o -iname 'perf_bind*' -o -iname 'jisu_mode*' -o -iname '小鱼儿性能*' \\\\) -print 2>/dev/null | while read -r f; do rm -rf \"\\$f\" 2>/dev/null; done")
                             // 2. 解除所有 bind 遮罩
                             su("for m in /proc/powerhal_cpu_ctrl/perfserv_freq /proc/powerhal_cpu_ctrl/adpf_enable /proc/perfmgr/perf_ioctl /sys/module/perfmgr/parameters/min_freq_limit_level /sys/module/perfmgr/parameters/max_freq_limit_level /sys/module/perfmgr/parameters/gpu_req_min_freq /proc/thermal_message/temp_state /proc/thermal_message/market_download_limit /proc/thermal_message/cpu_nolimit_temp; do while umount \$m 2>/dev/null; do :; done; done")
                             su("rm -rf /dev/xy_ps_bak /dev/xy_pmi_empty /dev/xy_tm_* /dev/scene_fast* /dev/scene_sd_* /dev/scene_* 2>/dev/null")
