@@ -2637,6 +2637,7 @@ private fun ModeButton(
     slot: String = "path"
 ) {
     var on by remember { mutableStateOf(false) }
+    var clickTick by remember { mutableStateOf(0) }
     var onInitDone by remember { mutableStateOf(false) }
     // 每次进入界面：检测守护文件是否存在（存在=开，不存在=关）
     LaunchedEffect(Unit) {
@@ -2700,7 +2701,8 @@ private fun ModeButton(
     }
     // 首次进入跳过，只有用户点击（on 变化）才执行
     var modeFirstRun by remember { mutableStateOf(true) }
-    LaunchedEffect(title, on) {
+    LaunchedEffect(title, clickTick) {
+        if (clickTick == 0) return@LaunchedEffect
         if (!onInitDone) return@LaunchedEffect
         if (modeFirstRun) { modeFirstRun = false; return@LaunchedEffect }
         if (title == "性能模式") {
@@ -2821,29 +2823,28 @@ private fun ModeButton(
             }
         }
         if (title == "放开通行") {
-            val remembered2 = ctx3.getSharedPreferences("yx_mode", 0).getBoolean("open", false)
-            if (remembered2) {
-                scope2.launch {
-                    withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        runCatching {
-                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                "sh /data/adb/service.d/xy_open_access.sh >/dev/null 2>&1")).waitFor()
-                        }
+            // 检测自己的文件是否存在（存在=开，不存在=关）
+            val exists = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                        "[ -f /data/adb/service.d/xy_open_access.sh ] && echo 1 || echo 0"))
+                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
+                    o == "1"
+                } catch (t: Throwable) { false }
+            }
+            if (on && exists) {
+                // 关闭：删文件
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                            "rm -f /data/adb/service.d/xy_open_access.sh")).waitFor()
                     }
                 }
-            }
-            on = remembered2 ||
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                try {
-                    val pr = Runtime.getRuntime().exec(
-                        arrayOf(suBin(), "--mount-master", "-c", "[ -f /data/adb/service.d/xy_open_access.sh ] && echo y || echo n")
-                    )
-                    val o = pr.inputStream.bufferedReader().readText()
-                    pr.waitFor()
-                    o.trim() == "y"
-                } catch (t: Throwable) {
-                    false
-                }
+                latencyMsg = "已关闭"
+            } else if (on && !exists) {
+                latencyMsg = "放开通行未部署"
+            } else {
+                latencyMsg = "已关闭"
             }
             refreshLatency()
         }
@@ -2857,6 +2858,7 @@ private fun ModeButton(
             .background(Color(0xE60E0E10))
             .clickable {
                 on = !on
+                clickTick++
                 if (title == "刷入内核模块") {
                     latencyMsg = "导出中…"
                     scope2.launch {
