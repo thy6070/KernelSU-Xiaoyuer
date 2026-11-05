@@ -3793,6 +3793,8 @@ private val perfGameScript = listOf(
     "  *)",
     "    echo \"  [未适配] 机型 \$MODEL（\$SOCKEY）没有配置，不开启性能模式\"",
     "    echo \"  已写入第6行: \$NAME\"",
+    "    # 删掉自己的守护文件，避免 App 误判为\"已开启\"",
+    "    rm -f /data/adb/xy_perf_daemon /data/adb/xy_game.pid 2>/dev/null",
     "    exit 0 ;;",
     "esac",
     "",
