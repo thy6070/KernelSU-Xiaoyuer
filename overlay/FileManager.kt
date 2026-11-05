@@ -2638,16 +2638,17 @@ private fun ModeButton(
 ) {
     var on by remember { mutableStateOf(false) }
     var onInitDone by remember { mutableStateOf(false) }
+    // 每次进入界面：检测守护是否存在（存在=开，不存在=关）
     LaunchedEffect(Unit) {
-        val st = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val running = withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                    "P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
-                val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor(); o
-            }.getOrDefault("0")
+                    "P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else ps -A -o ARGS 2>/dev/null | grep -q 'xy_perf_daemon' && echo 1 || echo 0; fi"))
+                val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
+                o.trim() == "1"
+            }.getOrDefault(false)
         }
-        val running = st.trim() == "1"
-        if (running != on) on = running
+        on = running
         onInitDone = true
     }
     val ctxMsg = androidx.compose.ui.platform.LocalContext.current
