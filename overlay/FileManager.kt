@@ -2764,8 +2764,11 @@ private fun ModeButton(
                             su("sh /data/adb/xy_perf_daemon restore >/dev/null 2>&1")
                             // ===== 2. 杀所有旧进程（任何名字）+ 删所有旧版本自启 =====
                             su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E '性能模式|xy_perf_daemon|xy_game|xy_guard|xy_perf|perf_bind|jisu_mode' | grep -v grep | grep -v 'sh -c' | grep -v '恢复原样' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3")
-                            su("rm -f /data/adb/service.d/xy_game.sh /data/adb/service.d/xy_guard.sh /data/adb/service.d/xy_perf.sh /data/adb/post-fs-data.d/xy_* /data/adb/init.d/xy_* 2>/dev/null")
-                            su("rm -f /data/adb/service.d/*xiaoyu* /data/adb/service.d/*xy* /data/adb/post-fs-data.d/*xy* 2>/dev/null")
+                            // 删所有"我们的"自启（只匹配 xy_/xiaoyu/性能/小鱼儿，绝不碰别人的）
+                            su("rm -f /data/adb/service.d/xy_* /data/adb/service.d/*xiaoyu* /data/adb/service.d/*性能* /data/adb/service.d/*小鱼儿* 2>/dev/null")
+                            su("rm -f /data/adb/post-fs-data.d/xy_* /data/adb/post-fs-data.d/*xiaoyu* /data/adb/post-fs-data.d/*性能* 2>/dev/null")
+                            su("rm -f /data/adb/init.d/xy_* /data/adb/init.d/*xiaoyu* /data/adb/init.d/*性能* 2>/dev/null")
+                            su("rm -f /data/adb/service.d/xy_game.sh /data/adb/service.d/xy_guard.sh /data/adb/service.d/xy_perf.sh /data/adb/service.d/xy_open_access.sh 2>/dev/null")
                             su("rm -f /data/adb/xy_perf_daemon /data/adb/xy_perf_daemon /data/adb/xy_game.sh 2>/dev/null")
                             // 1. 解禁所有（不管谁禁的，全部恢复）
                             su("pm list packages -d 2>/dev/null | sed 's/^package://' | while read -r pk; do [ -z \"\$pk\" ] && continue; pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
@@ -3765,18 +3768,18 @@ private val perfGameScript = listOf(
     "      P_THM=\"tmsg\"; P_CORE_CPU=\"6:2/2/0\"; P_UCLAMP=\"1024\"; P_TAP=\"0\"; P_WALT=\"1\"",
     "      P_HZ=\"144\"; P_BIND=\"1\"; P_PKGS=\"1\"; P_PKGSET=\"mi\" ;;",
     "    redmi_kpad|mtk_d9400p)   # 红米K Pad 天玑9400+（全拉满）",
-    "      P_MAXPCT=\"100,100,100\"; P_MAXABS=\"\"; P_MIN=\"hw_min\"",
+    "      P_MAXPCT=\"100,100,100\"; P_MAXABS=\"\"; P_MIN=\"max\"",
     "      P_GOV=\"performance\"; P_TL=\"keep\"; P_UP=\"10\"; P_DOWN=\"5000\"",
     "      P_CPSET=\"0-3,0-5,0-5,0-7\"; P_GPU=\"disabled\"; P_GPOUP=\"1612000\"; P_PS=\"clear\"",
     "      P_THM=\"shell\"; P_CORE=\"4/4/1,3/3/0,1/1/0\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"",
     "      P_HZ=\"max\"; P_BIND=\"1\"; P_PKGSET=\"mi\" ;;",
     "    mi_pad6pro|sd_8gen1)     # 小米平板6 Pro 骁龙8Gen1（23046RP50C 实测 Scene 极速）",
     "      P_MAXPCT=\"100,100,100\"; P_MAXABS=\"\"",
-    "      P_MINABS=\"1056000,1555200,1766400\"",
+    "      P_MIN=\"max\"",
     "      P_HIS=\"1228800,1555200,1651200\"",
     "      P_TLSTR=\"10 1664837:-6|10 2569875:0|10 2587265:0 2703984:-6\"",
     "      P_GOV=\"performance\"; P_UP=\"0\"; P_DOWN=\"1000\"",
-    "      P_CPSET=\"0-3,0-3,0-5,0-7\"; P_GPU=\"mod100\"; P_GPUMX=\"862000000\"; P_PS=\"keep\"",
+    "      P_CPSET=\"0-3,0-3,0-5,0-7\"; P_GPU=\"mod100\"; P_GPUMX=\"0\"; P_PS=\"keep\"",
     "      P_THM=\"tmsg\"; P_CORE_CPU=\"0:4/4/0,4:3/3/0,7:1/1/0\"; P_UCLAMP=\"1024\"",
     "      P_HZ=\"max\"; P_BIND=\"1\"; P_PKGSET=\"mi\" ;;",
     "    mi_pad8gen4|sd_8gen4)    # 小米平板8 骁龙8Gen4（全拉满：max=hw/perf/GPU温控解除）",
