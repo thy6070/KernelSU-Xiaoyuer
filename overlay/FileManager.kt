@@ -2628,6 +2628,19 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
     }
 }
 
+private fun loadExecPath(slot: String): String? {
+    return try {
+        val lineNo = when (slot) { "path" -> 3; "path2" -> 4; "path3" -> 5; else -> 3 }
+        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+            "sed -n '" + lineNo + "p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+        val o = pr.inputStream.bufferedReader().readText().trim()
+        pr.waitFor()
+        o.ifEmpty { null }
+    } catch (t: Throwable) {
+        null
+    }
+}
+
 @Composable
 private fun ModeButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -2656,6 +2669,10 @@ private fun ModeButton(
     var latencyMsg by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         latencyMsg = ctxMsg.getSharedPreferences("yx_mode", 0).getString("msg_" + title, null)
+        // 进界面就读取"执行此文件"的路径（不用点击）
+        if (title == "执行此文件" || title == "刷入驱动") {
+            execPath = withContext(kotlinx.coroutines.Dispatchers.IO) { loadExecPath(slot) }
+        }
     }
     LaunchedEffect(latencyMsg) {
         val v = latencyMsg
@@ -2789,18 +2806,8 @@ private fun ModeButton(
             }
         }
         if (title == "执行此文件" || title == "刷入驱动") {
-            execPath = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                try {
-                    val lineNo = when (slot) { "path" -> 3; "path2" -> 4; "path3" -> 5; else -> 3 }
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "sed -n '" + lineNo + "p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
-                    val o = pr.inputStream.bufferedReader().readText().trim()
-                    pr.waitFor()
-                    o.ifEmpty { null }
-                } catch (t: Throwable) {
-                    null
-                }
-            }
+            // 点击时也刷新一次（保险）
+            execPath = withContext(kotlinx.coroutines.Dispatchers.IO) { loadExecPath(slot) }
         }
         if (title == "隐藏BL") {
             on = ctx3.getSharedPreferences("yx_mode", 0).getBoolean("bl", false) ||
@@ -3707,6 +3714,7 @@ private val perfGameScript = listOf(
     "case \"\$MODEL\" in",
     "  25091RP04C|25091RP04|25091RP0) PROFILE=\"mi_pad8pro\" ;;   # 小米平板8 Pro（骁龙8Elite，实测）",
     "  25097RP43C|25097RP4C|25097RP4D) PROFILE=\"mi_pad8gen4\" ;;  # 小米平板8（骁龙8Gen4，实测）",
+    "  25079RPDCC|25079RPDC)          PROFILE=\"redmi_kpad\" ;;   # 红米K Pad（天玑9400+，实测）",
     "  PLF110|PKG110)                 PROFILE=\"op_ace5\" ;;      # 一加Ace5 竞速版（天玑9400，实测）",
     "esac",
     "if [ -z \"\$PROFILE\" ]; then",
@@ -3755,6 +3763,13 @@ private val perfGameScript = listOf(
     "      P_CPSET=\"0-1,0-4,0-4,0-7\"; P_GPU=\"mod100\"; P_GPUMX=\"0\"; P_PS=\"keep\"",
     "      P_THM=\"tmsg\"; P_CORE_CPU=\"6:2/2/0\"; P_UCLAMP=\"1024\"; P_TAP=\"0\"; P_WALT=\"1\"",
     "      P_HZ=\"144\"; P_BIND=\"1\"; P_PKGS=\"1\"; P_PKGSET=\"mi\" ;;",
+    "    redmi_kpad|sd_8elite)    # 红米K Pad 天玑9400+（25079RPDCC 实测 Scene 极速模式）",
+    "      P_MAXPCT=\"75,85,86\"; P_MAXABS=\"1800000,2800000,3200000\"",
+    "      P_MINABS=\"339000,622000,798000\"",
+    "      P_GOV=\"sugov_ext\"; P_UP=\"1000\"; P_DOWN=\"1000\"; P_TL=\"keep\"",
+    "      P_CPSET=\"0-3,0-5,0-5,0-7\"; P_GPU=\"disabled\"; P_GPOUP=\"1378000\"; P_PS=\"clear\"",
+    "      P_THM=\"off\"; P_CORE_CPU=\"0:4/4/1,4:3/3/0,7:1/1/0\"; P_UCLAMP=\"0\"",
+    "      P_HZ=\"keep\"; P_BIND=\"1\"; P_PKGSET=\"\" ;;",
     "    mi_pad8gen4|sd_8gen4)    # 小米平板8 骁龙8Gen4（全拉满：max=hw/perf/GPU温控解除）",
     "      P_MAXPCT=\"100,100,100,100\"; P_MAXABS=\"\"",
     "      P_MIN=\"max\"",
