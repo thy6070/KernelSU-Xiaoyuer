@@ -2775,6 +2775,9 @@ private fun ModeButton(
                             // 1.5 清理旧版本性能模式残留（小鱼儿1.7 / perf_ultimate / jisu_mode 等）
                             //     ★ 保护 /storage/emulated/0/小鱼儿 目录
                             su("rm -rf /data/adb/perf_ultimate /data/adb/perf_bind /data/adb/jisu_mode /sdcard/小鱼儿1.7 /sdcard/小鱼儿性能模式.sh /sdcard/小鱼儿性能.sh /data/local/tmp/jisu_mode 2>/dev/null")
+                            // 1.7 恢复新增优化项（KSM/L3/DDR/sched_boost）
+                            su("echo 1 > /sys/kernel/mm/ksm/run 2>/dev/null; echo 0 > /proc/sys/walt/sched_boost 2>/dev/null; echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; echo 0 > /proc/sys/kernel/softlockup_panic 2>/dev/null")
+                            su("for L in /sys/devices/system/cpu/bus_dcvs/L3 /sys/devices/system/cpu/bus_dcvs/DDR; do [ -d \"\$L\" ] && { cat \"\$L/hw_min_freq\" 2>/dev/null > \"\$L/boost_freq\" 2>/dev/null; }; done")
                             // 2. 解除所有 bind 遮罩
                             su("for m in /proc/powerhal_cpu_ctrl/perfserv_freq /proc/powerhal_cpu_ctrl/adpf_enable /proc/perfmgr/perf_ioctl /sys/module/perfmgr/parameters/min_freq_limit_level /sys/module/perfmgr/parameters/max_freq_limit_level /sys/module/perfmgr/parameters/gpu_req_min_freq /proc/thermal_message/temp_state /proc/thermal_message/market_download_limit /proc/thermal_message/cpu_nolimit_temp; do while umount \$m 2>/dev/null; do :; done; done")
                             su("rm -rf /dev/xy_ps_bak /dev/xy_pmi_empty /dev/xy_tm_* /dev/scene_fast* /dev/scene_sd_* /dev/scene_* 2>/dev/null")
@@ -4267,8 +4270,6 @@ private val perfGameScript = listOf(
     "  W /sys/kernel/mm/ksm/run 0",
     "  # 2. 关闭 zram 写回（如可）",
     "  W /sys/block/zram0/writeback 0",
-    "  # 3. 降低日志（减少 IO）",
-    "  setprop logd.klogd 0 2>/dev/null",
     "  # 4. walt 调度增强",
     "  W /proc/sys/walt/sched_boost 1",
     "  W /proc/sys/kernel/sched_boost 1",
