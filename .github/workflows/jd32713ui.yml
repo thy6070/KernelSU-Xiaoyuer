@@ -13,8 +13,8 @@ jobs:
       cert_size: ${{ steps.cert.outputs.size }}
       cert_hash: ${{ steps.cert.outputs.hash }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
@@ -56,7 +56,7 @@ jobs:
           cargo build --package ksuinit --target=aarch64-linux-android --release
           mkdir -p userspace/ksud/bin/aarch64
           cp target/aarch64-linux-android/release/ksuinit userspace/ksud/bin/aarch64/
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: self
       - name: Copy lkm ko into ksud assets
@@ -73,7 +73,7 @@ jobs:
           source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
           cargo build --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
           ls -l target/aarch64-linux-android/release/ksud
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ksud-aarch64
           path: |
@@ -84,7 +84,7 @@ jobs:
     needs: [prepare, ksud]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Clone official 32713
         run: |
@@ -135,12 +135,12 @@ jobs:
           python3 ../.github/brand/spoof_ns.py
           echo "spoof ok"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Build APK
         run: |
@@ -150,7 +150,7 @@ jobs:
           ./gradlew clean :app:assembleRelease -x lint 2>&1 | tail -120
 
       - name: Download ksud
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ksud-aarch64
           path: ksud-out
@@ -179,13 +179,13 @@ jobs:
             --out manager-32713-ui.apk aligned.apk
           $BT/apksigner verify --print-certs manager-32713-ui.apk | head -4
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: manager-32713-ui
           path: manager-32713-ui.apk
 
       - name: Publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: jd-32713-ui
           name: 极道帝兵 UI

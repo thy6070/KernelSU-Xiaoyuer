@@ -7,7 +7,7 @@ jobs:
   gen:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
@@ -22,7 +22,7 @@ jobs:
           keytool -exportcert -alias jidao -keystore jidao.jks -storepass "$PASS" -file cert.der
           echo "SHA256:"
           sha256sum cert.der
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: jidao-key
           path: |
