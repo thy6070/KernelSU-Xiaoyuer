@@ -2727,7 +2727,13 @@ private fun ModeButton(
                 val pr0 = Runtime.getRuntime().exec(arrayOf("getprop", "ro.product.model"))
                 val v = pr0.inputStream.bufferedReader().readText().trim(); pr0.waitFor(); v
             }.getOrDefault("")
-            val supported = mdl in listOf("PLF110", "PKG110", "25091RP04C", "25091RP04", "25091RP0")
+            val supported = mdl in listOf(
+                "PLF110", "PKG110",                                  // 一加 Ace5 竞速版
+                "25091RP04C", "25091RP04", "25091RP0",               // 小米平板8 Pro
+                "25097RP43C", "25097RP4C", "25097RP4D",              // 小米平板8 Gen4
+                "25079RPDCC", "25079RPDC",                           // 红米 K Pad
+                "23046RP50C", "25046RP50C", "25046RP5"               // 小米平板6 Pro
+            )
             if (enabling && !supported) {
                 latencyMsg = "未适配此机型，不开启"
                 return@LaunchedEffect
