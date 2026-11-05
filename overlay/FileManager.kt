@@ -2618,7 +2618,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                                     "P=$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"$P\" ] && kill -0 \"$P\" 2>/dev/null; then echo 1; else echo 0; fi"))
                                 val n = p2.inputStream.bufferedReader().readText().trim().toIntOrNull() ?: 0
                                 p2.waitFor()
-                                if (n > 0) name else "未开启（$name）"
+                                if (n > 0) "已开启 · $name" else "未开启（$name）"
                             }
                         } catch (t: Throwable) { "未适配此机型" }
                     }
