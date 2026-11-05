@@ -2600,7 +2600,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                 androidx.compose.runtime.mutableStateOf("检查中…")
             }
             androidx.compose.runtime.LaunchedEffect(Unit) {
-                while (true) {
+                run {
                     devLabel = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         try {
                             val pr = Runtime.getRuntime().exec(arrayOf("getprop", "ro.product.model"))
@@ -2622,7 +2622,6 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                             }
                         } catch (t: Throwable) { "未适配此机型" }
                     }
-                    kotlinx.coroutines.delay(2000)
                 }
             }
             ModeButton(Icons.Outlined.DarkMode, "放开通行")
