@@ -2703,8 +2703,6 @@ private fun ModeButton(
     var modeFirstRun by remember { mutableStateOf(true) }
     LaunchedEffect(title, clickTick) {
         if (clickTick == 0) return@LaunchedEffect
-        if (!onInitDone) return@LaunchedEffect
-        if (modeFirstRun) { modeFirstRun = false; return@LaunchedEffect }
         if (title == "性能模式") {
             val enabling = on
             // 未适配机型：不开启（脚本也有兜底）
