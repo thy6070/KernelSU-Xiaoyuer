@@ -2735,7 +2735,8 @@ private fun ModeButton(
                             } catch (t: Throwable) { }
                             val sp = scriptFile.absolutePath.replace("'", "'\\''")
                             val r1 = su("rm -f /data/adb/xy_game.off; cat '" + sp + "' > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon; ls -l /data/adb/xy_perf_daemon 2>/dev/null | awk '{print \$5}'")
-                            val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E '性能模式|xy_perf_daemon|xy_game' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 & sleep 2; P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else echo 0; fi")
+                            // 开启：不杀旧进程；已经在跑就直接返回
+                            val r2 = su("P=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P\" ] && kill -0 \"\$P\" 2>/dev/null; then echo 1; else setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 & sleep 2; P2=\$(cat /data/adb/xy_game.pid 2>/dev/null); if [ -n \"\$P2\" ] && kill -0 \"\$P2\" 2>/dev/null; then echo 1; else echo 0; fi; fi")
                             if (r2.trim() == "1") "已开启" else "已开启（守护未确认，请重启App再看）"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
