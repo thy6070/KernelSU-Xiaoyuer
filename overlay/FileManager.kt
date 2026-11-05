@@ -4024,6 +4024,8 @@ private val perfGameScript = listOf(
     "        [ -d \"\$z\" ] || continue",
     "        case \"\$(cat \"\$z/type\" 2>/dev/null)\" in",
     "          shell_front|shell_frame|shell_back) W \"\$z/mode\" disabled ;;",
+    "          # 仿 Scene Extreme GT：写 emul_temp 假低温（29.5℃），温控以为不热",
+    "          battery|mtk-battery|usb|vtskin*|shell_*) W \"\$z/emul_temp\" 29500 ;;",
     "        esac",
     "      done ;;",
     "    both|hard) for z in /sys/class/thermal/thermal_zone*/mode; do W \"\$z\" disabled; done ;;",
