@@ -3825,6 +3825,8 @@ private val perfGameScript = listOf(
     "  op_ace5)     NAME=\"一加 Ace5 竞速版\" ;;",
     "  mi_pad8pro)  NAME=\"小米平板8 Pro\" ;;",
     "  mi_pad8gen4) NAME=\"小米平板8\" ;;",
+    "  redmi_kpad)  NAME=\"红米 K Pad\" ;;",
+    "  mi_pad6pro)  NAME=\"小米平板6 Pro\" ;;",
     "  *)           NAME=\"未适配此机型\" ;;",
     "esac",
     "mkdir -p /storage/emulated/0/小鱼儿 2>/dev/null",
