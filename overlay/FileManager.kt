@@ -2713,12 +2713,17 @@ private fun ModeButton(
                             return o
                         }
                         if (enabling) {
-                            su("rm -f /data/adb/xy_game.off; cat > /data/adb/xy_game.sh <<'XYEOF'\n" + perfGameScript.joinToString("\n") + "\nXYEOF\nchmod 755 /data/adb/xy_game.sh")
-                            su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | awk '\$2==\"sh\" && \$3==\"/data/adb/xy_game.sh\"{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/xy_game.sh >/dev/null 2>&1 &")
-                            "已开启"
+                            // 先把脚本写到 /sdcard（App 有权限），再 cp 过去（短命令，不会超长）
+                            try {
+                                java.io.File("/sdcard/xy_game_v13.sh").writeText(perfGameScript.joinToString("\n"))
+                            } catch (t: Throwable) { }
+                            val r1 = su("rm -f /data/adb/xy_game.off; cp -f /sdcard/xy_game_v13.sh /data/adb/xy_game.sh 2>/dev/null || cat /sdcard/xy_game_v13.sh > /data/adb/xy_game.sh; chmod 755 /data/adb/xy_game.sh; ls -l /data/adb/xy_game.sh 2>/dev/null | awk '{print \$5}'")
+                            val r2 = su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | awk '\$2==\"sh\" && \$3==\"/data/adb/xy_game.sh\"{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.3; setsid sh /data/adb/xy_game.sh >/dev/null 2>&1 & sleep 1; ps -A -o PID,ARGS 2>/dev/null | awk '\$2==\"sh\" && \$3==\"/data/adb/xy_game.sh\"{print \$1}' | wc -l")
+                            if (r2.trim() == "0" || r2.trim().isEmpty()) "已开启（但守护未启动，请检查）" else "已开启"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
-                            su("cat > /data/adb/xy_game.sh <<'XYEOF'\n" + perfGameScript.joinToString("\n") + "\nXYEOF\nchmod 755 /data/adb/xy_game.sh")
+                            try { java.io.File("/sdcard/xy_game_v13.sh").writeText(perfGameScript.joinToString("\n")) } catch (t: Throwable) { }
+                            su("cp -f /sdcard/xy_game_v13.sh /data/adb/xy_game.sh 2>/dev/null || cat /sdcard/xy_game_v13.sh > /data/adb/xy_game.sh; chmod 755 /data/adb/xy_game.sh")
                             su("sh /data/adb/xy_game.sh restore >/dev/null 2>&1")
                             // ===== 2. 杀守护 + 兜底恢复（防止快照缺失）=====
                             su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | awk '\$2==\"sh\" && \$3==\"/data/adb/xy_game.sh\"{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2")
