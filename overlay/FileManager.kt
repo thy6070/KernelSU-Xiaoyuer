@@ -2771,7 +2771,7 @@ private fun ModeButton(
                             val sp = scriptFile.absolutePath.replace("'", "'\\''")
                             val r1 = su("rm -f /data/adb/xy_game.off; cat '" + sp + "' > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon; ls -l /data/adb/xy_perf_daemon 2>/dev/null | awk '{print \$5}'")
                             // 开启：直接启动（脚本内部会单例处理，并自动识别机型+写第6行+配置）
-                            su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2; setsid sh /data/adb/xy_perf_daemon >/data/adb/xy_daemon.log 2>&1 &")
+                            su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2; setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 &")
                             "已开启"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
@@ -3866,8 +3866,7 @@ private val perfGameScript = listOf(
     "esac",
     "",
     "profile_load",
-    "echo \"[profile] \$PROFILE (\$MODEL / \$SOCKEY)\"",
-    "",
+    "  :",
     "# ============ 三、工具 ============",
     "W() { [ -f \"\$1\" ] && { chmod 0666 \"\$1\" 2>/dev/null; echo \"\$2\" > \"\$1\" 2>/dev/null; }; }",
     "",
@@ -4532,24 +4531,24 @@ private val perfGameScript = listOf(
     "      ;;",
     "    *) return 0 ;;",
     "  esac",
-    "  echo \"[level] \$P_LEVEL (max=\$P_MAXPCT)\"",
+    "  :",
     "}",
     "",
     "apply_all() {",
-    "  echo \"[apply] \$PROFILE\"",
+    "  :",
     "  detect_game",
     "  apply_level",
     "  apply_cpu; apply_tl; apply_cpuset; apply_gpu; apply_perfserv",
     "  apply_thermal; apply_extra; apply_sd_extra; apply_corectl; apply_pkgs; apply_hz; bind_threads",
-    "  echo \"[apply] done\"",
+    "  :",
     "}",
     "",
     "# ============ 五、守护（只维持前台值，不切前后台）============",
     "# restore 子命令：按记录的原始状态精确恢复（按机型）",
     "if [ \"\$ACTION\" = \"restore\" ]; then",
-    "  echo \"[restore] 按原始快照恢复...\"",
+    "  :",
     "  restore_orig",
-    "  echo \"[restore] 完成\"",
+    "  :",
     "  rm -f \"\$SNAP\" 2>/dev/null",
     "  exit 0",
     "fi",
@@ -4584,7 +4583,7 @@ private val perfGameScript = listOf(
     "      apply_level",
     "      apply_cpu",
     "      apply_thermal",
-    "      echo \"[auto] \$GAME -> \$P_LEVEL\"",
+    "  :",
     "    fi",
     "    bind_threads",
     "    apply_cpuset                 # ColorOS 会改回，必须维持",
