@@ -4547,6 +4547,7 @@ private val perfGameScript = listOf(
     "",
     "# ===== 档位（4 档完整配置，Scene 同款）=====",
     "apply_level() {",
+    "  echo \"\$P_LEVEL\" > /data/adb/xy_level 2>/dev/null",
     "  case \"\$P_LEVEL\" in",
     "    cool)",
     "      P_MAXPCT=\"60,60,60,60\"; P_MAXABS=\"\"",
