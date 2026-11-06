@@ -3801,7 +3801,7 @@ private val perfGameScript = listOf(
     "    redmi_kpad|mtk_d9400p)   # 红米K Pad 天玑9400+（全拉满）",
     "      P_MAXPCT=\"100,100,100\"; P_MAXABS=\"\"; P_MIN=\"hw_min\"",
     "      P_GOV=\"sugov_ext\"; P_TL=\"keep\"; P_UP=\"10\"; P_DOWN=\"5000\"",
-    "      P_CPSET=\"0-3,0-5,0-5,0-7\"; P_GPU=\"disabled\"; P_GPOUP=\"1612000\"; P_PS=\"clear\"",
+    "      P_CPSET=\"0-3,0-5,0-5,0-7\"; P_GPU=\"disabled\"; P_GPOUP=\"1612000\"; P_PS=\"one\"",
     "      P_THM=\"shell\"; P_CORE=\"4/4/1,3/3/0,1/1/0\"; P_UCLAMP=\"1024\"; P_TAP=\"1\"",
     "      P_HZ=\"max\"; P_BIND=\"1\"; P_PKGSET=\"mi\" ;;",
     "    mi_pad6pro|sd_8gen1)     # 小米平板6 Pro 骁龙8Gen1（23046RP50C 实测 Scene 极速）",
