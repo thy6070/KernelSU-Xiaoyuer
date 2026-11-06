@@ -2771,7 +2771,7 @@ private fun ModeButton(
                             val sp = scriptFile.absolutePath.replace("'", "'\\''")
                             val r1 = su("rm -f /data/adb/xy_game.off; cat '" + sp + "' > /data/adb/xy_perf_daemon; chmod 755 /data/adb/xy_perf_daemon; ls -l /data/adb/xy_perf_daemon 2>/dev/null | awk '{print \$5}'")
                             // 开启：直接启动（脚本内部会单例处理，并自动识别机型+写第6行+配置）
-                            su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2; setsid sh /data/adb/xy_perf_daemon >/dev/null 2>&1 &")
+                            su("for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep -E 'xy_perf_daemon' | grep -v grep | grep -v 'sh -c' | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done; sleep 0.2; setsid sh /data/adb/xy_perf_daemon >/data/adb/xy_daemon.log 2>&1 &")
                             "已开启"
                         } else {
                             // ===== 1. 按机型精确恢复（脚本记录的原始快照）=====
