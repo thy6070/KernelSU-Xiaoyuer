@@ -4087,7 +4087,7 @@ private val perfGameScript = listOf(
     "      done",
     "      for base in /proc/thermal_message /sys/class/thermal/thermal_message /sys/devices/virtual/thermal/thermal_message; do",
     "        [ -d \"\$base\" ] || continue",
-    "        for f in temp_state market_download_limit cpu_nolimit_temp; do",
+    "        for f in atc_enable temp_aware sconfig balance_mode connsys_limit modem_level modem_limit poor_modem_limit cloud_game market_download_limit thermal_max_brightness torch_level torch_real_level video_mode voice_limit wifi_limit super_hdr display_therm_temp flash_state; do",
     "          pf=\"\$base/\$f\"; [ -e \"\$pf\" ] || continue",
     "          umount \"\$pf\" 2>/dev/null",
     "          cp -f \"\$pf\" \"/dev/xy_tm_\$f\" 2>/dev/null",
