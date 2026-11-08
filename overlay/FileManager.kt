@@ -221,7 +221,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(BG_COLOR))
-                .blur(if (panel) 30.dp else 0.dp)
+                .blur(if (panel || termFull) 30.dp else 0.dp)
         ) {
             if (termFull) {
                 TerminalOverlay(
@@ -2469,15 +2469,35 @@ private fun TerminalOverlay(
     onExit: () -> Unit
 ) {
     val scroll = rememberScrollState()
+    var open by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { open = true }
+    // 收起：先播 shrink 动画，再真正关闭
+    LaunchedEffect(open) {
+        if (!open) {
+            kotlinx.coroutines.delay(300)
+            onExit()
+        }
+    }
     Dialog(
-        onDismissRequest = onExit,
+        onDismissRequest = { open = false },
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false,
             dismissOnClickOutside = false
         )
     ) {
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0x66000000))) {
+      androidx.compose.animation.AnimatedVisibility(
+        visible = open,
+        enter = androidx.compose.animation.expandVertically(
+            animationSpec = tween(360, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+            expandFrom = Alignment.CenterVertically
+        ) + androidx.compose.animation.fadeIn(tween(200)),
+        exit = androidx.compose.animation.shrinkVertically(
+            animationSpec = tween(260, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+            shrinkTowards = Alignment.CenterVertically
+        ) + androidx.compose.animation.fadeOut(tween(160))
+      ) {
         Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             // 执行输出（全屏）
             SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -2508,7 +2528,7 @@ private fun TerminalOverlay(
                     ),
                     singleLine = true
                 )
-                IconButton(onClick = onExit, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = { open = false }, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Icons.Outlined.FullscreenExit,
                         contentDescription = "缩小",
@@ -2527,6 +2547,7 @@ private fun TerminalOverlay(
                 )
             }
         }
+      }
     }
     }
 }
