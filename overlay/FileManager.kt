@@ -22,7 +22,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -48,7 +47,6 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.Person
@@ -75,7 +73,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.AdminPanelSettings
@@ -106,13 +103,10 @@ import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -193,7 +187,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     var panel by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
-    var termFull by remember { mutableStateOf(false) }   // 全屏终端
     var termInput by remember { mutableStateOf("") }
     var termText by remember { mutableStateOf("") }
     var selectedFile by remember { mutableStateOf<String?>(null) }
@@ -221,28 +214,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val panelP = remember { Animatable(0f) }
     val uiScope = rememberCoroutineScope()
 
-    // 终端命令执行（岛内和全屏共用）
-    fun termRun() {
-        val cmd = termInput
-        termInput = ""
-        val alive = activeProc
-        if (alive != null && alive.isAlive) {
-            try {
-                alive.outputStream.write((cmd + "\n").toByteArray())
-                alive.outputStream.flush()
-                termText = termText + cmd + "\n"
-            } catch (t: Throwable) {
-                termText = termText + "写入失败: " + (t.message ?: "") + "\n"
-            }
-        } else {
-            termText = termText + "\n$ " + cmd + "\n"
-            uiScope.launch {
-                val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
-                termText = termText + out.out.joinToString("\n") + out.err.joinToString("\n") + "\n"
-            }
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))) {
         Box(
             modifier = Modifier
@@ -250,15 +221,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 .background(Color(BG_COLOR))
                 .blur(if (panel) 30.dp else 0.dp)
         ) {
-            if (termFull) {
-                TerminalOverlay(
-                    text = termText,
-                    input = termInput,
-                    onInputChange = { termInput = it },
-                    onRun = { termRun() },
-                    onExit = { termFull = false }
-                )
-            }
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
             BrowserPane(
@@ -394,11 +356,32 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         runOk = runOk,
         running = running,
         terminalMode = showTerminal,
-        onOpenTerminal = { termFull = true },
         termText = termText,
         termInput = termInput,
         onTermInput = { termInput = it },
-        onTermRun = { termRun() },
+        onTermRun = {
+            val cmd = termInput
+            // 允许空输入（发送换行给等待中的脚本）
+            if (true) {
+                termInput = ""
+                val alive = activeProc
+                if (alive != null && alive.isAlive) {
+                    try {
+                        alive.outputStream.write((cmd + "\n").toByteArray())
+                        alive.outputStream.flush()
+                        termText = termText + cmd + "\n"
+                    } catch (t: Throwable) {
+                        termText = termText + "写入失败: " + (t.message ?: "") + "\n"
+                    }
+                } else {
+                    termText = termText + "\n$ " + cmd + "\n"
+                    uiScope.launch {
+                        val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
+                        termText = termText + out.out.joinToString("\n") + out.err.joinToString("\n") + "\n"
+                    }
+                }
+            }
+        },
         onTermClose = { showTerminal = false },
         onArchiveEnter = {
             val p = longPressPath ?: selectedFile
@@ -794,7 +777,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
         }
     if (editPath != null) {
-        var editFontScale by remember { mutableStateOf(1f) }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -802,76 +784,60 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 .padding(24.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "编辑 " + (editPath ?: "").substringAfterLast('/'),
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1
-                    )
-                    Text(
-                        text = "取消",
-                        color = Color(0xFFAAAAAA),
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .clickable { editPath = null }
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                    Text(
-                        text = "保存",
-                        color = Color(0xFF0A84FF),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clickable {
-                                val target = editPath
-                                if (target != null) {
-                                    uiScope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            try {
-                                                val b64 = android.util.Base64.encodeToString(
-                                                    editText.toByteArray(),
-                                                    android.util.Base64.NO_WRAP
-                                                )
-                                                Shell.cmd(
-                                                    "echo '" + b64 + "' | base64 -d > '" +
-                                                        target.replace("'", "'\''") + "'"
-                                                ).exec()
-                                            } catch (t: Throwable) {
-                                            }
-                                        }
-                                        editPath = null
-                                        refreshTick += 1
-                                    }
-                                }
-                            }
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
+                Text(
+                    text = "编辑 " + (editPath ?: "").substringAfterLast('/'),
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
                 androidx.compose.foundation.text.BasicTextField(
                     value = editText,
                     onValueChange = { editText = it },
                     textStyle = androidx.compose.ui.text.TextStyle(
                         color = Color.White,
-                        fontSize = (12f * editFontScale).sp,
+                        fontSize = 12.sp,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     ),
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .background(Color(0xFF141418), RoundedCornerShape(10.dp))
-                        .pointerInput(Unit) {
-                            detectTransformGestures { _, _, zoom, _ ->
-                                editFontScale = (editFontScale * zoom).coerceIn(0.6f, 3f)
-                            }
-                        }
                         .padding(10.dp)
                 )
-
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        IslandActionButton("取消", Color(0xFF3A3A3C)) {
+                            editPath = null
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        IslandActionButton("保存", Color(0xFF0A84FF)) {
+                            val target = editPath
+                            if (target != null) {
+                                uiScope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        try {
+                                            val b64 = android.util.Base64.encodeToString(
+                                                editText.toByteArray(),
+                                                android.util.Base64.NO_WRAP
+                                            )
+                                            Shell.cmd(
+                                                "echo '" + b64 + "' | base64 -d > '" +
+                                                    target.replace("'", "'\''") + "'"
+                                            ).exec()
+                                        } catch (t: Throwable) {
+                                        }
+                                    }
+                                    editPath = null
+                                    refreshTick += 1
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -951,7 +917,6 @@ private fun ansiAnnotated(src: String): androidx.compose.ui.text.AnnotatedString
     return b.toAnnotatedString()
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ProMaxIsland(
     onBack: () -> Unit = {},
@@ -962,7 +927,6 @@ private fun ProMaxIsland(
     runOk: Boolean,
     running: Boolean,
     terminalMode: Boolean,
-    onOpenTerminal: () -> Unit,
     termText: String,
     termInput: String,
     onTermInput: (String) -> Unit,
@@ -1226,13 +1190,6 @@ private fun ProMaxIsland(
     LaunchedEffect(longPressTick) {
         if (longPressTick <= 0) return@LaunchedEffect
         val lp = longPressPath ?: return@LaunchedEffect
-        if (lp.isNotEmpty()) {
-            // 终端展开时长按 → 全屏终端；其他情况 → 导航栏
-            if (terminalMode) {
-                onOpenTerminal()
-                return@LaunchedEffect
-            }
-        }
         if (lp.isNotEmpty()) {
             navClosing = true
             expanded = false
@@ -2237,21 +2194,16 @@ private fun ProMaxIsland(
                         .fillMaxWidth()
                         .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
                 ) {
-                    Box(
+                    Text(
+                        text = ansiAnnotated(termText),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(240.dp)
-                    ) {
-                        Text(
-                            text = ansiAnnotated(termText),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(termScroll),
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color.White
-                        )
-                    }
+                            .verticalScroll(termScroll),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color.White
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -2269,16 +2221,6 @@ private fun ProMaxIsland(
                             ),
                             singleLine = true
                         )
-                        IconButton(
-                            onClick = { onOpenTerminal() },
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Outlined.Fullscreen,
-                                contentDescription = "放大",
-                                tint = Color(0xFFB0B0B0)
-                            )
-                        }
                         Text(
                             "发送",
                             modifier = Modifier
@@ -2482,103 +2424,80 @@ private fun IslandActionButton(
 }
 
 @Composable
-private fun TerminalOverlay(
-    text: String,
-    input: String,
-    onInputChange: (String) -> Unit,
-    onRun: () -> Unit,
-    onExit: () -> Unit
-) {
-    var open by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { open = true }
-    var fontScale by remember { mutableStateOf(1f) }
-    val scroll = rememberScrollState()
+private fun TerminalOverlay(onExit: () -> Unit) {
+    var input by remember { mutableStateOf("") }
+    val lines = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
 
-    Dialog(
-        onDismissRequest = onExit,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-            dismissOnClickOutside = false
-        )
-    ) {
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
-            // 向四周延生 / 从四周收回（裁剪扩展，文字不变形）
-            androidx.compose.animation.AnimatedVisibility(
-                visible = open,
-                enter = androidx.compose.animation.expandVertically(
-                    animationSpec = tween(340), expandFrom = Alignment.CenterVertically
-                ) + androidx.compose.animation.expandHorizontally(
-                    animationSpec = tween(340), expandFrom = Alignment.CenterHorizontally
-                ) + androidx.compose.animation.fadeIn(tween(180)),
-                exit = androidx.compose.animation.shrinkVertically(
-                    animationSpec = tween(280), shrinkTowards = Alignment.CenterVertically
-                ) + androidx.compose.animation.shrinkHorizontally(
-                    animationSpec = tween(280), shrinkTowards = Alignment.CenterHorizontally
-                ) + androidx.compose.animation.fadeOut(tween(140))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTransformGestures { _, _, zoom, _ ->
-                                fontScale = (fontScale * zoom).coerceIn(0.6f, 3f)
-                            }
-                        }
-                        .padding(10.dp)
-                ) {
-                    // 输出（字号随捏合变化）
-                    SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        Text(
-                            text = ansiAnnotated(text),
-                            modifier = Modifier.fillMaxWidth().verticalScroll(scroll),
-                            fontSize = (14f * fontScale).sp,
-                            lineHeight = (20f * fontScale).sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color(0xFFDDDDDD)
-                        )
-                    }
-                    // 底部输入行
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        androidx.compose.foundation.text.BasicTextField(
-                            value = input,
-                            onValueChange = onInputChange,
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(Color(0xFF0E0E10), RoundedCornerShape(6.dp))
-                                .padding(6.dp),
-                            textStyle = androidx.compose.ui.text.TextStyle(
-                                color = Color.White,
-                                fontSize = 12.sp
-                            ),
-                            singleLine = true
-                        )
-                        IconButton(
-                            onClick = onExit,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Outlined.FullscreenExit,
-                                contentDescription = "缩小",
-                                tint = Color(0xFFB0B0B0)
-                            )
-                        }
-                        Text(
-                            "发送",
-                            modifier = Modifier
-                                .clickable { onRun() }
-                                .padding(start = 6.dp)
-                                .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
-                                .padding(horizontal = 16.dp, vertical = 7.dp),
-                            fontSize = 14.sp,
-                            color = Color.White
-                        )
-                    }
-                }
+    fun run(cmd: String) {
+        if (cmd.isBlank()) return
+        lines.add("> " + cmd)
+        busy = true
+        scope.launch {
+            val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
+            out.out.forEach { if (it.isNotBlank()) lines.add(it) }
+            if (out.err.isNotEmpty()) out.err.forEach { if (it.isNotBlank()) lines.add(it) }
+            busy = false
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xF2000000)).padding(12.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(text = "终端", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "关闭",
+                color = Color(0xFF0A84FF),
+                fontSize = 13.sp,
+                modifier = Modifier.clickable { onExit() }
+            )
+        }
+        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            items(lines) { line ->
+                Text(
+                    text = line,
+                    color = Color(0xFFDDDDDD),
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(vertical = 1.dp)
+                )
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "\$", color = Color(0xFF4CAF50), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            androidx.compose.foundation.text.BasicTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace
+                ),
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Go
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onGo = {
+                        run(input)
+                        input = ""
+                    }
+                )
+            )
+            Text(
+                text = if (busy) "…" else "运行",
+                color = Color(0xFF0A84FF),
+                fontSize = 12.sp,
+                modifier = Modifier.clickable {
+                    run(input)
+                    input = ""
+                }
+            )
         }
     }
 }
