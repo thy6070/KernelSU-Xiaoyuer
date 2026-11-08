@@ -47,6 +47,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.Person
@@ -73,6 +74,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.AdminPanelSettings
@@ -104,10 +106,12 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -215,6 +219,28 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var activeProc by remember { mutableStateOf<Process?>(null) }
     val panelP = remember { Animatable(0f) }
     val uiScope = rememberCoroutineScope()
+
+    // 执行命令（岛内和全屏共用）
+    fun termRun() {
+        val cmd = termInput
+        termInput = ""
+        val alive = activeProc
+        if (alive != null && alive.isAlive) {
+            try {
+                alive.outputStream.write((cmd + "\n").toByteArray())
+                alive.outputStream.flush()
+                termText = termText + cmd + "\n"
+            } catch (t: Throwable) {
+                termText = termText + "写入失败: " + (t.message ?: "") + "\n"
+            }
+        } else {
+            termText = termText + "\n$ " + cmd + "\n"
+            uiScope.launch {
+                val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
+                termText = termText + out.out.joinToString("\n") + out.err.joinToString("\n") + "\n"
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))) {
         Box(
@@ -966,8 +992,8 @@ private fun ProMaxIsland(
     leftPath: String = "/storage/emulated/0/",
     rightPath: String = "/data/",
     onFileOp: (String, String) -> Unit,
-    onOpen: () -> Unit,
-    onOpenTerminal: () -> Unit
+    onOpenTerminal: () -> Unit,
+    onOpen: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     var showWave by remember { mutableStateOf(false) }
