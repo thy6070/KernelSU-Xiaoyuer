@@ -73,6 +73,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.AdminPanelSettings
@@ -187,6 +188,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     var panel by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
+    var termFull by remember { mutableStateOf(false) }   // 全屏终端
     var termInput by remember { mutableStateOf("") }
     var termText by remember { mutableStateOf("") }
     var selectedFile by remember { mutableStateOf<String?>(null) }
@@ -221,6 +223,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 .background(Color(BG_COLOR))
                 .blur(if (panel) 30.dp else 0.dp)
         ) {
+            if (termFull) {
+                TerminalOverlay(onExit = { termFull = false })
+            }
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
             BrowserPane(
@@ -356,6 +361,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         runOk = runOk,
         running = running,
         terminalMode = showTerminal,
+        onOpenTerminal = { termFull = true },
         termText = termText,
         termInput = termInput,
         onTermInput = { termInput = it },
@@ -927,6 +933,7 @@ private fun ProMaxIsland(
     runOk: Boolean,
     running: Boolean,
     terminalMode: Boolean,
+    onOpenTerminal: () -> Unit,
     termText: String,
     termInput: String,
     onTermInput: (String) -> Unit,
@@ -1190,6 +1197,10 @@ private fun ProMaxIsland(
     LaunchedEffect(longPressTick) {
         if (longPressTick <= 0) return@LaunchedEffect
         val lp = longPressPath ?: return@LaunchedEffect
+        if (lp.isNotEmpty()) {
+            onOpenTerminal()
+            return@LaunchedEffect
+        }
         if (lp.isNotEmpty()) {
             navClosing = true
             expanded = false
@@ -2429,6 +2440,8 @@ private fun TerminalOverlay(onExit: () -> Unit) {
     val lines = remember { androidx.compose.runtime.mutableStateListOf<String>() }
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
+    val openAnim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { openAnim.animateTo(1f, tween(340)) }
 
     fun run(cmd: String) {
         if (cmd.isBlank()) return
@@ -2442,62 +2455,89 @@ private fun TerminalOverlay(onExit: () -> Unit) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xF2000000)).padding(12.dp)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text = "终端", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "关闭",
-                color = Color(0xFF0A84FF),
-                fontSize = 13.sp,
-                modifier = Modifier.clickable { onExit() }
-            )
-        }
-        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            items(lines) { line ->
-                Text(
-                    text = line,
-                    color = Color(0xFFDDDDDD),
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.padding(vertical = 1.dp)
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+    // 进入动画：从模糊+缩小 展开到 清晰+满屏
+    val blurDp = (26f * (1f - openAnim.value)).dp
+    val sc = 0.90f + 0.10f * openAnim.value
+
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(blurDp)
+                .graphicsLayer { scaleX = sc; scaleY = sc; alpha = openAnim.value }
         ) {
-            Text(text = "\$", color = Color(0xFF4CAF50), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-            androidx.compose.foundation.text.BasicTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
-                textStyle = androidx.compose.ui.text.TextStyle(
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace
-                ),
-                singleLine = true,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Go
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onGo = {
-                        run(input)
-                        input = ""
-                    }
-                )
-            )
-            Text(
-                text = if (busy) "…" else "运行",
-                color = Color(0xFF0A84FF),
-                fontSize = 12.sp,
-                modifier = Modifier.clickable {
-                    run(input)
-                    input = ""
+            Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+                // 标题
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "终端", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = "关闭",
+                        color = Color(0xFFFF453A),
+                        fontSize = 13.sp,
+                        modifier = Modifier.clickable { onExit() }
+                    )
                 }
-            )
+                // 输出（长按可复制）
+                SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(lines) { line ->
+                            Text(
+                                text = line,
+                                color = Color(0xFFDDDDDD),
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+                // 输入行：$ + 输入 + 运行 + 关闭
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "$", color = Color(0xFF4CAF50), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Go
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onGo = {
+                                run(input)
+                                input = ""
+                            }
+                        )
+                    )
+                    Text(
+                        text = if (busy) "…" else "运行",
+                        color = Color(0xFF0A84FF),
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable {
+                            run(input)
+                            input = ""
+                        }
+                    )
+                    Text(
+                        text = "关闭",
+                        color = Color(0xFFFF453A),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 10.dp).clickable { onExit() }
+                    )
+                }
+            }
         }
     }
 }
