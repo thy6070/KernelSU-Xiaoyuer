@@ -103,6 +103,7 @@ import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -1250,7 +1251,7 @@ private fun ProMaxIsland(
         }
     }
     val ball = remember { Animatable(1f) }
-    val wingHidden = selectedFile != null || navMode || terminalMode
+    val wingHidden = selectedFile != null || navMode
     LaunchedEffect(wingHidden) {
         if (wingHidden) {
             ball.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 120f))
@@ -1308,11 +1309,20 @@ private fun ProMaxIsland(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Image(
-                painter = painterResource(id = me.weishu.kernelsu.R.mipmap.mod_icon),
-                contentDescription = null,
-                modifier = Modifier.size(34.dp)
-            )
+            if (terminalMode) {
+                Icon(
+                    imageVector = Icons.Outlined.Fullscreen,
+                    contentDescription = "放大",
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp)
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = me.weishu.kernelsu.R.mipmap.mod_icon),
+                    contentDescription = null,
+                    modifier = Modifier.size(34.dp)
+                )
+            }
         }
 
         // main pill on top
