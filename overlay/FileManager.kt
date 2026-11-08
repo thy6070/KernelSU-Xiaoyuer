@@ -245,10 +245,40 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))) {
+        // 视频背景（循环静音，自适应大小）
+        androidx.compose.ui.viewinterop.AndroidView(
+            factory = { ctx ->
+                android.widget.VideoView(ctx).apply {
+                    val uri = android.net.Uri.parse("/storage/emulated/0/mmexport1794145383544.mp4")
+                    setVideoURI(uri)
+                    setOnPreparedListener { mp ->
+                        mp.isLooping = true
+                        mp.setVolume(0f, 0f)
+                        val vw = width
+                        val vh = height
+                        val vRatio = if (vh > 0) vw.toFloat() / vh else 1f
+                        val mRatio = if (mp.videoHeight > 0) mp.videoWidth.toFloat() / mp.videoHeight else vRatio
+                        val lp = layoutParams
+                        if (lp != null) {
+                            if (mRatio > vRatio) {
+                                lp.width = (vh * mRatio).toInt()
+                                lp.height = vh
+                            } else {
+                                lp.width = vw
+                                lp.height = (vw / mRatio).toInt()
+                            }
+                            layoutParams = lp
+                        }
+                        start()
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(BG_COLOR))
+                .background(Color(0x33000000))
                 .blur(if (panel || termFull || editPath != null) 30.dp else 0.dp)
         ) {
             if (termFull) {
@@ -1334,10 +1364,8 @@ private fun ProMaxIsland(
             ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         } else {
-            // 收起：分岛先滑回胶囊（收回动画），再以首页层叠形态滑出
+            // 收起：分岛不移动（保持滑出位置），只把图标切回层叠
             wingIconExpanded = false
-            ball.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 120f))
-            ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         }
     }
     val ballShift = ball.value
