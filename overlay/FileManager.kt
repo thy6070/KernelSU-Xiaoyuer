@@ -1322,10 +1322,9 @@ private fun ProMaxIsland(
             ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         } else {
-            // 收起：先滑入胶囊（保持放大图标），滑出前才变回层叠
-            ball.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 120f))
+            // 收起：胶囊收起的同时分岛向右滑出（无延迟）
             wingIconExpanded = false
-            kotlinx.coroutines.delay(180)
+            ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         }
     }
