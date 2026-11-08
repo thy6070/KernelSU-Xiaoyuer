@@ -2512,6 +2512,7 @@ private fun TerminalOverlay(
     onExit: () -> Unit
 ) {
     val scroll = rememberScrollState()
+    var fontScale by remember { mutableStateOf(1f) }
     var open by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { open = true }
     // 收起：先播 shrink 动画，再真正关闭
