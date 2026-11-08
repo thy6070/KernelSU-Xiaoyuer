@@ -2209,20 +2209,25 @@ private fun ProMaxIsland(
                         .fillMaxWidth()
                         .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
                 ) {
-                    Text(
-                        text = ansiAnnotated(termText),
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(240.dp)
-                            .verticalScroll(termScroll)
                             .combinedClickable(
                                 onClick = {},
                                 onLongClick = { onOpenTerminal() }
-                            ),
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color.White
-                    )
+                            )
+                    ) {
+                        Text(
+                            text = ansiAnnotated(termText),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(termScroll),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color.White
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
