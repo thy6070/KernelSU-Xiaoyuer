@@ -245,49 +245,43 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))) {
-        // 视频背景（循环静音，按屏幕比例放大裁切，无黑边）
+        // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
-                object : android.widget.VideoView(ctx) {
-                    var vw = 0
-                    var vh = 0
-                    override fun onMeasure(w: Int, h: Int) {
-                        val sw = MeasureSpec.getSize(w)
-                        val sh = MeasureSpec.getSize(h)
-                        if (vw > 0 && vh > 0 && sw > 0 && sh > 0) {
-                            val vr = vw.toFloat() / vh.toFloat()
-                            val sr = sw.toFloat() / sh.toFloat()
-                            if (vr > sr) {
-                                setMeasuredDimension((sh * vr).toInt(), sh)
-                            } else {
-                                setMeasuredDimension(sw, (sw / vr).toInt())
-                            }
-                        } else {
-                            setMeasuredDimension(sw, sh)
-                        }
-                    }
-                }.apply {
-                    // App 无存储权限：用 root 把视频复制到私有目录再播放
-                    val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
-                    if (!cached.exists() || cached.length() == 0L) {
+                val tv = android.view.TextureView(ctx)
+                val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
+                if (!cached.exists() || cached.length() == 0L) {
+                    try {
+                        val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
+                        p.waitFor()
+                    } catch (t: Throwable) {}
+                }
+                tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                    var mp: android.media.MediaPlayer? = null
+                    override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
                         try {
-                            val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                "cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
-                            p.waitFor()
+                            val m = android.media.MediaPlayer()
+                            m.setDataSource(cached.absolutePath)
+                            m.setSurface(android.view.Surface(st))
+                            m.isLooping = true
+                            m.setVolume(0f, 0f)
+                            m.prepare()
+                            m.start()
+                            mp = m
                         } catch (t: Throwable) {}
                     }
-                    setVideoURI(android.net.Uri.fromFile(cached))
-                    setOnPreparedListener { mp ->
-                        vw = mp.videoWidth
-                        vh = mp.videoHeight
-                        mp.isLooping = true
-                        mp.setVolume(0f, 0f)
-                        requestLayout()
-                        start()
+                    override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                    override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
+                        try { mp?.release() } catch (t: Throwable) {}
+                        mp = null
+                        return true
                     }
+                    override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                 }
+                tv
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
         )
         Box(
             modifier = Modifier
