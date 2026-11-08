@@ -923,6 +923,7 @@ private fun ansiAnnotated(src: String): androidx.compose.ui.text.AnnotatedString
     return b.toAnnotatedString()
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ProMaxIsland(
     onBack: () -> Unit = {},
@@ -2213,7 +2214,11 @@ private fun ProMaxIsland(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(240.dp)
-                            .verticalScroll(termScroll),
+                            .verticalScroll(termScroll)
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = { onOpenTerminal() }
+                            ),
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         color = Color.White
