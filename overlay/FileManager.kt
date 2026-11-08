@@ -1205,15 +1205,6 @@ private fun ProMaxIsland(
     LaunchedEffect(forceSoPanelTick) {
         if (forceSoPanelTick > 0) soPanel = true
     }
-    // 终端内容放大/缩小（单纯缩放+过渡模糊）
-    var zoomed by remember { mutableStateOf(false) }
-    val zoomAnim = remember { Animatable(0f) }
-    val zoomScope = rememberCoroutineScope()
-    fun zoomTo(v: Boolean) {
-        zoomed = v
-        zoomScope.launch { zoomAnim.animateTo(if (v) 1f else 0f, tween(420)) }
-    }
-
     LaunchedEffect(longPressTick) {
         if (longPressTick <= 0) return@LaunchedEffect
         val lp = longPressPath ?: return@LaunchedEffect
@@ -2220,24 +2211,18 @@ private fun ProMaxIsland(
                 exit = shrinkVertically(animationSpec = tween(260, easing = zyEase), shrinkTowards = Alignment.CenterVertically) + fadeOut(tween(160))
             ) {
                 val termScroll = rememberScrollState()
-                    // 高度 240dp → 满屏（放大），过渡期间加模糊
-                    val _screenH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-                    val zoomH = (240.dp + (_screenH - 240.dp - 70.dp) * zoomAnim.value)
-                    val zoomBlur = (16f * (1f - kotlin.math.abs(zoomAnim.value * 2f - 1f))).dp
                     LaunchedEffect(termText) {
                         termScroll.animateScrollTo(termScroll.maxValue)
                     }
-                val sidePad = (8f * (1f - zoomAnim.value)).dp
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = sidePad, end = sidePad, bottom = 8.dp)
+                        .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(zoomH)
-                            .blur(zoomBlur)
+                            .height(240.dp)
                     ) {
                         Text(
                             text = ansiAnnotated(termText),
@@ -2267,13 +2252,12 @@ private fun ProMaxIsland(
                             singleLine = true
                         )
                         IconButton(
-                            onClick = { zoomTo(!zoomed) },
+                            onClick = { onOpenTerminal() },
                             modifier = Modifier.size(34.dp)
                         ) {
                             Icon(
-                                imageVector = if (zoomed) androidx.compose.material.icons.Icons.Outlined.FullscreenExit
-                                              else androidx.compose.material.icons.Icons.Outlined.Fullscreen,
-                                contentDescription = if (zoomed) "缩小" else "放大",
+                                imageVector = androidx.compose.material.icons.Icons.Outlined.Fullscreen,
+                                contentDescription = "放大",
                                 tint = Color(0xFFB0B0B0)
                             )
                         }
