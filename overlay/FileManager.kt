@@ -1264,6 +1264,11 @@ private fun ProMaxIsland(
         if (terminalMode) {
             ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
+        } else {
+            // 收起：先滑入胶囊，再滑出（图标已变回层叠）
+            ball.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 120f))
+            kotlinx.coroutines.delay(180)
+            ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         }
     }
     val ballShift = ball.value
