@@ -248,7 +248,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(BG_COLOR))
-                .blur(if (panel || termFull) 30.dp else 0.dp)
+                .blur(if (panel || termFull || editPath != null) 30.dp else 0.dp)
         ) {
             if (termFull) {
                 TerminalOverlay(
@@ -820,7 +820,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xE6000000))
+                .background(Color(0x66000000))
                 .padding(24.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -891,7 +891,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 editFontScale = (editFontScale * zoom).coerceIn(0.6f, 3f)
                             }
                         }
-                        .background(Color(0xFF141418), RoundedCornerShape(10.dp))
                         .padding(10.dp)
                 )
             }
@@ -1323,9 +1322,9 @@ private fun ProMaxIsland(
             ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         } else {
-            // 收起：胶囊收起的同时分岛向右滑出（无延迟）
+            // 收起：分岛先滑回胶囊（收回动画），再以首页层叠形态滑出
             wingIconExpanded = false
-            ball.snapTo(0f)
+            ball.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 120f))
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         }
     }
