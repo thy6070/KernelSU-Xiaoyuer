@@ -47,6 +47,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.Person
@@ -219,6 +220,28 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val panelP = remember { Animatable(0f) }
     val uiScope = rememberCoroutineScope()
 
+    // 终端命令执行（岛内和全屏共用）
+    fun termRun() {
+        val cmd = termInput
+        termInput = ""
+        val alive = activeProc
+        if (alive != null && alive.isAlive) {
+            try {
+                alive.outputStream.write((cmd + "\n").toByteArray())
+                alive.outputStream.flush()
+                termText = termText + cmd + "\n"
+            } catch (t: Throwable) {
+                termText = termText + "写入失败: " + (t.message ?: "") + "\n"
+            }
+        } else {
+            termText = termText + "\n$ " + cmd + "\n"
+            uiScope.launch {
+                val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
+                termText = termText + out.out.joinToString("\n") + out.err.joinToString("\n") + "\n"
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))) {
         Box(
             modifier = Modifier
@@ -227,7 +250,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 .blur(if (panel) 30.dp else 0.dp)
         ) {
             if (termFull) {
-                TerminalOverlay(text = termText, onExit = { termFull = false })
+                TerminalOverlay(
+                    text = termText,
+                    input = termInput,
+                    onInputChange = { termInput = it },
+                    onRun = { termRun() },
+                    onExit = { termFull = false }
+                )
             }
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
@@ -368,29 +397,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         termText = termText,
         termInput = termInput,
         onTermInput = { termInput = it },
-        onTermRun = {
-            val cmd = termInput
-            // 允许空输入（发送换行给等待中的脚本）
-            if (true) {
-                termInput = ""
-                val alive = activeProc
-                if (alive != null && alive.isAlive) {
-                    try {
-                        alive.outputStream.write((cmd + "\n").toByteArray())
-                        alive.outputStream.flush()
-                        termText = termText + cmd + "\n"
-                    } catch (t: Throwable) {
-                        termText = termText + "写入失败: " + (t.message ?: "") + "\n"
-                    }
-                } else {
-                    termText = termText + "\n$ " + cmd + "\n"
-                    uiScope.launch {
-                        val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
-                        termText = termText + out.out.joinToString("\n") + out.err.joinToString("\n") + "\n"
-                    }
-                }
-            }
-        },
+        onTermRun = { termRun() },
         onTermClose = { showTerminal = false },
         onArchiveEnter = {
             val p = longPressPath ?: selectedFile
@@ -2473,38 +2480,37 @@ private fun IslandActionButton(
 }
 
 @Composable
-private fun TerminalOverlay(text: String, onExit: () -> Unit) {
+private fun TerminalOverlay(
+    text: String,
+    input: String,
+    onInputChange: (String) -> Unit,
+    onRun: () -> Unit,
+    onExit: () -> Unit
+) {
     val openAnim = remember { Animatable(0f) }
     LaunchedEffect(Unit) { openAnim.animateTo(1f, tween(340)) }
     val scroll = rememberScrollState()
 
-    // 进入动画：模糊 + 缩小 → 清晰 + 满屏
     val blurDp = (30f * (1f - openAnim.value)).dp
     val sc = 0.25f + 0.75f * openAnim.value
 
-    Box(modifier = Modifier.fillMaxSize().zIndex(100f).background(Color(0xF2000000))) {
+    Dialog(
+        onDismissRequest = onExit,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .blur(blurDp)
                 .graphicsLayer { scaleX = sc; scaleY = sc; alpha = openAnim.value }
-                .padding(14.dp)
+                .padding(10.dp)
         ) {
-            // 标题行
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = "执行输出", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "关闭",
-                    color = Color(0xFFFF453A),
-                    fontSize = 14.sp,
-                    modifier = Modifier.clickable { onExit() }
-                )
-            }
-            // 放大后的输出内容（可滚动、长按可复制）
+            // 输出（全屏显示，可滚动、长按复制）
             SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Text(
                     text = ansiAnnotated(text),
@@ -2517,7 +2523,47 @@ private fun TerminalOverlay(text: String, onExit: () -> Unit) {
                     color = Color(0xFFDDDDDD)
                 )
             }
+            // 底部输入行：输入框 + 缩小 + 发送
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = input,
+                    onValueChange = onInputChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(Color(0xFF0E0E10), RoundedCornerShape(6.dp))
+                        .padding(6.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color.White,
+                        fontSize = 12.sp
+                    ),
+                    singleLine = true
+                )
+                IconButton(
+                    onClick = onExit,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Outlined.FullscreenExit,
+                        contentDescription = "缩小",
+                        tint = Color(0xFFB0B0B0)
+                    )
+                }
+                Text(
+                    "发送",
+                    modifier = Modifier
+                        .clickable { onRun() }
+                        .padding(start = 6.dp)
+                        .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
+                        .padding(horizontal = 16.dp, vertical = 7.dp),
+                    fontSize = 14.sp,
+                    color = Color.White
+                )
+            }
         }
+    }
     }
 }
 
