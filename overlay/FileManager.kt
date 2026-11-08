@@ -266,10 +266,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             m.setSurface(android.view.Surface(st))
                             m.isLooping = true
                             m.setVolume(0f, 0f)
+                            m.setOnErrorListener { _, what, extra ->
+                                android.widget.Toast.makeText(ctx, "视频错误 " + what + "/" + extra, android.widget.Toast.LENGTH_LONG).show()
+                                true
+                            }
                             m.prepare()
                             m.start()
                             mp = m
-                        } catch (t: Throwable) {}
+                        } catch (t: Throwable) {
+                            android.widget.Toast.makeText(ctx, "视频异常: " + (t.message ?: t.javaClass.simpleName), android.widget.Toast.LENGTH_LONG).show()
+                        }
                     }
                     override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
                     override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
