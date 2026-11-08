@@ -1298,7 +1298,6 @@ private fun ProMaxIsland(
         // wing sits UNDER the pill and slides out of it
         Row(
             modifier = Modifier
-                .zIndex(2f)
                 .offset(x = (pillW.value / 2f + 30f).dp, y = 0.dp)
                 .width(52.dp)
                 .height(42.dp)
