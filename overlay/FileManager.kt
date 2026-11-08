@@ -244,7 +244,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
