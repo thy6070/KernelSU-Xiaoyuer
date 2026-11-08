@@ -104,10 +104,13 @@ import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -1195,6 +1198,15 @@ private fun ProMaxIsland(
     LaunchedEffect(forceSoPanelTick) {
         if (forceSoPanelTick > 0) soPanel = true
     }
+    // 终端内容放大/缩小（单纯缩放+过渡模糊）
+    var zoomed by remember { mutableStateOf(false) }
+    val zoomAnim = remember { Animatable(0f) }
+    val zoomScope = rememberCoroutineScope()
+    fun zoomTo(v: Boolean) {
+        zoomed = v
+        zoomScope.launch { zoomAnim.animateTo(if (v) 1f else 0f, tween(420)) }
+    }
+
     LaunchedEffect(longPressTick) {
         if (longPressTick <= 0) return@LaunchedEffect
         val lp = longPressPath ?: return@LaunchedEffect
@@ -2201,6 +2213,9 @@ private fun ProMaxIsland(
                 exit = shrinkVertically(animationSpec = tween(260, easing = zyEase), shrinkTowards = Alignment.CenterVertically) + fadeOut(tween(160))
             ) {
                 val termScroll = rememberScrollState()
+                    // 高度 240dp → 760dp（放大），过渡期间加模糊
+                    val zoomH = (240f + 520f * zoomAnim.value).dp
+                    val zoomBlur = (16f * (1f - kotlin.math.abs(zoomAnim.value * 2f - 1f))).dp
                     LaunchedEffect(termText) {
                         termScroll.animateScrollTo(termScroll.maxValue)
                     }
@@ -2217,12 +2232,6 @@ private fun ProMaxIsland(
                         Text(text = "终端", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            text = "放大",
-                            color = Color(0xFF0A84FF),
-                            fontSize = 13.sp,
-                            modifier = Modifier.clickable { onOpenTerminal() }
-                        )
-                        Text(
                             text = "关闭",
                             color = Color(0xFFFF453A),
                             fontSize = 13.sp,
@@ -2232,10 +2241,8 @@ private fun ProMaxIsland(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(240.dp)
-                            .pointerInput(Unit) {
-                                detectTapGestures(onLongPress = { onOpenTerminal() })
-                            }
+                            .height(zoomH)
+                            .blur(zoomBlur)
                     ) {
                         Text(
                             text = ansiAnnotated(termText),
@@ -2264,6 +2271,17 @@ private fun ProMaxIsland(
                             ),
                             singleLine = true
                         )
+                        IconButton(
+                            onClick = { zoomTo(!zoomed) },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (zoomed) androidx.compose.material.icons.Icons.Outlined.FullscreenExit
+                                              else androidx.compose.material.icons.Icons.Outlined.Fullscreen,
+                                contentDescription = if (zoomed) "缩小" else "放大",
+                                tint = Color(0xFFB0B0B0)
+                            )
+                        }
                         Text(
                             "发送",
                             modifier = Modifier
