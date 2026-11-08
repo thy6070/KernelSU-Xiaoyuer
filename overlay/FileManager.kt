@@ -22,6 +22,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -2471,12 +2472,10 @@ private fun TerminalOverlay(
     onRun: () -> Unit,
     onExit: () -> Unit
 ) {
-    val openAnim = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { openAnim.animateTo(1f, tween(340)) }
+    var open by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { open = true }
+    var fontScale by remember { mutableStateOf(1f) }
     val scroll = rememberScrollState()
-
-    val blurDp = (30f * (1f - openAnim.value)).dp
-    val sc = 0.25f + 0.75f * openAnim.value
 
     Dialog(
         onDismissRequest = onExit,
@@ -2486,68 +2485,84 @@ private fun TerminalOverlay(
             dismissOnClickOutside = false
         )
     ) {
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(blurDp)
-                .graphicsLayer { scaleX = sc; scaleY = sc; alpha = openAnim.value }
-                .padding(10.dp)
-        ) {
-            // 输出（全屏显示，可滚动、长按复制）
-            SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                Text(
-                    text = ansiAnnotated(text),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(scroll),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = Color(0xFFDDDDDD)
-                )
-            }
-            // 底部输入行：输入框 + 缩小 + 发送
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
+            // 向四周延生 / 从四周收回（裁剪扩展，文字不变形）
+            androidx.compose.animation.AnimatedVisibility(
+                visible = open,
+                enter = androidx.compose.animation.expandVertically(
+                    animationSpec = tween(320), expandFrom = Alignment.CenterVertically
+                ) + androidx.compose.animation.expandHorizontally(
+                    animationSpec = tween(320), expandFrom = Alignment.CenterHorizontally
+                ) + androidx.compose.animation.fadeIn(tween(160)),
+                exit = androidx.compose.animation.shrinkVertically(
+                    animationSpec = tween(260), shrinkTowards = Alignment.CenterVertically
+                ) + androidx.compose.animation.shrinkHorizontally(
+                    animationSpec = tween(260), shrinkTowards = Alignment.CenterHorizontally
+                ) + androidx.compose.animation.fadeOut(tween(120))
             ) {
-                androidx.compose.foundation.text.BasicTextField(
-                    value = input,
-                    onValueChange = onInputChange,
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .background(Color(0xFF0E0E10), RoundedCornerShape(6.dp))
-                        .padding(6.dp),
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = Color.White,
-                        fontSize = 12.sp
-                    ),
-                    singleLine = true
-                )
-                IconButton(
-                    onClick = onExit,
-                    modifier = Modifier.size(36.dp)
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, _, zoom, _ ->
+                                fontScale = (fontScale * zoom).coerceIn(0.6f, 3f)
+                            }
+                        }
+                        .padding(10.dp)
                 ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Outlined.FullscreenExit,
-                        contentDescription = "缩小",
-                        tint = Color(0xFFB0B0B0)
-                    )
+                    // 输出（字号随捏合变化）
+                    SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        Text(
+                            text = ansiAnnotated(text),
+                            modifier = Modifier.fillMaxWidth().verticalScroll(scroll),
+                            fontSize = (14f * fontScale).sp,
+                            lineHeight = (20f * fontScale).sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFFDDDDDD)
+                        )
+                    }
+                    // 底部输入行
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = input,
+                            onValueChange = onInputChange,
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(Color(0xFF0E0E10), RoundedCornerShape(6.dp))
+                                .padding(6.dp),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = Color.White,
+                                fontSize = 12.sp
+                            ),
+                            singleLine = true
+                        )
+                        IconButton(
+                            onClick = onExit,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Outlined.FullscreenExit,
+                                contentDescription = "缩小",
+                                tint = Color(0xFFB0B0B0)
+                            )
+                        }
+                        Text(
+                            "发送",
+                            modifier = Modifier
+                                .clickable { onRun() }
+                                .padding(start = 6.dp)
+                                .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
+                                .padding(horizontal = 16.dp, vertical = 7.dp),
+                            fontSize = 14.sp,
+                            color = Color.White
+                        )
+                    }
                 }
-                Text(
-                    "发送",
-                    modifier = Modifier
-                        .clickable { onRun() }
-                        .padding(start = 6.dp)
-                        .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
-                        .padding(horizontal = 16.dp, vertical = 7.dp),
-                    fontSize = 14.sp,
-                    color = Color.White
-                )
             }
         }
-    }
     }
 }
 
