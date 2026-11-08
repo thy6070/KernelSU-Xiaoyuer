@@ -1259,6 +1259,13 @@ private fun ProMaxIsland(
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         }
     }
+    // 执行文件时：分岛从胶囊里滑出（复用显出的动画）
+    LaunchedEffect(terminalMode) {
+        if (terminalMode) {
+            ball.snapTo(0f)
+            ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
+        }
+    }
     val ballShift = ball.value
     val ballScale = 0.55f + 0.45f * ballShift
 
@@ -1291,6 +1298,7 @@ private fun ProMaxIsland(
         // wing sits UNDER the pill and slides out of it
         Row(
             modifier = Modifier
+                .zIndex(2f)
                 .offset(x = (pillW.value / 2f + 30f).dp, y = 0.dp)
                 .width(52.dp)
                 .height(42.dp)
