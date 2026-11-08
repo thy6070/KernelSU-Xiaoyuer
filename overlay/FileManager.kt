@@ -2472,7 +2472,7 @@ private fun TerminalOverlay(onExit: () -> Unit) {
     val blurDp = (26f * (1f - openAnim.value)).dp
     val sc = 0.90f + 0.10f * openAnim.value
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
+    Box(modifier = Modifier.fillMaxSize().zIndex(100f).background(Color(0xF2000000))) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
