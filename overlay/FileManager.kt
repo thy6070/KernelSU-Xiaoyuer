@@ -30,6 +30,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.filled.Check
@@ -887,8 +888,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .weight(1f)
                         .fillMaxWidth()
                         .pointerInput(Unit) {
-                            detectTransformGestures { _, _, zoom, _ ->
-                                editFontScale = (editFontScale * zoom).coerceIn(0.6f, 3f)
+                            // 只在双指时缩放，单指放行给滚动
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                do {
+                                    val ev = awaitPointerEvent()
+                                    if (ev.changes.size >= 2) {
+                                        val zoom = ev.calculateZoom()
+                                        if (zoom != 1f && zoom > 0f) {
+                                            editFontScale = (editFontScale * zoom).coerceIn(0.6f, 3f)
+                                            ev.changes.forEach { it.consume() }
+                                        }
+                                    }
+                                } while (ev.changes.any { it.pressed })
                             }
                         }
                         .padding(10.dp)
@@ -2514,6 +2526,10 @@ private fun TerminalOverlay(
     var fontScale by remember { mutableStateOf(1f) }
     var open by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { open = true }
+    // 新输出自动滚到底部
+    LaunchedEffect(text) {
+        scroll.animateScrollTo(scroll.maxValue)
+    }
     // 收起：先播 shrink 动画，再真正关闭
     LaunchedEffect(open) {
         if (!open) {
@@ -2549,8 +2565,19 @@ private fun TerminalOverlay(
                     modifier = Modifier
                         .fillMaxWidth()
                         .pointerInput(Unit) {
-                            detectTransformGestures { _, _, zoom, _ ->
-                                fontScale = (fontScale * zoom).coerceIn(0.6f, 3f)
+                            // 只在双指时缩放，单指放行给滚动
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                do {
+                                    val ev = awaitPointerEvent()
+                                    if (ev.changes.size >= 2) {
+                                        val zoom = ev.calculateZoom()
+                                        if (zoom != 1f && zoom > 0f) {
+                                            fontScale = (fontScale * zoom).coerceIn(0.6f, 3f)
+                                            ev.changes.forEach { it.consume() }
+                                        }
+                                    }
+                                } while (ev.changes.any { it.pressed })
                             }
                         }
                         .verticalScroll(scroll),
