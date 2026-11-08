@@ -1198,8 +1198,11 @@ private fun ProMaxIsland(
         if (longPressTick <= 0) return@LaunchedEffect
         val lp = longPressPath ?: return@LaunchedEffect
         if (lp.isNotEmpty()) {
-            onOpenTerminal()
-            return@LaunchedEffect
+            // 终端展开时长按 → 全屏终端；其他情况 → 导航栏
+            if (terminalMode) {
+                onOpenTerminal()
+                return@LaunchedEffect
+            }
         }
         if (lp.isNotEmpty()) {
             navClosing = true
