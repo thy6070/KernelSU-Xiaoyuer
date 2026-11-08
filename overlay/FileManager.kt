@@ -245,30 +245,32 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color(BG_COLOR))) {
-        // 视频背景（循环静音，自适应大小）
+        // 视频背景（循环静音，按屏幕比例放大裁切，无黑边）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
-                android.widget.VideoView(ctx).apply {
-                    val uri = android.net.Uri.parse("/storage/emulated/0/mmexport1794145383544.mp4")
-                    setVideoURI(uri)
+                object : android.widget.VideoView(ctx) {
+                    override fun onMeasure(w: Int, h: Int) {
+                        val vw = MeasureSpec.getSize(w)
+                        val vh = MeasureSpec.getSize(h)
+                        if (videoWidth > 0 && videoHeight > 0 && vw > 0 && vh > 0) {
+                            val vr = videoWidth.toFloat() / videoHeight.toFloat()
+                            val sr = vw.toFloat() / vh.toFloat()
+                            if (vr > sr) {
+                                // 视频更宽：高度填满，宽度按比例超出（裁切左右）
+                                setMeasuredDimension((vh * vr).toInt(), vh)
+                            } else {
+                                // 视频更高：宽度填满，高度按比例超出（裁切上下）
+                                setMeasuredDimension(vw, (vw / vr).toInt())
+                            }
+                        } else {
+                            setMeasuredDimension(vw, vh)
+                        }
+                    }
+                }.apply {
+                    setVideoURI(android.net.Uri.parse("/storage/emulated/0/mmexport1794145383544.mp4"))
                     setOnPreparedListener { mp ->
                         mp.isLooping = true
                         mp.setVolume(0f, 0f)
-                        val vw = width
-                        val vh = height
-                        val vRatio = if (vh > 0) vw.toFloat() / vh else 1f
-                        val mRatio = if (mp.videoHeight > 0) mp.videoWidth.toFloat() / mp.videoHeight else vRatio
-                        val lp = layoutParams
-                        if (lp != null) {
-                            if (mRatio > vRatio) {
-                                lp.width = (vh * mRatio).toInt()
-                                lp.height = vh
-                            } else {
-                                lp.width = vw
-                                lp.height = (vw / mRatio).toInt()
-                            }
-                            layoutParams = lp
-                        }
                         start()
                     }
                 }
