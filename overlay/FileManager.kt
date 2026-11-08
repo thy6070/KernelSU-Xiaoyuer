@@ -993,6 +993,10 @@ private fun ProMaxIsland(
     onOpen: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // 执行文件打开终端时，确保岛也展开
+    LaunchedEffect(terminalMode) {
+        if (terminalMode) expanded = true
+    }
     var showWave by remember { mutableStateOf(false) }
     var navMode by remember { mutableStateOf(false) }
     var navTarget by remember { mutableStateOf<String?>(null) }
@@ -2506,16 +2510,16 @@ private fun TerminalOverlay(
             // 向四周延生 / 从四周收回（裁剪扩展，文字不变形）
             androidx.compose.animation.AnimatedVisibility(
                 visible = open,
-                enter = androidx.compose.animation.scaleIn(
-                    animationSpec = tween(320),
-                    initialScale = 0.12f,
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.12f)
-                ) + androidx.compose.animation.fadeIn(tween(200)),
-                exit = androidx.compose.animation.scaleOut(
-                    animationSpec = tween(280),
-                    targetScale = 0.12f,
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.12f)
-                ) + androidx.compose.animation.fadeOut(tween(160))
+                enter = androidx.compose.animation.expandVertically(
+                    animationSpec = tween(340), expandFrom = Alignment.CenterVertically
+                ) + androidx.compose.animation.expandHorizontally(
+                    animationSpec = tween(340), expandFrom = Alignment.CenterHorizontally
+                ) + androidx.compose.animation.fadeIn(tween(180)),
+                exit = androidx.compose.animation.shrinkVertically(
+                    animationSpec = tween(280), shrinkTowards = Alignment.CenterVertically
+                ) + androidx.compose.animation.shrinkHorizontally(
+                    animationSpec = tween(280), shrinkTowards = Alignment.CenterHorizontally
+                ) + androidx.compose.animation.fadeOut(tween(140))
             ) {
                 Column(
                     modifier = Modifier
