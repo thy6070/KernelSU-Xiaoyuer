@@ -2220,10 +2220,11 @@ private fun ProMaxIsland(
                     LaunchedEffect(termText) {
                         termScroll.animateScrollTo(termScroll.maxValue)
                     }
+                val sidePad = (8f * (1f - zoomAnim.value)).dp
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
+                        .padding(start = sidePad, end = sidePad, bottom = 8.dp)
                 ) {
                     Box(
                         modifier = Modifier
