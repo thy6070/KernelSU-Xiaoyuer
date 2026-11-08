@@ -142,36 +142,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v3
 
-      - name: Maven mirror
-        run: |
-          mkdir -p ~/.gradle/init.d
-          cat > ~/.gradle/init.d/mirror.gradle <<'MIRROR'
-          allprojects {
-              repositories {
-                  maven { url 'https://maven.aliyun.com/repository/public' }
-                  maven { url 'https://maven.aliyun.com/repository/google' }
-                  maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-                  maven { url 'https://jitpack.io' }
-                  google()
-                  mavenCentral()
-              }
-          }
-          settingsEvaluated { settings ->
-              settings.pluginManagement {
-                  repositories {
-                      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-                      gradlePluginPortal()
-                  }
-              }
-          }
-          MIRROR
-
       - name: Build APK
         run: |
           cd src/manager
-          # 用腾讯镜像下载 Gradle（services.gradle.org 经常超时）
-          sed -i 's|services.gradle.org/distributions|mirrors.cloud.tencent.com/gradle|' gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true
-          grep distributionUrl gradle/wrapper/gradle-wrapper.properties
           chmod +x gradlew
           set -o pipefail
           ./gradlew clean :app:assembleRelease -x lint 2>&1 | tail -120
