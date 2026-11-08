@@ -2213,8 +2213,9 @@ private fun ProMaxIsland(
                 exit = shrinkVertically(animationSpec = tween(260, easing = zyEase), shrinkTowards = Alignment.CenterVertically) + fadeOut(tween(160))
             ) {
                 val termScroll = rememberScrollState()
-                    // 高度 240dp → 760dp（放大），过渡期间加模糊
-                    val zoomH = (240f + 520f * zoomAnim.value).dp
+                    // 高度 240dp → 满屏（放大），过渡期间加模糊
+                    val _screenH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+                    val zoomH = (240.dp + (_screenH - 240.dp - 70.dp) * zoomAnim.value)
                     val zoomBlur = (16f * (1f - kotlin.math.abs(zoomAnim.value * 2f - 1f))).dp
                     LaunchedEffect(termText) {
                         termScroll.animateScrollTo(termScroll.maxValue)
@@ -2224,20 +2225,6 @@ private fun ProMaxIsland(
                         .fillMaxWidth()
                         .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
                 ) {
-                    // 固定标题行：放大 / 关闭
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "终端", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = "关闭",
-                            color = Color(0xFFFF453A),
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(start = 12.dp).clickable { onTermClose() }
-                        )
-                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
