@@ -249,28 +249,31 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
                 object : android.widget.VideoView(ctx) {
+                    var vw = 0
+                    var vh = 0
                     override fun onMeasure(w: Int, h: Int) {
-                        val vw = MeasureSpec.getSize(w)
-                        val vh = MeasureSpec.getSize(h)
-                        if (videoWidth > 0 && videoHeight > 0 && vw > 0 && vh > 0) {
-                            val vr = videoWidth.toFloat() / videoHeight.toFloat()
-                            val sr = vw.toFloat() / vh.toFloat()
+                        val sw = MeasureSpec.getSize(w)
+                        val sh = MeasureSpec.getSize(h)
+                        if (vw > 0 && vh > 0 && sw > 0 && sh > 0) {
+                            val vr = vw.toFloat() / vh.toFloat()
+                            val sr = sw.toFloat() / sh.toFloat()
                             if (vr > sr) {
-                                // 视频更宽：高度填满，宽度按比例超出（裁切左右）
-                                setMeasuredDimension((vh * vr).toInt(), vh)
+                                setMeasuredDimension((sh * vr).toInt(), sh)
                             } else {
-                                // 视频更高：宽度填满，高度按比例超出（裁切上下）
-                                setMeasuredDimension(vw, (vw / vr).toInt())
+                                setMeasuredDimension(sw, (sw / vr).toInt())
                             }
                         } else {
-                            setMeasuredDimension(vw, vh)
+                            setMeasuredDimension(sw, sh)
                         }
                     }
                 }.apply {
                     setVideoURI(android.net.Uri.parse("/storage/emulated/0/mmexport1794145383544.mp4"))
                     setOnPreparedListener { mp ->
+                        vw = mp.videoWidth
+                        vh = mp.videoHeight
                         mp.isLooping = true
                         mp.setVolume(0f, 0f)
+                        requestLayout()
                         start()
                     }
                 }
