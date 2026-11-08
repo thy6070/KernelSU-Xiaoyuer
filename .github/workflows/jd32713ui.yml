@@ -145,6 +145,8 @@ jobs:
       - name: Build APK
         run: |
           cd src/manager
+          # 用腾讯镜像下载 Gradle（services.gradle.org 经常超时）
+          sed -i 's|https://services.gradle.org/distributions/|https://mirrors.cloud.tencent.com/gradle/|' gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true
           chmod +x gradlew
           set -o pipefail
           ./gradlew clean :app:assembleRelease -x lint 2>&1 | tail -120
