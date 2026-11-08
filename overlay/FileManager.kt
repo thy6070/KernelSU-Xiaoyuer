@@ -993,10 +993,6 @@ private fun ProMaxIsland(
     onOpen: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    // 执行文件打开终端时，确保岛也展开
-    LaunchedEffect(terminalMode) {
-        if (terminalMode) expanded = true
-    }
     var showWave by remember { mutableStateOf(false) }
     var navMode by remember { mutableStateOf(false) }
     var navTarget by remember { mutableStateOf<String?>(null) }
