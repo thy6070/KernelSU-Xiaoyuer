@@ -267,7 +267,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }.apply {
-                    setVideoURI(android.net.Uri.fromFile(java.io.File("/storage/emulated/0/mmexport1794145383544.mp4")))
+                    // App 无存储权限：用 root 把视频复制到私有目录再播放
+                    val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
+                    if (!cached.exists() || cached.length() == 0L) {
+                        try {
+                            val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                "cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
+                            p.waitFor()
+                        } catch (t: Throwable) {}
+                    }
+                    setVideoURI(android.net.Uri.fromFile(cached))
                     setOnPreparedListener { mp ->
                         vw = mp.videoWidth
                         vh = mp.videoHeight
@@ -1369,9 +1378,9 @@ private fun ProMaxIsland(
             ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         } else {
-            // 收起：分岛快速滑回胶囊（150ms），随后在胶囊振动期间弹出
+            // 收起：分岛按原速滑回胶囊（保持放大图标），滑出前才变层叠
+            ball.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 120f))
             wingIconExpanded = false
-            ball.animateTo(0f, tween(150))
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         }
     }
