@@ -267,7 +267,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }.apply {
-                    setVideoURI(android.net.Uri.parse("/storage/emulated/0/mmexport1794145383544.mp4"))
+                    setVideoURI(android.net.Uri.fromFile(java.io.File("/storage/emulated/0/mmexport1794145383544.mp4")))
                     setOnPreparedListener { mp ->
                         vw = mp.videoWidth
                         vh = mp.videoHeight
@@ -1369,8 +1369,10 @@ private fun ProMaxIsland(
             ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         } else {
-            // 收起：分岛不移动（保持滑出位置），只把图标切回层叠
+            // 收起：分岛快速滑回胶囊（150ms），随后在胶囊振动期间弹出
             wingIconExpanded = false
+            ball.animateTo(0f, tween(150))
+            ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         }
     }
     val ballShift = ball.value
