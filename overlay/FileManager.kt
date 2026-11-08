@@ -224,7 +224,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 .blur(if (panel) 30.dp else 0.dp)
         ) {
             if (termFull) {
-                TerminalOverlay(onExit = { termFull = false })
+                TerminalOverlay(text = termText, onExit = { termFull = false })
             }
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
@@ -2213,10 +2213,9 @@ private fun ProMaxIsland(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(240.dp)
-                            .combinedClickable(
-                                onClick = {},
-                                onLongClick = { onOpenTerminal() }
-                            )
+                            .pointerInput(Unit) {
+                                detectTapGestures(onLongPress = { onOpenTerminal() })
+                            }
                     ) {
                         Text(
                             text = ansiAnnotated(termText),
@@ -2448,108 +2447,49 @@ private fun IslandActionButton(
 }
 
 @Composable
-private fun TerminalOverlay(onExit: () -> Unit) {
-    var input by remember { mutableStateOf("") }
-    val lines = remember { androidx.compose.runtime.mutableStateListOf<String>() }
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+private fun TerminalOverlay(text: String, onExit: () -> Unit) {
     val openAnim = remember { Animatable(0f) }
     LaunchedEffect(Unit) { openAnim.animateTo(1f, tween(340)) }
+    val scroll = rememberScrollState()
 
-    fun run(cmd: String) {
-        if (cmd.isBlank()) return
-        lines.add("> " + cmd)
-        busy = true
-        scope.launch {
-            val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
-            out.out.forEach { if (it.isNotBlank()) lines.add(it) }
-            if (out.err.isNotEmpty()) out.err.forEach { if (it.isNotBlank()) lines.add(it) }
-            busy = false
-        }
-    }
-
-    // 进入动画：从模糊+缩小 展开到 清晰+满屏
+    // 进入动画：模糊 + 缩小 → 清晰 + 满屏
     val blurDp = (26f * (1f - openAnim.value)).dp
     val sc = 0.90f + 0.10f * openAnim.value
 
     Box(modifier = Modifier.fillMaxSize().zIndex(100f).background(Color(0xF2000000))) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .blur(blurDp)
                 .graphicsLayer { scaleX = sc; scaleY = sc; alpha = openAnim.value }
+                .padding(14.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-                // 标题
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "终端", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        text = "关闭",
-                        color = Color(0xFFFF453A),
-                        fontSize = 13.sp,
-                        modifier = Modifier.clickable { onExit() }
-                    )
-                }
-                // 输出（长按可复制）
-                SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(lines) { line ->
-                            Text(
-                                text = line,
-                                color = Color(0xFFDDDDDD),
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.padding(vertical = 1.dp)
-                            )
-                        }
-                    }
-                }
-                // 输入行：$ + 输入 + 运行 + 关闭
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "$", color = Color(0xFF4CAF50), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                    androidx.compose.foundation.text.BasicTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            imeAction = androidx.compose.ui.text.input.ImeAction.Go
-                        ),
-                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                            onGo = {
-                                run(input)
-                                input = ""
-                            }
-                        )
-                    )
-                    Text(
-                        text = if (busy) "…" else "运行",
-                        color = Color(0xFF0A84FF),
-                        fontSize = 12.sp,
-                        modifier = Modifier.clickable {
-                            run(input)
-                            input = ""
-                        }
-                    )
-                    Text(
-                        text = "关闭",
-                        color = Color(0xFFFF453A),
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(start = 10.dp).clickable { onExit() }
-                    )
-                }
+            // 标题行
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "执行输出", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "关闭",
+                    color = Color(0xFFFF453A),
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable { onExit() }
+                )
+            }
+            // 放大后的输出内容（可滚动、长按可复制）
+            SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Text(
+                    text = ansiAnnotated(text),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scroll),
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFFDDDDDD)
+                )
             }
         }
     }
