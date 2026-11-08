@@ -815,6 +815,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
         }
     if (editPath != null) {
+        var editFontScale by remember { mutableStateOf(1f) }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -822,60 +823,76 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 .padding(24.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Text(
-                    text = "编辑 " + (editPath ?: "").substringAfterLast('/'),
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "编辑 " + (editPath ?: "").substringAfterLast('/'),
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "取消",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clickable { editPath = null }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                    Text(
+                        text = "保存",
+                        color = Color(0xFF0A84FF),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clickable {
+                                val target = editPath
+                                if (target != null) {
+                                    uiScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            try {
+                                                val b64 = android.util.Base64.encodeToString(
+                                                    editText.toByteArray(),
+                                                    android.util.Base64.NO_WRAP
+                                                )
+                                                Shell.cmd(
+                                                    "echo '" + b64 + "' | base64 -d > '" +
+                                                        target.replace("'", "'\\''") + "'"
+                                                ).exec()
+                                            } catch (t: Throwable) {
+                                            }
+                                        }
+                                        editPath = null
+                                        refreshTick += 1
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
                 androidx.compose.foundation.text.BasicTextField(
                     value = editText,
                     onValueChange = { editText = it },
                     textStyle = androidx.compose.ui.text.TextStyle(
                         color = Color.White,
-                        fontSize = 12.sp,
+                        fontSize = (12f * editFontScale).sp,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     ),
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, _, zoom, _ ->
+                                editFontScale = (editFontScale * zoom).coerceIn(0.6f, 3f)
+                            }
+                        }
                         .background(Color(0xFF141418), RoundedCornerShape(10.dp))
                         .padding(10.dp)
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        IslandActionButton("取消", Color(0xFF3A3A3C)) {
-                            editPath = null
-                        }
-                    }
-                    Box(modifier = Modifier.weight(1f)) {
-                        IslandActionButton("保存", Color(0xFF0A84FF)) {
-                            val target = editPath
-                            if (target != null) {
-                                uiScope.launch {
-                                    withContext(Dispatchers.IO) {
-                                        try {
-                                            val b64 = android.util.Base64.encodeToString(
-                                                editText.toByteArray(),
-                                                android.util.Base64.NO_WRAP
-                                            )
-                                            Shell.cmd(
-                                                "echo '" + b64 + "' | base64 -d > '" +
-                                                    target.replace("'", "'\''") + "'"
-                                            ).exec()
-                                        } catch (t: Throwable) {
-                                        }
-                                    }
-                                    editPath = null
-                                    refreshTick += 1
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -1301,9 +1318,9 @@ private fun ProMaxIsland(
     // 执行文件时：分岛从胶囊里滑出（复用显出的动画）
     LaunchedEffect(terminalMode) {
         if (terminalMode) {
+            wingIconExpanded = true
             ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
-            wingIconExpanded = true
         } else {
             // 收起：先滑入胶囊（保持放大图标），滑出前才变回层叠
             ball.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 120f))
@@ -2529,9 +2546,16 @@ private fun TerminalOverlay(
             SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Text(
                     text = ansiAnnotated(text),
-                    modifier = Modifier.fillMaxWidth().verticalScroll(scroll),
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, _, zoom, _ ->
+                                fontScale = (fontScale * zoom).coerceIn(0.6f, 3f)
+                            }
+                        }
+                        .verticalScroll(scroll),
+                    fontSize = (12f * fontScale).sp,
+                    lineHeight = (18f * fontScale).sp,
                     fontFamily = FontFamily.Monospace,
                     color = Color(0xFFDDDDDD)
                 )
