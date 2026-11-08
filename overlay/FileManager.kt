@@ -188,6 +188,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     var panel by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
+    var termFull by remember { mutableStateOf(false) }
     var termInput by remember { mutableStateOf("") }
     var termText by remember { mutableStateOf("") }
     var selectedFile by remember { mutableStateOf<String?>(null) }
@@ -222,6 +223,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 .background(Color(BG_COLOR))
                 .blur(if (panel) 30.dp else 0.dp)
         ) {
+            if (termFull) {
+                TerminalOverlay(
+                    text = termText,
+                    input = termInput,
+                    onInputChange = { termInput = it },
+                    onRun = { termRun() },
+                    onExit = { termFull = false }
+                )
+            }
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
             BrowserPane(
@@ -357,6 +367,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         runOk = runOk,
         running = running,
         terminalMode = showTerminal,
+        onOpenTerminal = { termFull = true },
         termText = termText,
         termInput = termInput,
         onTermInput = { termInput = it },
@@ -955,7 +966,8 @@ private fun ProMaxIsland(
     leftPath: String = "/storage/emulated/0/",
     rightPath: String = "/data/",
     onFileOp: (String, String) -> Unit,
-    onOpen: () -> Unit
+    onOpen: () -> Unit,
+    onOpenTerminal: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     var showWave by remember { mutableStateOf(false) }
@@ -1251,6 +1263,7 @@ private fun ProMaxIsland(
         }
     }
     val ball = remember { Animatable(1f) }
+    var wingIconExpanded by remember { mutableStateOf(false) }
     val wingHidden = selectedFile != null || navMode
     LaunchedEffect(wingHidden) {
         if (wingHidden) {
@@ -1264,9 +1277,11 @@ private fun ProMaxIsland(
         if (terminalMode) {
             ball.snapTo(0f)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
+            wingIconExpanded = true
         } else {
-            // 收起：先滑入胶囊，再滑出（图标已变回层叠）
+            // 收起：先滑入胶囊（保持放大图标），滑出前才变回层叠
             ball.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 120f))
+            wingIconExpanded = false
             kotlinx.coroutines.delay(180)
             ball.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 130f))
         }
@@ -1317,11 +1332,11 @@ private fun ProMaxIsland(
                 .clip(RoundedCornerShape(21.dp))
                 .background(Color.Black)
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
-                .clickable { onOpen() },
+                .clickable { if (wingIconExpanded) onOpenTerminal() else onOpen() },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            if (terminalMode) {
+            if (wingIconExpanded) {
                 Icon(
                     imageVector = Icons.Outlined.Fullscreen,
                     contentDescription = "放大",
@@ -2446,81 +2461,73 @@ private fun IslandActionButton(
 }
 
 @Composable
-private fun TerminalOverlay(onExit: () -> Unit) {
-    var input by remember { mutableStateOf("") }
-    val lines = remember { androidx.compose.runtime.mutableStateListOf<String>() }
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-
-    fun run(cmd: String) {
-        if (cmd.isBlank()) return
-        lines.add("> " + cmd)
-        busy = true
-        scope.launch {
-            val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
-            out.out.forEach { if (it.isNotBlank()) lines.add(it) }
-            if (out.err.isNotEmpty()) out.err.forEach { if (it.isNotBlank()) lines.add(it) }
-            busy = false
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xF2000000)).padding(12.dp)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text = "终端", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "关闭",
-                color = Color(0xFF0A84FF),
-                fontSize = 13.sp,
-                modifier = Modifier.clickable { onExit() }
-            )
-        }
-        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            items(lines) { line ->
+private fun TerminalOverlay(
+    text: String,
+    input: String,
+    onInputChange: (String) -> Unit,
+    onRun: () -> Unit,
+    onExit: () -> Unit
+) {
+    val scroll = rememberScrollState()
+    Dialog(
+        onDismissRequest = onExit,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xF2000000))) {
+        Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+            // 执行输出（全屏）
+            SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Text(
-                    text = line,
-                    color = Color(0xFFDDDDDD),
-                    fontSize = 11.sp,
+                    text = ansiAnnotated(text),
+                    modifier = Modifier.fillMaxWidth().verticalScroll(scroll),
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
                     fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.padding(vertical = 1.dp)
+                    color = Color(0xFFDDDDDD)
+                )
+            }
+            // 底部输入行
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = input,
+                    onValueChange = onInputChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(Color(0xFF0E0E10), RoundedCornerShape(6.dp))
+                        .padding(6.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color.White,
+                        fontSize = 12.sp
+                    ),
+                    singleLine = true
+                )
+                IconButton(onClick = onExit, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.FullscreenExit,
+                        contentDescription = "缩小",
+                        tint = Color(0xFFB0B0B0)
+                    )
+                }
+                Text(
+                    "发送",
+                    modifier = Modifier
+                        .clickable { onRun() }
+                        .padding(start = 6.dp)
+                        .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
+                        .padding(horizontal = 16.dp, vertical = 7.dp),
+                    fontSize = 14.sp,
+                    color = Color.White
                 )
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = "\$", color = Color(0xFF4CAF50), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-            androidx.compose.foundation.text.BasicTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
-                textStyle = androidx.compose.ui.text.TextStyle(
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace
-                ),
-                singleLine = true,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Go
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onGo = {
-                        run(input)
-                        input = ""
-                    }
-                )
-            )
-            Text(
-                text = if (busy) "…" else "运行",
-                color = Color(0xFF0A84FF),
-                fontSize = 12.sp,
-                modifier = Modifier.clickable {
-                    run(input)
-                    input = ""
-                }
-            )
-        }
+    }
     }
 }
 
