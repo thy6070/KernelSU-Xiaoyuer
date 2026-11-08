@@ -142,6 +142,29 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v3
 
+      - name: Maven mirror
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/mirror.gradle <<'MIRROR'
+          allprojects {
+              repositories {
+                  maven { url 'https://maven.aliyun.com/repository/public' }
+                  maven { url 'https://maven.aliyun.com/repository/google' }
+                  maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+                  google()
+                  mavenCentral()
+              }
+          }
+          settingsEvaluated { settings ->
+              settings.pluginManagement {
+                  repositories {
+                      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+                      gradlePluginPortal()
+                  }
+              }
+          }
+          MIRROR
+
       - name: Build APK
         run: |
           cd src/manager
