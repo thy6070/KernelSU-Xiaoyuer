@@ -2209,6 +2209,26 @@ private fun ProMaxIsland(
                         .fillMaxWidth()
                         .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
                 ) {
+                    // 固定标题行：放大 / 关闭
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "终端", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "放大",
+                            color = Color(0xFF0A84FF),
+                            fontSize = 13.sp,
+                            modifier = Modifier.clickable { onOpenTerminal() }
+                        )
+                        Text(
+                            text = "关闭",
+                            color = Color(0xFFFF453A),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(start = 12.dp).clickable { onTermClose() }
+                        )
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2453,8 +2473,8 @@ private fun TerminalOverlay(text: String, onExit: () -> Unit) {
     val scroll = rememberScrollState()
 
     // 进入动画：模糊 + 缩小 → 清晰 + 满屏
-    val blurDp = (26f * (1f - openAnim.value)).dp
-    val sc = 0.90f + 0.10f * openAnim.value
+    val blurDp = (30f * (1f - openAnim.value)).dp
+    val sc = 0.25f + 0.75f * openAnim.value
 
     Box(modifier = Modifier.fillMaxSize().zIndex(100f).background(Color(0xF2000000))) {
         Column(
