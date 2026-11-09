@@ -245,23 +245,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
 
-    // 后台扫描背景文件，避免阻塞主线程导致 Surface 创建失败
-    val bgInfo = remember { mutableStateOf<Pair<String, Boolean>?>(null) }
-    LaunchedEffect(Unit) {
-        val name = kotlinx.coroutines.withContext(Dispatchers.IO) {
-            suNow("ls -1 /storage/emulated/0/小鱼儿/ 2>/dev/null | grep -E '^bg\\.(mp4|png|jpg|jpeg|webp)$' | head -1").trim()
-        }
-        bgInfo.value = if (name.isNotEmpty()) "/storage/emulated/0/小鱼儿/" + name to name.endsWith(".mp4")
-                       else "/storage/emulated/0/小鱼儿/bg.mp4" to true
-    }
-
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // 背景（读取用户设置的图片/视频，默认 bg.mp4）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
-                val info = bgInfo.value ?: ("/storage/emulated/0/小鱼儿/bg.mp4" to true)
-                val bgPath = info.first
-                val isVid = info.second
+                val bgPath = "/storage/emulated/0/小鱼儿/bg.mp4"
+                val isVid = true
                 val cached = java.io.File(ctx.filesDir, if (isVid) "bg_video.mp4" else "bg_image.img")
                 if (!cached.exists() || cached.length() == 0L) {
                     try {
@@ -2114,17 +2103,16 @@ private fun ProMaxIsland(
                                                     IslandActionButton("设为背景", Color(0xFF0A84FF)) {
                                                         try {
                                                             val src = longPressPath
-                                                            val ext = src.substringAfterLast('.', "mp4").lowercase()
-                                                            val dst = "/storage/emulated/0/小鱼儿/bg." + ext
+                                                            val dst = "/storage/emulated/0/小鱼儿/bg.mp4"
                                                             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                "rm -f /storage/emulated/0/小鱼儿/bg.* && cp '" + src.replace("'", "'\\''") + "' '" + dst + "'"))
+                                                                "cp -f '" + src.replace("'", "'\\''") + "' '" + dst + "'"))
                                                             pr.waitFor()
-                                                            // 清掉旧的背景缓存，下次进来重新复制
+                                                            // 清缓存，下次重新复制
                                                             try {
                                                                 java.io.File(navCtx.filesDir, "bg_video.mp4").delete()
                                                                 java.io.File(navCtx.filesDir, "bg_image.img").delete()
                                                             } catch (t2: Throwable) {}
-                                                            android.widget.Toast.makeText(navCtx, "背景已设为 " + dst, android.widget.Toast.LENGTH_SHORT).show()
+                                                            android.widget.Toast.makeText(navCtx, "背景已设为 bg.mp4", android.widget.Toast.LENGTH_SHORT).show()
                                                         } catch (t: Throwable) {
                                                             android.widget.Toast.makeText(navCtx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
                                                         }
