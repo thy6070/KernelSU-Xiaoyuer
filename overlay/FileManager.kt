@@ -277,10 +277,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 m.setSurface(android.view.Surface(st))
                                 m.isLooping = true
                                 m.setVolume(0f, 0f)
-                                m.prepare()
-                                m.start()
+                                m.setOnPreparedListener { p -> p.start() }
+                                m.setOnErrorListener { _, what, extra ->
+                                    android.util.Log.e("BG", "media error $what/$extra")
+                                    true
+                                }
+                                m.prepareAsync()
                                 mp = m
-                            } catch (t: Throwable) {}
+                            } catch (t: Throwable) {
+                                android.util.Log.e("BG", "video init: " + (t.message ?: ""))
+                            }
                         }
                         override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
                         override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
