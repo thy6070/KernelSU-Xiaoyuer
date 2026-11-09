@@ -194,6 +194,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     var panel by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
+    var previewPath by remember { mutableStateOf<String?>(null) }
     var termFull by remember { mutableStateOf(false) }
     var termInput by remember { mutableStateOf("") }
     var termText by remember { mutableStateOf("") }
@@ -794,6 +795,61 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
         }
+
+    // 图片/视频预览
+    val pv = previewPath
+    if (pv != null) {
+        val pvLower = pv.lowercase()
+        val pvIsVideo = pvLower.endsWith(".mp4") || pvLower.endsWith(".mkv") ||
+            pvLower.endsWith(".avi") || pvLower.endsWith(".mov") ||
+            pvLower.endsWith(".webm") || pvLower.endsWith(".3gp")
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(200f)
+                .background(Color.Black)
+                .clickable { previewPath = null },
+            contentAlignment = Alignment.Center
+        ) {
+            if (pvIsVideo) {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { vctx ->
+                        android.widget.VideoView(vctx).apply {
+                            val tmp = java.io.File(vctx.cacheDir, "preview_${Math.abs(pv.hashCode())}.mp4")
+                            if (!tmp.exists()) {
+                                try {
+                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                        "cp '" + pv.replace("'", "'\\''") + "' '" + tmp.absolutePath + "'"))
+                                    pr.waitFor()
+                                } catch (t: Throwable) {}
+                            }
+                            setVideoURI(android.net.Uri.fromFile(tmp))
+                            setOnPreparedListener { mp -> mp.isLooping = true; start() }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize().padding(vertical = 60.dp)
+                )
+            } else {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { vctx ->
+                        android.widget.ImageView(vctx).apply {
+                            val tmp = java.io.File(vctx.cacheDir, "preview_${Math.abs(pv.hashCode())}.img")
+                            if (!tmp.exists()) {
+                                try {
+                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                        "cp '" + pv.replace("'", "'\\''") + "' '" + tmp.absolutePath + "'"))
+                                    pr.waitFor()
+                                } catch (t: Throwable) {}
+                            }
+                            setImageBitmap(android.graphics.BitmapFactory.decodeFile(tmp.absolutePath))
+                            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize().padding(vertical = 60.dp)
+                )
+            }
+        }
+    }
 
     // 全屏终端（在模糊层之外，输出清晰）
     if (termFull) {
@@ -1400,8 +1456,14 @@ private fun ProMaxIsland(
     val selName = sel?.substringAfterLast('/') ?: ""
     val accent = sel?.let { fileAccent(it) } ?: Color(0xFFEDEDED)
     val lowerSel = sel?.lowercase() ?: ""
+    val _lowerSel2 = selName.lowercase()
+    val _isImgSel = _lowerSel2.endsWith(".jpg") || _lowerSel2.endsWith(".jpeg") || _lowerSel2.endsWith(".png") ||
+        _lowerSel2.endsWith(".webp") || _lowerSel2.endsWith(".bmp") || _lowerSel2.endsWith(".gif")
+    val _isVidSel = _lowerSel2.endsWith(".mp4") || _lowerSel2.endsWith(".mkv") || _lowerSel2.endsWith(".avi") ||
+        _lowerSel2.endsWith(".mov") || _lowerSel2.endsWith(".webm") || _lowerSel2.endsWith(".3gp")
     val actionLabel = when {
         sel == null -> ""
+        _isImgSel || _isVidSel -> "查看"
         isApk(selName) -> "安装"
         lowerSel.endsWith(".so") -> "启动"
         lowerSel.endsWith(".sh") || lowerSel.endsWith(".rc") -> "执行"
@@ -2021,7 +2083,7 @@ private fun ProMaxIsland(
                                                 val isImg = lp.endsWith(".jpg") || lp.endsWith(".jpeg") || lp.endsWith(".png") || lp.endsWith(".webp") || lp.endsWith(".bmp")
                                                 val isVid = lp.endsWith(".mp4") || lp.endsWith(".mkv") || lp.endsWith(".avi") || lp.endsWith(".mov") || lp.endsWith(".webm") || lp.endsWith(".3gp")
                                                 if (isImg || isVid) {
-                                                    IslandActionButton("设为背景", Color(0xFF8E8E93)) {
+                                                    IslandActionButton("设为背景", Color(0xFF0A84FF)) {
                                                         try {
                                                             navCtx.getSharedPreferences("settings", 0).edit()
                                                                 .putString("bg_path", longPressPath)
@@ -2414,7 +2476,9 @@ private fun ProMaxIsland(
                         }
                         Box(modifier = Modifier.weight(1f)) {
                             IslandActionButton(actionLabel, actionColor) {
-                                if (actionLabel == "更多") openArchive()
+                                if (actionLabel == "查看") {
+                                    previewPath = sel
+                                } else if (actionLabel == "更多") openArchive()
                                 else if (actionLabel == "编辑") onFileOp("edit", "")
                                 else if (lowerSel.endsWith(".so")) soPanel = true
                                 else onAction("")
