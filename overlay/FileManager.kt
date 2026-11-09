@@ -249,6 +249,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
+                // 图片背景（bg_image.img）优先，否则播视频（bg_video.mp4）
+                val imgCached = java.io.File(ctx.filesDir, "bg_image.img")
+                if (imgCached.exists() && imgCached.length() > 0L) {
+                    val iv = android.widget.ImageView(ctx)
+                    iv.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    try {
+                        iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
+                    } catch (t: Throwable) {}
+                    iv
+                } else {
                 val tv = android.view.TextureView(ctx)
                 val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
                 if (!cached.exists() || cached.length() == 0L) {
@@ -289,7 +299,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 tv
             },
             modifier = Modifier.fillMaxSize()
-                .blur(15.dp)
+                .blur(10.dp)
         )
         Box(
             modifier = Modifier
@@ -2095,14 +2105,19 @@ private fun ProMaxIsland(
                                                     IslandActionButton("设为背景", Color(0xFF0A84FF)) {
                                                         try {
                                                             val src = longPressPath
-                                                            val dst = java.io.File(navCtx.filesDir, "bg_video.mp4").absolutePath
+                                                            // 图片和视频分开存，背景渲染时按类型显示
+                                                            val dstName = if (isImg) "bg_image.img" else "bg_video.mp4"
+                                                            val otherName = if (isImg) "bg_video.mp4" else "bg_image.img"
+                                                            val dst = java.io.File(navCtx.filesDir, dstName).absolutePath
+                                                            val other = java.io.File(navCtx.filesDir, otherName).absolutePath
                                                             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                "cp -f '" + src.replace("'", "'\\''") + "' '" + dst + "'"))
+                                                                "rm -f '" + other + "' && cp -f '" + src.replace("'", "'\\''") + "' '" + dst + "' && chmod 644 '" + dst + "'"))
                                                             pr.waitFor()
                                                             android.widget.Toast.makeText(navCtx, "背景已替换，重进文件管理器生效", android.widget.Toast.LENGTH_SHORT).show()
                                                         } catch (t: Throwable) {
                                                             android.widget.Toast.makeText(navCtx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
                                                         }
+                                                        onClearLongPress()
                                                         closeIsland()
                                                     }
                                                 }
