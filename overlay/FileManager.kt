@@ -244,6 +244,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
+                try {
+                    android.widget.Toast.makeText(navCtx0,
+                        "定位: uri=" + uri + " | name=" + queryDisplayName(navCtx0, uri) + " | fp=" + fp,
+                        android.widget.Toast.LENGTH_LONG).show()
+                } catch (t: Throwable) {}
                 if (!fp.isNullOrBlank()) {
                     val f = java.io.File(fp)
                     if (f.isDirectory) {
