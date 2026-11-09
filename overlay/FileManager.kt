@@ -289,7 +289,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             },
             modifier = Modifier.fillMaxSize()
                 .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
-                .blur(20.dp)
+                .blur(15.dp)
         )
         Box(
             modifier = Modifier
@@ -793,7 +793,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
 
-    // 全屏终端（根层，zIndex 在岛之上，不受模糊影响）
+        }
+
+    // 全屏终端（在模糊层之外，输出清晰）
     if (termFull) {
         TerminalOverlay(
             text = termText,
@@ -803,9 +805,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onExit = { termFull = false }
         )
     }
-        }
 
-        if (panel) {
+    if (panel) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
