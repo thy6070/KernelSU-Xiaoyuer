@@ -193,6 +193,27 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var leftPath by remember { mutableStateOf("/storage/emulated/0") }
     var rightPath by remember { mutableStateOf("/data") }
 
+    // 处理外部应用传来的文件/目录（ACTION_VIEW）
+    val navCtx0 = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        try {
+            val act = navCtx0 as? android.app.Activity
+            val uri = act?.intent?.data
+            if (uri != null) {
+                val fp = uri.path
+                if (!fp.isNullOrBlank()) {
+                    val f = java.io.File(fp)
+                    if (f.isDirectory) {
+                        leftPath = fp
+                    } else {
+                        val pdir = f.parent
+                        if (!pdir.isNullOrBlank()) leftPath = pdir
+                    }
+                }
+            }
+        } catch (t: Throwable) {}
+    }
+
     var panel by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
     var previewPath by remember { mutableStateOf<String?>(null) }
