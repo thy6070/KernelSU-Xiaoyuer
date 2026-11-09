@@ -326,8 +326,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 val imgCached = java.io.File(ctx.filesDir, "bg_image.img")
                 if (imgCached.exists() && imgCached.length() > 0L) {
                     val iv = android.widget.ImageView(ctx)
-                    // 按横屏完整显示（不放大裁切，留边）
-                    iv.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    // 按设置的模式显示：default=等比例撑满；landscape=横屏撑满(裁切)
+                    val bgMode = try {
+                        ctx.getSharedPreferences("settings", 0).getString("bg_mode", "default") ?: "default"
+                    } catch (t: Throwable) { "default" }
+                    iv.scaleType = if (bgMode == "landscape") {
+                        android.widget.ImageView.ScaleType.CENTER_CROP
+                    } else {
+                        android.widget.ImageView.ScaleType.FIT_CENTER
+                    }
                     iv.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)
                     try {
                         iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
@@ -2200,21 +2207,14 @@ private fun ProMaxIsland(
                                                 val isImg = lp.endsWith(".jpg") || lp.endsWith(".jpeg") || lp.endsWith(".png") || lp.endsWith(".webp") || lp.endsWith(".bmp")
                                                 val isVid = lp.endsWith(".mp4") || lp.endsWith(".mkv") || lp.endsWith(".avi") || lp.endsWith(".mov") || lp.endsWith(".webm") || lp.endsWith(".3gp")
                                                 if (isImg || isVid) {
-                                                    IslandActionButton("设为背景", Color(0xFF0A84FF)) {
-                                                        try {
-                                                            val src = longPressPath
-                                                            // 图片和视频分开存，背景渲染时按类型显示
-                                                            val dstName = if (isImg) "bg_image.img" else "bg_video.mp4"
-                                                            val otherName = if (isImg) "bg_video.mp4" else "bg_image.img"
-                                                            val dst = java.io.File(navCtx.filesDir, dstName).absolutePath
-                                                            val other = java.io.File(navCtx.filesDir, otherName).absolutePath
-                                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                "rm -f '" + other + "' && cp -f '" + src.replace("'", "'\\''") + "' '" + dst + "' && chmod 644 '" + dst + "'"))
-                                                            pr.waitFor()
-                                                            android.widget.Toast.makeText(navCtx, "背景已替换，重进文件管理器生效", android.widget.Toast.LENGTH_SHORT).show()
-                                                        } catch (t: Throwable) {
-                                                            android.widget.Toast.makeText(navCtx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
-                                                        }
+                                                    // 默认：等比例撑满；横屏：横屏撑满
+                                                    IslandActionButton("默认", Color(0xFF8E8E93)) {
+                                                        setBgBackground(navCtx, longPressPath, isImg, "default")
+                                                        onClearLongPress()
+                                                        closeIsland()
+                                                    }
+                                                    IslandActionButton("横屏", Color(0xFF0A84FF)) {
+                                                        setBgBackground(navCtx, longPressPath, isImg, "landscape")
                                                         onClearLongPress()
                                                         closeIsland()
                                                     }
@@ -4138,6 +4138,23 @@ private val RT_DRIVER_MIRRORS = listOf(
 
 // 把 content:// URI 解析成真实文件路径（MediaStore / Downloads）
 // 从 content:// URI 查显示文件名
+// 设置背景（图片/视频），mode = default / landscape
+internal fun setBgBackground(ctx: android.content.Context, src: String, isImg: Boolean, mode: String) {
+    try {
+        ctx.getSharedPreferences("settings", 0).edit().putString("bg_mode", mode).apply()
+        val dstName = if (isImg) "bg_image.img" else "bg_video.mp4"
+        val otherName = if (isImg) "bg_video.mp4" else "bg_image.img"
+        val dst = java.io.File(ctx.filesDir, dstName).absolutePath
+        val other = java.io.File(ctx.filesDir, otherName).absolutePath
+        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+            "rm -f '" + other + "' && cp -f '" + src.replace("'", "'\\''") + "' '" + dst + "' && chmod 644 '" + dst + "'"))
+        pr.waitFor()
+        android.widget.Toast.makeText(ctx, "已设为背景（" + (if (mode == "default") "默认" else "横屏") + "），重进生效", android.widget.Toast.LENGTH_SHORT).show()
+    } catch (t: Throwable) {
+        android.widget.Toast.makeText(ctx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
 internal fun queryDisplayName(ctx: android.content.Context, uri: android.net.Uri): String? {
     try {
         ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
