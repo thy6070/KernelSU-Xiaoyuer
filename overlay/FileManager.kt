@@ -1551,7 +1551,6 @@ private fun ProMaxIsland(
         ) {
             Row(
                 modifier = Modifier
-                    .wrapContentSize()
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFF1A1A1E))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
