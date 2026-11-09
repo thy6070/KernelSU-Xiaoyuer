@@ -249,44 +249,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
-                val tv = android.view.TextureView(ctx)
-                val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
-                if (!cached.exists() || cached.length() == 0L) {
+                android.widget.VideoView(ctx).apply {
                     try {
-                        val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
-                        p.waitFor()
-                    } catch (t: Throwable) {}
-                }
-                tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-                    var mp: android.media.MediaPlayer? = null
-                    override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
-                        try {
-                            val m = android.media.MediaPlayer()
-                            m.setDataSource(cached.absolutePath)
-                            m.setSurface(android.view.Surface(st))
-                            m.isLooping = true
-                            m.setVolume(0f, 0f)
-                            m.setOnErrorListener { _, what, extra ->
-                                android.widget.Toast.makeText(ctx, "视频错误 " + what + "/" + extra, android.widget.Toast.LENGTH_LONG).show()
-                                true
-                            }
-                            m.prepare()
-                            m.start()
-                            mp = m
-                        } catch (t: Throwable) {
-                            android.widget.Toast.makeText(ctx, "视频异常: " + (t.message ?: t.javaClass.simpleName), android.widget.Toast.LENGTH_LONG).show()
+                        setVideoPath(cached.absolutePath)
+                        setOnPreparedListener { mp ->
+                            mp.isLooping = true
+                            mp.setVolume(0f, 0f)
+                            start()
                         }
+                        setOnErrorListener { _, what, extra ->
+                            android.util.Log.e("BG", "vv error " + what + "/" + extra)
+                            true
+                        }
+                    } catch (t: Throwable) {
+                        android.util.Log.e("BG", "vv: " + (t.message ?: ""))
                     }
-                    override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
-                    override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
-                        try { mp?.release() } catch (t: Throwable) {}
-                        mp = null
-                        return true
-                    }
-                    override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                 }
-                tv
             },
             modifier = Modifier.fillMaxSize()
                 .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
