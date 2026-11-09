@@ -194,7 +194,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     var panel by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
-    var previewPath by remember { mutableStateOf<String?>(null) }
     var termFull by remember { mutableStateOf(false) }
     var termInput by remember { mutableStateOf("") }
     var termText by remember { mutableStateOf("") }
@@ -249,6 +248,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
+                val tv = android.view.TextureView(ctx)
                 val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
                 if (!cached.exists() || cached.length() == 0L) {
                     try {
@@ -257,29 +257,45 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         p.waitFor()
                     } catch (t: Throwable) {}
                 }
-                android.widget.VideoView(ctx).apply {
-                    try {
-                        setVideoPath(cached.absolutePath)
-                        setOnPreparedListener { mp ->
-                            mp.isLooping = true
-                            mp.setVolume(0f, 0f)
-                            start()
+                tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                    var mp: android.media.MediaPlayer? = null
+                    override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                        try {
+                            val m = android.media.MediaPlayer()
+                            m.setDataSource(cached.absolutePath)
+                            m.setSurface(android.view.Surface(st))
+                            m.isLooping = true
+                            m.setVolume(0f, 0f)
+                            m.setOnErrorListener { _, what, extra ->
+                                android.widget.Toast.makeText(ctx, "视频错误 " + what + "/" + extra, android.widget.Toast.LENGTH_LONG).show()
+                                true
+                            }
+                            m.prepare()
+                            m.start()
+                            mp = m
+                        } catch (t: Throwable) {
+                            android.widget.Toast.makeText(ctx, "视频异常: " + (t.message ?: t.javaClass.simpleName), android.widget.Toast.LENGTH_LONG).show()
                         }
-                        setOnErrorListener { _, what, extra ->
-                            android.util.Log.e("BG", "vv error " + what + "/" + extra)
-                            true
-                        }
-                    } catch (t: Throwable) {
-                        android.util.Log.e("BG", "vv: " + (t.message ?: ""))
                     }
+                    override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                    override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
+                        try { mp?.release() } catch (t: Throwable) {}
+                        mp = null
+                        return true
+                    }
+                    override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                 }
+                tv
             },
             modifier = Modifier.fillMaxSize()
+                .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
+                .blur(15.dp)
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .blur(if (panel || termFull || editPath != null) 10.dp else 0.dp)
+                .background(Color(0x33000000))
+                .blur(if (panel || termFull || editPath != null) 15.dp else 0.dp)
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
@@ -417,7 +433,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         running = running,
         terminalMode = showTerminal,
         onOpenTerminal = { termFull = true },
-        onPreview = { previewPath = it },
         termText = termText,
         termInput = termInput,
         onTermInput = { termInput = it },
@@ -780,61 +795,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
         }
 
-    // 图片/视频预览
-    val pv = previewPath
-    if (pv != null) {
-        val pvLower = pv.lowercase()
-        val pvIsVideo = pvLower.endsWith(".mp4") || pvLower.endsWith(".mkv") ||
-            pvLower.endsWith(".avi") || pvLower.endsWith(".mov") ||
-            pvLower.endsWith(".webm") || pvLower.endsWith(".3gp")
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(200f)
-                .background(Color.Black)
-                .clickable { previewPath = null },
-            contentAlignment = Alignment.Center
-        ) {
-            if (pvIsVideo) {
-                androidx.compose.ui.viewinterop.AndroidView(
-                    factory = { vctx ->
-                        android.widget.VideoView(vctx).apply {
-                            val tmp = java.io.File(vctx.cacheDir, "preview_${Math.abs(pv.hashCode())}.mp4")
-                            if (!tmp.exists()) {
-                                try {
-                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                        "cp '" + pv.replace("'", "'\\''") + "' '" + tmp.absolutePath + "'"))
-                                    pr.waitFor()
-                                } catch (t: Throwable) {}
-                            }
-                            setVideoURI(android.net.Uri.fromFile(tmp))
-                            setOnPreparedListener { mp -> mp.isLooping = true; start() }
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize().padding(vertical = 60.dp)
-                )
-            } else {
-                androidx.compose.ui.viewinterop.AndroidView(
-                    factory = { vctx ->
-                        android.widget.ImageView(vctx).apply {
-                            val tmp = java.io.File(vctx.cacheDir, "preview_${Math.abs(pv.hashCode())}.img")
-                            if (!tmp.exists()) {
-                                try {
-                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                        "cp '" + pv.replace("'", "'\\''") + "' '" + tmp.absolutePath + "'"))
-                                    pr.waitFor()
-                                } catch (t: Throwable) {}
-                            }
-                            setImageBitmap(android.graphics.BitmapFactory.decodeFile(tmp.absolutePath))
-                            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize().padding(vertical = 60.dp)
-                )
-            }
-        }
-    }
-
     // 全屏终端（在模糊层之外，输出清晰）
     if (termFull) {
         TerminalOverlay(
@@ -1111,7 +1071,6 @@ private fun ProMaxIsland(
     rightPath: String = "/data/",
     onFileOp: (String, String) -> Unit,
     onOpenTerminal: () -> Unit,
-    onPreview: (String) -> Unit,
     onOpen: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1441,14 +1400,8 @@ private fun ProMaxIsland(
     val selName = sel?.substringAfterLast('/') ?: ""
     val accent = sel?.let { fileAccent(it) } ?: Color(0xFFEDEDED)
     val lowerSel = sel?.lowercase() ?: ""
-    val _lowerSel2 = selName.lowercase()
-    val _isImgSel = _lowerSel2.endsWith(".jpg") || _lowerSel2.endsWith(".jpeg") || _lowerSel2.endsWith(".png") ||
-        _lowerSel2.endsWith(".webp") || _lowerSel2.endsWith(".bmp") || _lowerSel2.endsWith(".gif")
-    val _isVidSel = _lowerSel2.endsWith(".mp4") || _lowerSel2.endsWith(".mkv") || _lowerSel2.endsWith(".avi") ||
-        _lowerSel2.endsWith(".mov") || _lowerSel2.endsWith(".webm") || _lowerSel2.endsWith(".3gp")
     val actionLabel = when {
         sel == null -> ""
-        _isImgSel || _isVidSel -> "查看"
         isApk(selName) -> "安装"
         lowerSel.endsWith(".so") -> "启动"
         lowerSel.endsWith(".sh") || lowerSel.endsWith(".rc") -> "执行"
@@ -1482,16 +1435,7 @@ private fun ProMaxIsland(
                 .clip(RoundedCornerShape(21.dp))
                 .background(Color.Black)
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
-                .clickable {
-                    if (wingIconExpanded) {
-                        // 先关岛内终端 + 清长按/选中 + 收岛，再由全屏终端接管
-                        onTermClose()
-                        onClearLongPress()
-                        onClearSelection()
-                        closeIsland()
-                        onOpenTerminal()
-                    } else onOpen()
-                },
+                .clickable { if (wingIconExpanded) onOpenTerminal() else onOpen() },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -2071,27 +2015,6 @@ private fun ProMaxIsland(
                                                 onFileOp("share", "")
                                                 closeIsland()
                                             }
-                                            // 图片/视频设为背景
-                                            if (!longPressIsDir && longPressPath != null) {
-                                                val lp = longPressPath.lowercase()
-                                                val isImg = lp.endsWith(".jpg") || lp.endsWith(".jpeg") || lp.endsWith(".png") || lp.endsWith(".webp") || lp.endsWith(".bmp")
-                                                val isVid = lp.endsWith(".mp4") || lp.endsWith(".mkv") || lp.endsWith(".avi") || lp.endsWith(".mov") || lp.endsWith(".webm") || lp.endsWith(".3gp")
-                                                if (isImg || isVid) {
-                                                    IslandActionButton("设为背景", Color(0xFF0A84FF)) {
-                                                        try {
-                                                            val src = longPressPath
-                                                            val dst = java.io.File(navCtx.filesDir, "bg_video.mp4").absolutePath
-                                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                "cp -f '" + src.replace("'", "'\\''") + "' '" + dst + "'"))
-                                                            pr.waitFor()
-                                                            android.widget.Toast.makeText(navCtx, "背景已替换，重进文件管理器生效", android.widget.Toast.LENGTH_SHORT).show()
-                                                        } catch (t: Throwable) {
-                                                            android.widget.Toast.makeText(navCtx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
-                                                        }
-                                                        closeIsland()
-                                                    }
-                                                }
-                                            }
                                         }
                                         if (!longPressIsDir) {
                                             IslandActionButton(
@@ -2474,9 +2397,7 @@ private fun ProMaxIsland(
                         }
                         Box(modifier = Modifier.weight(1f)) {
                             IslandActionButton(actionLabel, actionColor) {
-                                if (actionLabel == "查看") {
-                                    sel?.let { onPreview(it) }
-                                } else if (actionLabel == "更多") openArchive()
+                                if (actionLabel == "更多") openArchive()
                                 else if (actionLabel == "编辑") onFileOp("edit", "")
                                 else if (lowerSel.endsWith(".so")) soPanel = true
                                 else onAction("")
@@ -3817,25 +3738,19 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
         lowerName.endsWith(".3gp") || lowerName.endsWith(".webm")
     val mediaThumb by produceState<ImageBitmap?>(null, fullPath) {
         if (value != null) return@produceState
-        if (isDir || (!isImageFile && !isVideoFile)) return@produceState
+        if (isDir) return@produceState
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                // App 无存储权限：先用 root 复制到 cache 再解码
-                val tmp = java.io.File(ctx.cacheDir, "thumb_" + Math.abs(fullPath.hashCode()))
-                if (!tmp.exists() || tmp.length() == 0L) {
-                    suNow("cp '" + fullPath.replace("'", "'\\''") + "' '" + tmp.absolutePath + "'")
-                }
-                if (!tmp.exists() || tmp.length() == 0L) null
-                else if (isImageFile) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(tmp.absolutePath)
+                if (isImageFile) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(fullPath)
                     if (bmp != null) {
                         val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 96, 96, true)
                         if (scaled !== bmp) bmp.recycle()
                         scaled.asImageBitmap()
                     } else null
-                } else {
+                } else if (isVideoFile) {
                     val retr = android.media.MediaMetadataRetriever()
-                    retr.setDataSource(tmp.absolutePath)
+                    retr.setDataSource(fullPath)
                     val bmp = retr.getFrameAtTime(0)
                     retr.release()
                     if (bmp != null) {
@@ -3843,7 +3758,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
                         if (scaled !== bmp) bmp.recycle()
                         scaled.asImageBitmap()
                     } else null
-                }
+                } else null
             } catch (t: Throwable) { null }
         }
     }
