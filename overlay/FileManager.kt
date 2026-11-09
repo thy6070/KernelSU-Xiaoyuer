@@ -434,6 +434,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         running = running,
         terminalMode = showTerminal,
         onOpenTerminal = { termFull = true },
+        onPreview = { previewPath = it },
         termText = termText,
         termInput = termInput,
         onTermInput = { termInput = it },
@@ -1127,6 +1128,7 @@ private fun ProMaxIsland(
     rightPath: String = "/data/",
     onFileOp: (String, String) -> Unit,
     onOpenTerminal: () -> Unit,
+    onPreview: (String) -> Unit,
     onOpen: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -2477,7 +2479,7 @@ private fun ProMaxIsland(
                         Box(modifier = Modifier.weight(1f)) {
                             IslandActionButton(actionLabel, actionColor) {
                                 if (actionLabel == "查看") {
-                                    previewPath = sel
+                                    sel?.let { onPreview(it) }
                                 } else if (actionLabel == "更多") openArchive()
                                 else if (actionLabel == "编辑") onFileOp("edit", "")
                                 else if (lowerSel.endsWith(".so")) soPanel = true
