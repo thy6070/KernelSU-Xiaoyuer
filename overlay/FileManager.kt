@@ -340,11 +340,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 val tv = android.view.TextureView(ctx)
                 val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
                 if (!cached.exists() || cached.length() == 0L) {
+                    // 1) 优先从 小鱼儿/bg.mp4 复制
                     try {
                         val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                             "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "' && chmod 644 '" + cached.absolutePath + "'"))
                         p.waitFor()
                     } catch (t: Throwable) {}
+                }
+                if (!cached.exists() || cached.length() == 0L) {
+                    // 2) 回退：从 APK 内置 assets/bg.mp4 释放
+                    try {
+                        ctx.assets.open("bg.mp4").use { input ->
+                            cached.outputStream().use { out -> input.copyTo(out) }
+                        }
+                    } catch (t: Throwable) {
+                        android.util.Log.e("BG", "asset: " + (t.message ?: ""))
+                    }
                 }
                 tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
                     var mp: android.media.MediaPlayer? = null
@@ -367,7 +378,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             try { cached.delete() } catch (t2: Throwable) {}
                             android.widget.Toast.makeText(ctx, "视频异常[" + t.javaClass.simpleName + "]: " + (t.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
                             try {
-                                val lf = java.io.File("/data/local/tmp/xy_bg_error.log")
+                                val lf = java.io.File("/storage/emulated/0/小鱼儿/bg_error.log")
                                 lf.appendText(java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) +
                                     " " + t.javaClass.simpleName + ": " + (t.message ?: "") +
                                     " | file=" + cached.absolutePath + " | len=" + cached.length() +
