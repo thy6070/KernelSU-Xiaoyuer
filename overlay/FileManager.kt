@@ -246,19 +246,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // 背景（读取用户设置的图片/视频，默认 bg.mp4）
+        // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
+                val tv = android.view.TextureView(ctx)
                 val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
                 if (!cached.exists() || cached.length() == 0L) {
-                    // 首次：从 小鱼儿/bg.mp4 复制一份作默认
                     try {
                         val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "cp -f '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
+                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
                         p.waitFor()
                     } catch (t: Throwable) {}
                 }
-                val tv = android.view.TextureView(ctx)
                 tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
                     var mp: android.media.MediaPlayer? = null
                     override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
@@ -268,12 +267,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             m.setSurface(android.view.Surface(st))
                             m.isLooping = true
                             m.setVolume(0f, 0f)
+                            m.setOnErrorListener { _, what, extra ->
+                                android.widget.Toast.makeText(ctx, "视频错误 " + what + "/" + extra, android.widget.Toast.LENGTH_LONG).show()
+                                true
+                            }
                             m.prepare()
                             m.start()
                             mp = m
-                            android.util.Log.e("BG", "video started")
                         } catch (t: Throwable) {
-                            android.util.Log.e("BG", "video: " + (t.message ?: ""))
+                            android.widget.Toast.makeText(ctx, "视频异常: " + (t.message ?: t.javaClass.simpleName), android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
                     override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
@@ -285,7 +287,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                 }
                 tv
-
             },
             modifier = Modifier.fillMaxSize()
                 .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
