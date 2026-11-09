@@ -326,16 +326,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 val imgCached = java.io.File(ctx.filesDir, "bg_image.img")
                 if (imgCached.exists() && imgCached.length() > 0L) {
                     val iv = android.widget.ImageView(ctx)
-                    // 按设置的模式显示：default=等比例撑满；landscape=横屏撑满(裁切)
+                    // default=等比例撑满；landscape=把图片旋转成横屏再撑满
                     val bgMode = try {
                         ctx.getSharedPreferences("settings", 0).getString("bg_mode", "default") ?: "default"
                     } catch (t: Throwable) { "default" }
-                    iv.scaleType = if (bgMode == "landscape") {
-                        android.widget.ImageView.ScaleType.CENTER_CROP
-                    } else {
-                        android.widget.ImageView.ScaleType.FIT_CENTER
-                    }
+                    iv.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
                     iv.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)
+                    if (bgMode == "landscape") {
+                        try {
+                            val raw = android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath)
+                            if (raw != null) {
+                                val mtx = android.graphics.Matrix()
+                                mtx.postRotate(90f)
+                                val rotated = android.graphics.Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, mtx, true)
+                                iv.setImageBitmap(rotated)
+                            }
+                        } catch (t: Throwable) {}
+                    }
                     try {
                         iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
                     } catch (t: Throwable) {}
@@ -1532,7 +1539,7 @@ private fun ProMaxIsland(
 
     // Island.kt ball choreography
     val wingPress = remember { Animatable(0f) }
-    // 设为背景：模式选择面板
+    // 设为背景：模式选择面板（用小尺寸岛按钮，居中）
     val bgPickNow = bgModePick
     if (bgPickNow != null) {
         Box(
@@ -1544,35 +1551,21 @@ private fun ProMaxIsland(
         ) {
             Row(
                 modifier = Modifier
+                    .wrapContentSize()
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFF1A1A1E))
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "默认",
-                    modifier = Modifier
-                        .clickable {
-                            setBgBackground(navCtx, bgPickNow, bgModeIsImg, "default")
-                            bgModePick = null
-                        }
-                        .background(Color(0xFF3A3A3C), RoundedCornerShape(percent = 50))
-                        .padding(horizontal = 24.dp, vertical = 10.dp),
-                    fontSize = 14.sp,
-                    color = Color.White
-                )
-                Text(
-                    "横屏",
-                    modifier = Modifier
-                        .clickable {
-                            setBgBackground(navCtx, bgPickNow, bgModeIsImg, "landscape")
-                            bgModePick = null
-                        }
-                        .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
-                        .padding(horizontal = 24.dp, vertical = 10.dp),
-                    fontSize = 14.sp,
-                    color = Color.White
-                )
+                IslandActionButton("默认", Color(0xFF3A3A3C)) {
+                    setBgBackground(navCtx, bgPickNow, bgModeIsImg, "default")
+                    bgModePick = null
+                }
+                IslandActionButton("横屏", Color(0xFF0A84FF)) {
+                    setBgBackground(navCtx, bgPickNow, bgModeIsImg, "landscape")
+                    bgModePick = null
+                }
             }
         }
     }
