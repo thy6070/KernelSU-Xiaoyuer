@@ -249,6 +249,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
+                val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
+                if (!cached.exists() || cached.length() == 0L) {
+                    try {
+                        val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
+                        p.waitFor()
+                    } catch (t: Throwable) {}
+                }
                 android.widget.VideoView(ctx).apply {
                     try {
                         setVideoPath(cached.absolutePath)
