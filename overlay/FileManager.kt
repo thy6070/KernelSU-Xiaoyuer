@@ -267,7 +267,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                  "/storage/emulated/0/小鱼儿/bg.mp4"
                              }
                 val isVid = bgPath.lowercase().endsWith(".mp4")
-                val cached = java.io.File(ctx.filesDir, "bg_" + Math.abs(bgPath.hashCode()) + (if (isVid) ".mp4" else ".img"))
+                val cached = java.io.File(ctx.filesDir, if (isVid) "bg_video.mp4" else "bg_image.img")
                 if (!cached.exists() || cached.length() == 0L) {
                     try {
                         val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
@@ -276,22 +276,32 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     } catch (t: Throwable) {}
                 }
                 if (isVid) {
-                    android.widget.VideoView(ctx).apply {
-                        try {
-                            setVideoPath(cached.absolutePath)
-                            setOnPreparedListener { mp ->
-                                mp.isLooping = true
-                                mp.setVolume(0f, 0f)
-                                start()
+                    val tv = android.view.TextureView(ctx)
+                    tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                        var mp: android.media.MediaPlayer? = null
+                        override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                            try {
+                                val m = android.media.MediaPlayer()
+                                m.setDataSource(cached.absolutePath)
+                                m.setSurface(android.view.Surface(st))
+                                m.isLooping = true
+                                m.setVolume(0f, 0f)
+                                m.prepare()
+                                m.start()
+                                mp = m
+                            } catch (t: Throwable) {
+                                android.util.Log.e("BG", "video: " + (t.message ?: ""))
                             }
-                            setOnErrorListener { _, what, extra ->
-                                android.util.Log.e("BG", "video error " + what + "/" + extra)
-                                true
-                            }
-                        } catch (t: Throwable) {
-                            android.util.Log.e("BG", "video: " + (t.message ?: ""))
                         }
+                        override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                        override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
+                            try { mp?.release() } catch (t: Throwable) {}
+                            mp = null
+                            return true
+                        }
+                        override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                     }
+                    tv
                 } else {
                     android.widget.ImageView(ctx).apply {
                         scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
