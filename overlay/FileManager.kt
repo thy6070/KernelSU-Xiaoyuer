@@ -3777,7 +3777,16 @@ private fun BrowserPane(
         }
     }
     LaunchedEffect(highlightName, entries) {
-        val idx = entries.indexOfFirst { it.name == highlightName }
+        // 优先按完整路径定位；匹配不到时回退到文件名
+        val byPath = entries.indexOfFirst {
+            val joined = if (path.endsWith("/")) path + it.name else "$path/${it.name}"
+            joined == highlightName
+        }
+        val byName = if (byPath < 0 && highlightName != null) {
+            val n = highlightName.substringAfterLast('/')
+            entries.indexOfFirst { it.name == n }
+        } else -1
+        val idx = if (byPath >= 0) byPath else byName
         if (idx >= 0) {
             listState.animateScrollToItem(idx + 1)
         }
