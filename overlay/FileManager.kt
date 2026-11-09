@@ -256,7 +256,24 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     pr.inputStream.bufferedReader().readText().trim().also { pr.waitFor() }
                 } catch (t: Throwable) { "" }
                 val bgPath = if (bgName.isNotEmpty()) "/storage/emulated/0/小鱼儿/" + bgName
-                             else "/storage/emulated/0/小鱼儿/bg.mp4"
+                             else {
+                                 // 没有 bg.* 时，用备份的默认视频
+                                 val def = "/storage/emulated/0/小鱼儿/default_bg.mp4"
+                                 val exists = try {
+                                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", "[ -s '" + def + "' ] && echo y"))
+                                     val o2 = pr.inputStream.bufferedReader().readText().trim()
+                                     pr.waitFor()
+                                     o2 == "y"
+                                 } catch (t: Throwable) { false }
+                                 if (exists) {
+                                     try {
+                                         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                             "cp '" + def + "' '/storage/emulated/0/小鱼儿/bg.mp4'"))
+                                         pr.waitFor()
+                                     } catch (t: Throwable) {}
+                                     "/storage/emulated/0/小鱼儿/bg.mp4"
+                                 } else def
+                             }
                 val isVid = bgPath.lowercase().endsWith(".mp4")
                 val cached = java.io.File(ctx.filesDir, "bg_" + Math.abs(bgPath.hashCode()) + (if (isVid) ".mp4" else ".img"))
                 if (!cached.exists() || cached.length() == 0L) {
