@@ -253,7 +253,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 if (!cached.exists() || cached.length() == 0L) {
                     try {
                         val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
+                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "' && chmod 644 '" + cached.absolutePath + "'"))
                         p.waitFor()
                     } catch (t: Throwable) {}
                 }
