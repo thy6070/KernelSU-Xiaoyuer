@@ -246,6 +246,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
 
+    // 目录滚动位置（根层共享，避免 key 重建丢状态）
+    val dirScroll = remember { mutableStateMapOf<String, Int>() }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
@@ -312,6 +315,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         key(leftPath) {
             BrowserPane(
                 path = leftPath,
+                dirScroll = dirScroll,
                 onNavigate = { leftPath = it },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
@@ -353,6 +357,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         key(rightPath) {
             BrowserPane(
                 path = rightPath,
+                dirScroll = dirScroll,
                 onNavigate = { rightPath = it },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
@@ -3689,6 +3694,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
 @Composable
 private fun BrowserPane(
     path: String,
+    dirScroll: MutableMap<String, Int>,
     onNavigate: (String) -> Unit,
     onFileClick: (String) -> Unit,
     refreshTick: Int = 0,
@@ -3724,8 +3730,8 @@ private fun BrowserPane(
 
     val parent = parentOf(path)
     val listState = rememberLazyListState()
-    // 记住每个目录的滚动位置，返回上级时恢复而不是跳到顶部
-    val scrollPositions = remember { mutableStateMapOf<String, Int>() }
+    // 记住每个目录的滚动位置，返回上级时恢复而不是跳到顶部（根层共享）
+    val scrollPositions = dirScroll
     var restoredPath by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(entries) {
         if (entries.isNotEmpty() && restoredPath != path) {
