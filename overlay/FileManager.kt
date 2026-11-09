@@ -3723,6 +3723,21 @@ private fun BrowserPane(
 
     val parent = parentOf(path)
     val listState = rememberLazyListState()
+    // 记住每个目录的滚动位置，返回上级时恢复而不是跳到顶部
+    val scrollPositions = remember { mutableStateMapOf<String, Int>() }
+    var restoredPath by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(entries) {
+        if (entries.isNotEmpty() && restoredPath != path) {
+            val pos = scrollPositions[path] ?: 0
+            listState.scrollToItem(pos.coerceIn(0, maxOf(0, entries.size)))
+            restoredPath = path
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(path) {
+        onDispose {
+            scrollPositions[path] = listState.firstVisibleItemIndex
+        }
+    }
     LaunchedEffect(highlightName, entries) {
         val idx = entries.indexOfFirst { it.name == highlightName }
         if (idx >= 0) {
