@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -201,14 +200,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val act = navCtx0 as? android.app.Activity
             val uri = act?.intent?.data
             if (uri != null) {
-                val fp = uri.path
+                val fp = when {
+                    uri.scheme == "content" -> queryRealPath(navCtx0, uri)
+                    else -> uri.path
+                }
                 if (!fp.isNullOrBlank()) {
                     val f = java.io.File(fp)
                     if (f.isDirectory) {
                         leftPath = fp
+                        FileLocate.path = fp
+                        FileLocate.tick += 1
                     } else {
                         val pdir = f.parent
-                        if (!pdir.isNullOrBlank()) leftPath = pdir
+                        if (!pdir.isNullOrBlank()) {
+                            leftPath = pdir
+                            FileLocate.path = fp
+                            FileLocate.tick += 1
+                        }
                     }
                 }
             }
@@ -236,7 +244,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val target = FileLocate.path ?: return@LaunchedEffect
         val dir = target.substringBeforeLast('/', "/")
         if (leftPath == dir) refreshTick += 1 else leftPath = dir
-        leftHighlight = target
+        leftHighlight = target.substringAfterLast('/')
     }
 
     var runMessage by remember { mutableStateOf<String?>(null) }
@@ -270,8 +278,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     // 目录滚动位置（根层共享，避免 key 重建丢状态）
     val dirScroll = remember { mutableStateMapOf<String, Int>() }
-    // 多选路径集合（橙色填充）
-    val selectedPaths = remember { mutableStateMapOf<String, Boolean>() }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
@@ -340,7 +346,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = leftPath,
                 dirScroll = dirScroll,
-                selectedPaths = selectedPaths,
                 onNavigate = { leftPath = it },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
@@ -383,7 +388,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = rightPath,
                 dirScroll = dirScroll,
-                selectedPaths = selectedPaths,
                 onNavigate = { rightPath = it },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
@@ -3721,7 +3725,6 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
 private fun BrowserPane(
     path: String,
     dirScroll: MutableMap<String, Int>,
-    selectedPaths: MutableMap<String, Boolean>,
     onNavigate: (String) -> Unit,
     onFileClick: (String) -> Unit,
     refreshTick: Int = 0,
@@ -3773,11 +3776,7 @@ private fun BrowserPane(
         }
     }
     LaunchedEffect(highlightName, entries) {
-        // 按完整路径定位（避免同名文件跳错）
-        val idx = entries.indexOfFirst {
-            val joined = if (path.endsWith("/")) path + it.name else "$path/${it.name}"
-            joined == highlightName
-        }
+        val idx = entries.indexOfFirst { it.name == highlightName }
         if (idx >= 0) {
             listState.animateScrollToItem(idx + 1)
         }
@@ -3820,22 +3819,12 @@ private fun BrowserPane(
                 name = entry.name,
                 isDir = entry.isDir,
                 fullPath = rowPath,
-                selected = selectedPath == rowPath || selectedPaths.containsKey(rowPath),
+                selected = selectedPath == rowPath,
                 highlight = highlightName,
                 onClick = {
-                    if (selectedPaths.isNotEmpty()) {
-                        // 多选状态：点击切换选中
-                        if (selectedPaths.containsKey(rowPath)) selectedPaths.remove(rowPath)
-                        else selectedPaths[rowPath] = true
-                    } else {
-                        if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
-                    }
+                    if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
-                onLongClick = { onLongPress(rowPath) },
-                onSwipe = {
-                    if (selectedPaths.containsKey(rowPath)) selectedPaths.remove(rowPath)
-                    else selectedPaths[rowPath] = true
-                }
+                onLongClick = { onLongPress(rowPath) }
             )
         }
     }
@@ -3849,8 +3838,7 @@ private fun FsRow(
     selected: Boolean = false,
     highlight: String? = null,
     onClick: () -> Unit,
-    onLongClick: () -> Unit = {},
-    onSwipe: () -> Unit = {}
+    onLongClick: () -> Unit = {}
 ) {
     // ZySU row: rounded 14dp, no tile behind the glyph, 12sp monospace, outline on the row
     val accent = if (isDir) null else fileAccent(name)
@@ -3859,24 +3847,9 @@ private fun FsRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .pointerInput(fullPath) {
-                // 向右滑动 = 切换多选
-                var dx = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { dx = 0f },
-                    onDragEnd = {
-                        if (dx > 40f) onSwipe()
-                        dx = 0f
-                    }
-                ) { change, drag ->
-                    dx += drag
-                    change.consume()
-                }
-            }
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .background(
-                if (selected) Color(0x33FF9800)
-                else if (highlight != null && highlight == fullPath) Color(0x3300BCD4)
+                if (highlight != null && highlight == name) Color(0x3300BCD4)
                 else Color.Transparent
             )
             .then(
@@ -4092,6 +4065,33 @@ private val RT_DRIVER_MIRRORS = listOf(
     "https://gh.llkk.cc/",
     "https://hub.gitmirror.com/"
 )
+
+// 把 content:// URI 解析成真实文件路径（MediaStore / Downloads）
+internal fun queryRealPath(ctx: android.content.Context, uri: android.net.Uri): String? {
+    try {
+        if (uri.scheme == "file") return uri.path
+        val proj = arrayOf(android.provider.MediaStore.Files.FileColumns.DATA)
+        ctx.contentResolver.query(uri, proj, null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val idx = c.getColumnIndex(android.provider.MediaStore.Files.FileColumns.DATA)
+                if (idx >= 0) {
+                    val p = c.getString(idx)
+                    if (!p.isNullOrBlank()) return p
+                }
+            }
+        }
+    } catch (t: Throwable) {}
+    try {
+        val id = android.provider.DocumentsContract.getDocumentId(uri)
+        if (id.startsWith("raw:")) return id.removePrefix("raw:")
+        if (id.contains(":")) {
+            val p = id.substringAfter(":")
+            if (p.startsWith("/")) return p
+            return p
+        }
+    } catch (t: Throwable) {}
+    return null
+}
 
 internal fun suBin(): String {
     // Never probe at length here: the first su call may block on the grant dialog.
