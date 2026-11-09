@@ -363,6 +363,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             m.start()
                             mp = m
                         } catch (t: Throwable) {
+                            // 播放失败：删掉缓存，下次启动重新复制（可能缓存损坏/编码不兼容）
+                            try { cached.delete() } catch (t2: Throwable) {}
                             android.widget.Toast.makeText(ctx, "视频异常: " + (t.message ?: t.javaClass.simpleName), android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
