@@ -293,7 +293,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0x33000000))
                 .blur(if (panel || termFull || editPath != null) 10.dp else 0.dp)
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
