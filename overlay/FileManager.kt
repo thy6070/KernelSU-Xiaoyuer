@@ -258,40 +258,34 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         p.waitFor()
                     } catch (t: Throwable) {}
                 }
-                if (isVid) {
-                    val tv = android.view.TextureView(ctx)
-                    tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-                        var mp: android.media.MediaPlayer? = null
-                        override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
-                            try {
-                                val m = android.media.MediaPlayer()
-                                m.setDataSource(cached.absolutePath)
-                                m.setSurface(android.view.Surface(st))
-                                m.isLooping = true
-                                m.setVolume(0f, 0f)
-                                m.prepare()
-                                m.start()
-                                mp = m
-                                android.util.Log.e("BG", "video started")
-                            } catch (t: Throwable) {
-                                android.util.Log.e("BG", "video: " + (t.message ?: ""))
-                            }
+                val tv = android.view.TextureView(ctx)
+                tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                    var mp: android.media.MediaPlayer? = null
+                    override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                        try {
+                            val m = android.media.MediaPlayer()
+                            m.setDataSource(cached.absolutePath)
+                            m.setSurface(android.view.Surface(st))
+                            m.isLooping = true
+                            m.setVolume(0f, 0f)
+                            m.prepare()
+                            m.start()
+                            mp = m
+                            android.util.Log.e("BG", "video started")
+                        } catch (t: Throwable) {
+                            android.util.Log.e("BG", "video: " + (t.message ?: ""))
                         }
-                        override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
-                        override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
-                            try { mp?.release() } catch (t: Throwable) {}
-                            mp = null
-                            return true
-                        }
-                        override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                     }
-                    tv
-                } else {
-                    android.widget.ImageView(ctx).apply {
-                        scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                        setImageBitmap(android.graphics.BitmapFactory.decodeFile(cached.absolutePath))
+                    override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                    override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
+                        try { mp?.release() } catch (t: Throwable) {}
+                        mp = null
+                        return true
                     }
+                    override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                 }
+                tv
+
             },
             modifier = Modifier.fillMaxSize()
                 .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
