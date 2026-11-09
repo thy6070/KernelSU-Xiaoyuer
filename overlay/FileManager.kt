@@ -2581,6 +2581,7 @@ private fun TerminalOverlay(
     // 和编辑文本同款：半透明黑 + 根层模糊背景
     androidx.compose.animation.AnimatedVisibility(
         visible = open,
+        modifier = Modifier.fillMaxSize().zIndex(100f),
         enter = androidx.compose.animation.expandVertically(
             animationSpec = tween(360, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
             expandFrom = Alignment.CenterVertically
@@ -2593,7 +2594,6 @@ private fun TerminalOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .zIndex(100f)
                 .background(Color(0x66000000))
                 .padding(12.dp)
         ) {
