@@ -249,13 +249,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         // 背景（读取用户设置的图片/视频，默认 bg.mp4）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
-                val bgPath = "/storage/emulated/0/小鱼儿/bg.mp4"
-                val isVid = true
-                val cached = java.io.File(ctx.filesDir, if (isVid) "bg_video.mp4" else "bg_image.img")
+                val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
                 if (!cached.exists() || cached.length() == 0L) {
+                    // 首次：从 小鱼儿/bg.mp4 复制一份作默认
                     try {
                         val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '" + bgPath.replace("'", "'\\''") + "' '" + cached.absolutePath + "'"))
+                            "cp -f '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
                         p.waitFor()
                     } catch (t: Throwable) {}
                 }
@@ -2103,16 +2102,11 @@ private fun ProMaxIsland(
                                                     IslandActionButton("设为背景", Color(0xFF0A84FF)) {
                                                         try {
                                                             val src = longPressPath
-                                                            val dst = "/storage/emulated/0/小鱼儿/bg.mp4"
+                                                            val dst = java.io.File(navCtx.filesDir, "bg_video.mp4").absolutePath
                                                             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                                                 "cp -f '" + src.replace("'", "'\\''") + "' '" + dst + "'"))
                                                             pr.waitFor()
-                                                            // 清缓存，下次重新复制
-                                                            try {
-                                                                java.io.File(navCtx.filesDir, "bg_video.mp4").delete()
-                                                                java.io.File(navCtx.filesDir, "bg_image.img").delete()
-                                                            } catch (t2: Throwable) {}
-                                                            android.widget.Toast.makeText(navCtx, "背景已设为 bg.mp4", android.widget.Toast.LENGTH_SHORT).show()
+                                                            android.widget.Toast.makeText(navCtx, "背景已替换，重进文件管理器生效", android.widget.Toast.LENGTH_SHORT).show()
                                                         } catch (t: Throwable) {
                                                             android.widget.Toast.makeText(navCtx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
                                                         }
