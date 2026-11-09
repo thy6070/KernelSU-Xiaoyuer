@@ -2123,6 +2123,11 @@ private fun ProMaxIsland(
                                                             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                                                 "rm -f /storage/emulated/0/小鱼儿/bg.* && cp '" + src.replace("'", "'\\''") + "' '" + dst + "'"))
                                                             pr.waitFor()
+                                                            // 清掉旧的背景缓存，下次进来重新复制
+                                                            try {
+                                                                java.io.File(navCtx.filesDir, "bg_video.mp4").delete()
+                                                                java.io.File(navCtx.filesDir, "bg_image.img").delete()
+                                                            } catch (t2: Throwable) {}
                                                             android.widget.Toast.makeText(navCtx, "背景已设为 " + dst, android.widget.Toast.LENGTH_SHORT).show()
                                                         } catch (t: Throwable) {
                                                             android.widget.Toast.makeText(navCtx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
