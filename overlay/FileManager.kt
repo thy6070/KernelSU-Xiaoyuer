@@ -278,11 +278,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 if (isVid) {
                     android.widget.VideoView(ctx).apply {
                         try {
-                            setVideoURI(android.net.Uri.fromFile(cached))
+                            setVideoPath(cached.absolutePath)
                             setOnPreparedListener { mp ->
                                 mp.isLooping = true
                                 mp.setVolume(0f, 0f)
                                 start()
+                            }
+                            setOnErrorListener { _, what, extra ->
+                                android.util.Log.e("BG", "video error " + what + "/" + extra)
+                                true
                             }
                         } catch (t: Throwable) {
                             android.util.Log.e("BG", "video: " + (t.message ?: ""))
