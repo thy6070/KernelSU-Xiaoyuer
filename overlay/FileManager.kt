@@ -235,7 +235,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val target = FileLocate.path ?: return@LaunchedEffect
         val dir = target.substringBeforeLast('/', "/")
         if (leftPath == dir) refreshTick += 1 else leftPath = dir
-        leftHighlight = target.substringAfterLast('/')
+        leftHighlight = target
     }
 
     var runMessage by remember { mutableStateOf<String?>(null) }
@@ -269,6 +269,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     // 目录滚动位置（根层共享，避免 key 重建丢状态）
     val dirScroll = remember { mutableStateMapOf<String, Int>() }
+    // 多选路径集合（橙色填充）
+    val selectedPaths = remember { mutableStateMapOf<String, Boolean>() }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
@@ -337,6 +339,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = leftPath,
                 dirScroll = dirScroll,
+                selectedPaths = selectedPaths,
                 onNavigate = { leftPath = it },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
@@ -379,6 +382,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = rightPath,
                 dirScroll = dirScroll,
+                selectedPaths = selectedPaths,
                 onNavigate = { rightPath = it },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
@@ -3716,6 +3720,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
 private fun BrowserPane(
     path: String,
     dirScroll: MutableMap<String, Int>,
+    selectedPaths: MutableMap<String, Boolean>,
     onNavigate: (String) -> Unit,
     onFileClick: (String) -> Unit,
     refreshTick: Int = 0,
@@ -3767,7 +3772,11 @@ private fun BrowserPane(
         }
     }
     LaunchedEffect(highlightName, entries) {
-        val idx = entries.indexOfFirst { it.name == highlightName }
+        // 按完整路径定位（避免同名文件跳错）
+        val idx = entries.indexOfFirst {
+            val joined = if (path.endsWith("/")) path + it.name else "$path/${it.name}"
+            joined == highlightName
+        }
         if (idx >= 0) {
             listState.animateScrollToItem(idx + 1)
         }
@@ -3810,12 +3819,22 @@ private fun BrowserPane(
                 name = entry.name,
                 isDir = entry.isDir,
                 fullPath = rowPath,
-                selected = selectedPath == rowPath,
+                selected = selectedPath == rowPath || selectedPaths.containsKey(rowPath),
                 highlight = highlightName,
                 onClick = {
-                    if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
+                    if (selectedPaths.isNotEmpty()) {
+                        // 多选状态：点击切换选中
+                        if (selectedPaths.containsKey(rowPath)) selectedPaths.remove(rowPath)
+                        else selectedPaths[rowPath] = true
+                    } else {
+                        if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
+                    }
                 },
-                onLongClick = { onLongPress(rowPath) }
+                onLongClick = { onLongPress(rowPath) },
+                onSwipe = {
+                    if (selectedPaths.containsKey(rowPath)) selectedPaths.remove(rowPath)
+                    else selectedPaths[rowPath] = true
+                }
             )
         }
     }
@@ -3829,7 +3848,8 @@ private fun FsRow(
     selected: Boolean = false,
     highlight: String? = null,
     onClick: () -> Unit,
-    onLongClick: () -> Unit = {}
+    onLongClick: () -> Unit = {},
+    onSwipe: () -> Unit = {}
 ) {
     // ZySU row: rounded 14dp, no tile behind the glyph, 12sp monospace, outline on the row
     val accent = if (isDir) null else fileAccent(name)
@@ -3838,9 +3858,24 @@ private fun FsRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
+            .pointerInput(fullPath) {
+                // 向右滑动 = 切换多选
+                var dx = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { dx = 0f },
+                    onDragEnd = {
+                        if (dx > 40f) onSwipe()
+                        dx = 0f
+                    }
+                ) { change, drag ->
+                    dx += drag
+                    change.consume()
+                }
+            }
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .background(
-                if (highlight != null && highlight == name) Color(0x3300BCD4)
+                if (selected) Color(0x33FF9800)
+                else if (highlight != null && highlight == fullPath) Color(0x3300BCD4)
                 else Color.Transparent
             )
             .then(
