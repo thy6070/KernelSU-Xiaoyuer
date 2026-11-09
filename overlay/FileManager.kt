@@ -289,13 +289,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             },
             modifier = Modifier.fillMaxSize()
                 .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
-                .blur(15.dp)
+                .blur(10.dp)
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0x33000000))
-                .blur(if (panel || termFull || editPath != null) 15.dp else 0.dp)
+                .blur(if (panel || termFull || editPath != null) 10.dp else 0.dp)
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
@@ -3738,19 +3738,25 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
         lowerName.endsWith(".3gp") || lowerName.endsWith(".webm")
     val mediaThumb by produceState<ImageBitmap?>(null, fullPath) {
         if (value != null) return@produceState
-        if (isDir) return@produceState
+        if (isDir || (!isImageFile && !isVideoFile)) return@produceState
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                if (isImageFile) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(fullPath)
+                // App 无存储权限：先用 root 复制到 cache 再解码
+                val tmp = java.io.File(ctx.cacheDir, "thumb_" + Math.abs(fullPath.hashCode()))
+                if (!tmp.exists() || tmp.length() == 0L) {
+                    suNow("cp '" + fullPath.replace("'", "'\\''") + "' '" + tmp.absolutePath + "'")
+                }
+                if (!tmp.exists() || tmp.length() == 0L) null
+                else if (isImageFile) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(tmp.absolutePath)
                     if (bmp != null) {
                         val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 96, 96, true)
                         if (scaled !== bmp) bmp.recycle()
                         scaled.asImageBitmap()
                     } else null
-                } else if (isVideoFile) {
+                } else {
                     val retr = android.media.MediaMetadataRetriever()
-                    retr.setDataSource(fullPath)
+                    retr.setDataSource(tmp.absolutePath)
                     val bmp = retr.getFrameAtTime(0)
                     retr.release()
                     if (bmp != null) {
@@ -3758,7 +3764,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
                         if (scaled !== bmp) bmp.recycle()
                         scaled.asImageBitmap()
                     } else null
-                } else null
+                }
             } catch (t: Throwable) { null }
         }
     }
