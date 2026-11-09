@@ -249,9 +249,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         // 背景（读取用户设置的图片/视频，默认 bg.mp4）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
-                val prefs = ctx.getSharedPreferences("settings", 0)
-                val bgPath = prefs.getString("bg_path", "/storage/emulated/0/小鱼儿/bg.mp4") ?: "/storage/emulated/0/小鱼儿/bg.mp4"
-                val isVid = prefs.getBoolean("bg_video", true)
+                // 扫描 小鱼儿/bg.* 决定背景（mp4=视频，png/jpg=图片）
+                val bgName = try {
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                        "ls -1 /storage/emulated/0/小鱼儿/ 2>/dev/null | grep -E '^bg\\.(mp4|png|jpg|jpeg|webp)$' | head -1"))
+                    pr.inputStream.bufferedReader().readText().trim().also { pr.waitFor() }
+                } catch (t: Throwable) { "" }
+                val bgPath = if (bgName.isNotEmpty()) "/storage/emulated/0/小鱼儿/" + bgName
+                             else "/storage/emulated/0/小鱼儿/bg.mp4"
+                val isVid = bgPath.lowercase().endsWith(".mp4")
                 val cached = java.io.File(ctx.filesDir, "bg_" + Math.abs(bgPath.hashCode()) + (if (isVid) ".mp4" else ".img"))
                 if (!cached.exists() || cached.length() == 0L) {
                     try {
@@ -2097,11 +2103,16 @@ private fun ProMaxIsland(
                                                 if (isImg || isVid) {
                                                     IslandActionButton("设为背景", Color(0xFF0A84FF)) {
                                                         try {
-                                                            navCtx.getSharedPreferences("settings", 0).edit()
-                                                                .putString("bg_path", longPressPath)
-                                                                .putBoolean("bg_video", isVid)
-                                                                .apply()
-                                                        } catch (t: Throwable) {}
+                                                            val src = longPressPath
+                                                            val ext = src.substringAfterLast('.', "mp4").lowercase()
+                                                            val dst = "/storage/emulated/0/小鱼儿/bg." + ext
+                                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                                                "rm -f /storage/emulated/0/小鱼儿/bg.* && cp '" + src.replace("'", "'\\''") + "' '" + dst + "'"))
+                                                            pr.waitFor()
+                                                            android.widget.Toast.makeText(navCtx, "背景已设为 " + dst, android.widget.Toast.LENGTH_SHORT).show()
+                                                        } catch (t: Throwable) {
+                                                            android.widget.Toast.makeText(navCtx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
                                                         closeIsland()
                                                     }
                                                 }
