@@ -326,7 +326,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 val imgCached = java.io.File(ctx.filesDir, "bg_image.img")
                 if (imgCached.exists() && imgCached.length() > 0L) {
                     val iv = android.widget.ImageView(ctx)
-                    iv.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    // 按横屏完整显示（不放大裁切，留边）
+                    iv.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    iv.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)
                     try {
                         iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
                     } catch (t: Throwable) {}
