@@ -3629,7 +3629,7 @@ private fun BrowserPane(
 
         LazyColumn(
             state = listState,
-            modifier = modifier.fillMaxSize().background(Color(BG_COLOR)).nestedScroll(pullConn),
+            modifier = modifier.fillMaxSize().nestedScroll(pullConn),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
         item {
