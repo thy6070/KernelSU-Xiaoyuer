@@ -1245,6 +1245,8 @@ private fun ProMaxIsland(
     onOpen: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var bgModePick by remember { mutableStateOf<String?>(null) }
+    var bgModeIsImg by remember { mutableStateOf(false) }
     var showWave by remember { mutableStateOf(false) }
     var navMode by remember { mutableStateOf(false) }
     var navTarget by remember { mutableStateOf<String?>(null) }
@@ -1530,6 +1532,51 @@ private fun ProMaxIsland(
 
     // Island.kt ball choreography
     val wingPress = remember { Animatable(0f) }
+    // 设为背景：模式选择面板
+    val bgPickNow = bgModePick
+    if (bgPickNow != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0x66000000))
+                .clickable { bgModePick = null },
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF1A1A1E))
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "默认",
+                    modifier = Modifier
+                        .clickable {
+                            setBgBackground(navCtx, bgPickNow, bgModeIsImg, "default")
+                            bgModePick = null
+                        }
+                        .background(Color(0xFF3A3A3C), RoundedCornerShape(percent = 50))
+                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                    fontSize = 14.sp,
+                    color = Color.White
+                )
+                Text(
+                    "横屏",
+                    modifier = Modifier
+                        .clickable {
+                            setBgBackground(navCtx, bgPickNow, bgModeIsImg, "landscape")
+                            bgModePick = null
+                        }
+                        .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
+                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                    fontSize = 14.sp,
+                    color = Color.White
+                )
+            }
+        }
+    }
+
     LaunchedEffect(panelOpen) {
         if (panelOpen) {
             wingPress.animateTo(1f, tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)))
@@ -2207,14 +2254,10 @@ private fun ProMaxIsland(
                                                 val isImg = lp.endsWith(".jpg") || lp.endsWith(".jpeg") || lp.endsWith(".png") || lp.endsWith(".webp") || lp.endsWith(".bmp")
                                                 val isVid = lp.endsWith(".mp4") || lp.endsWith(".mkv") || lp.endsWith(".avi") || lp.endsWith(".mov") || lp.endsWith(".webm") || lp.endsWith(".3gp")
                                                 if (isImg || isVid) {
-                                                    // 默认：等比例撑满；横屏：横屏撑满
-                                                    IslandActionButton("默认", Color(0xFF8E8E93)) {
-                                                        setBgBackground(navCtx, longPressPath, isImg, "default")
-                                                        onClearLongPress()
-                                                        closeIsland()
-                                                    }
-                                                    IslandActionButton("横屏", Color(0xFF0A84FF)) {
-                                                        setBgBackground(navCtx, longPressPath, isImg, "landscape")
+                                                    // 点设为背景 → 收起岛 → 展开模式选择（默认/横屏）
+                                                    IslandActionButton("设为背景", Color(0xFF0A84FF)) {
+                                                        bgModePick = longPressPath
+                                                        bgModeIsImg = isImg
                                                         onClearLongPress()
                                                         closeIsland()
                                                     }
