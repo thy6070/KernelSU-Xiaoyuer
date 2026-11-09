@@ -233,7 +233,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             ""
                         }
-                        if (found.isNotEmpty()) fp = found
+                        if (found.isNotEmpty()) {
+                            fp = found
+                        } else {
+                            // 回退：全盘按文件名搜
+                            val global = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                suNow("find /storage/emulated/0 -maxdepth 6 -name '" + name.replace("'", "'\\''") + "' 2>/dev/null | head -1").trim()
+                            }
+                            if (global.isNotEmpty()) fp = global
+                        }
                     }
                 }
                 if (!fp.isNullOrBlank()) {
