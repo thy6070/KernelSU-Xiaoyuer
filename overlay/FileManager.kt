@@ -366,6 +366,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             // 播放失败：删掉缓存，下次启动重新复制（可能缓存损坏/编码不兼容）
                             try { cached.delete() } catch (t2: Throwable) {}
                             android.widget.Toast.makeText(ctx, "视频异常[" + t.javaClass.simpleName + "]: " + (t.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
+                            try {
+                                val lf = java.io.File("/data/local/tmp/xy_bg_error.log")
+                                lf.appendText(java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) +
+                                    " " + t.javaClass.simpleName + ": " + (t.message ?: "") +
+                                    " | file=" + cached.absolutePath + " | len=" + cached.length() +
+                                    " | exists=" + cached.exists() + "\n")
+                            } catch (t2: Throwable) {}
                         }
                     }
                     override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
