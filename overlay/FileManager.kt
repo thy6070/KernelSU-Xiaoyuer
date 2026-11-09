@@ -245,28 +245,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
 
+    // 后台扫描背景文件，避免阻塞主线程导致 Surface 创建失败
+    val bgInfo = remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    LaunchedEffect(Unit) {
+        val name = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            suNow("ls -1 /storage/emulated/0/小鱼儿/ 2>/dev/null | grep -E '^bg\\.(mp4|png|jpg|jpeg|webp)$' | head -1").trim()
+        }
+        bgInfo.value = if (name.isNotEmpty()) "/storage/emulated/0/小鱼儿/" + name to name.endsWith(".mp4")
+                       else "/storage/emulated/0/小鱼儿/bg.mp4" to true
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // 背景（读取用户设置的图片/视频，默认 bg.mp4）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
-                // 扫描 小鱼儿/bg.* 决定背景（mp4=视频，png/jpg=图片）
-                val bgName = try {
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "ls -1 /storage/emulated/0/小鱼儿/ 2>/dev/null | grep -E '^bg\\.(mp4|png|jpg|jpeg|webp)$' | head -1"))
-                    pr.inputStream.bufferedReader().readText().trim().also { pr.waitFor() }
-                } catch (t: Throwable) { "" }
-                val bgPath = if (bgName.isNotEmpty()) "/storage/emulated/0/小鱼儿/" + bgName
-                             else {
-                                 // 没有 bg.* 时，用 App 内置默认视频复制过去
-                                 val def = ctx.filesDir.absolutePath + "/bg_video.mp4"
-                                 try {
-                                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                         "mkdir -p '/storage/emulated/0/小鱼儿' && cp '" + def + "' '/storage/emulated/0/小鱼儿/bg.mp4'"))
-                                     pr.waitFor()
-                                 } catch (t: Throwable) {}
-                                 "/storage/emulated/0/小鱼儿/bg.mp4"
-                             }
-                val isVid = bgPath.lowercase().endsWith(".mp4")
+                val info = bgInfo.value ?: ("/storage/emulated/0/小鱼儿/bg.mp4" to true)
+                val bgPath = info.first
+                val isVid = info.second
                 val cached = java.io.File(ctx.filesDir, if (isVid) "bg_video.mp4" else "bg_image.img")
                 if (!cached.exists() || cached.length() == 0L) {
                     try {
@@ -276,20 +271,33 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     } catch (t: Throwable) {}
                 }
                 if (isVid) {
-                    // 取视频第一帧作为静态背景（TextureView 的 Surface 在 Compose 里不可靠）
-                    try {
-                        val retr = android.media.MediaMetadataRetriever()
-                        retr.setDataSource(cached.absolutePath)
-                        val frame = retr.getFrameAtTime(0)
-                        retr.release()
-                        android.widget.ImageView(ctx).apply {
-                            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                            setImageBitmap(frame)
+                    val tv = android.view.TextureView(ctx)
+                    tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                        var mp: android.media.MediaPlayer? = null
+                        override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                            try {
+                                val m = android.media.MediaPlayer()
+                                m.setDataSource(cached.absolutePath)
+                                m.setSurface(android.view.Surface(st))
+                                m.isLooping = true
+                                m.setVolume(0f, 0f)
+                                m.prepare()
+                                m.start()
+                                mp = m
+                                android.util.Log.e("BG", "video started")
+                            } catch (t: Throwable) {
+                                android.util.Log.e("BG", "video: " + (t.message ?: ""))
+                            }
                         }
-                    } catch (t: Throwable) {
-                        android.util.Log.e("BG", "frame: " + (t.message ?: ""))
-                        android.widget.ImageView(ctx)
+                        override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                        override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
+                            try { mp?.release() } catch (t: Throwable) {}
+                            mp = null
+                            return true
+                        }
+                        override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                     }
+                    tv
                 } else {
                     android.widget.ImageView(ctx).apply {
                         scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
