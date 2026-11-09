@@ -244,7 +244,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val target = FileLocate.path ?: return@LaunchedEffect
         val dir = target.substringBeforeLast('/', "/")
         if (leftPath == dir) refreshTick += 1 else leftPath = dir
-        leftHighlight = target.substringAfterLast('/')
+        // 存完整路径（不是文件名），避免同名文件跳错
+        leftHighlight = target
     }
 
     var runMessage by remember { mutableStateOf<String?>(null) }
