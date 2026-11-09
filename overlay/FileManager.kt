@@ -246,47 +246,51 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
+        // 背景（读取用户设置的图片/视频，默认 bg.mp4）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
-                val tv = android.view.TextureView(ctx)
-                val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
+                val prefs = ctx.getSharedPreferences("settings", 0)
+                val bgPath = prefs.getString("bg_path", "/storage/emulated/0/小鱼儿/bg.mp4") ?: "/storage/emulated/0/小鱼儿/bg.mp4"
+                val isVid = prefs.getBoolean("bg_video", true)
+                val cached = java.io.File(ctx.filesDir, "bg_" + Math.abs(bgPath.hashCode()) + (if (isVid) ".mp4" else ".img"))
                 if (!cached.exists() || cached.length() == 0L) {
                     try {
                         val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "'"))
+                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '" + bgPath.replace("'", "'\\''") + "' '" + cached.absolutePath + "'"))
                         p.waitFor()
                     } catch (t: Throwable) {}
                 }
-                tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-                    var mp: android.media.MediaPlayer? = null
-                    override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
-                        try {
-                            val m = android.media.MediaPlayer()
-                            m.setDataSource(cached.absolutePath)
-                            m.setSurface(android.view.Surface(st))
-                            m.isLooping = true
-                            m.setVolume(0f, 0f)
-                            m.setOnErrorListener { _, what, extra ->
-                                android.widget.Toast.makeText(ctx, "视频错误 " + what + "/" + extra, android.widget.Toast.LENGTH_LONG).show()
-                                true
-                            }
-                            m.prepare()
-                            m.start()
-                            mp = m
-                        } catch (t: Throwable) {
-                            android.widget.Toast.makeText(ctx, "视频异常: " + (t.message ?: t.javaClass.simpleName), android.widget.Toast.LENGTH_LONG).show()
+                if (isVid) {
+                    val tv = android.view.TextureView(ctx)
+                    tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
+                        var mp: android.media.MediaPlayer? = null
+                        override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                            try {
+                                val m = android.media.MediaPlayer()
+                                m.setDataSource(cached.absolutePath)
+                                m.setSurface(android.view.Surface(st))
+                                m.isLooping = true
+                                m.setVolume(0f, 0f)
+                                m.prepare()
+                                m.start()
+                                mp = m
+                            } catch (t: Throwable) {}
                         }
+                        override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                        override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
+                            try { mp?.release() } catch (t: Throwable) {}
+                            mp = null
+                            return true
+                        }
+                        override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                     }
-                    override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
-                    override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
-                        try { mp?.release() } catch (t: Throwable) {}
-                        mp = null
-                        return true
+                    tv
+                } else {
+                    android.widget.ImageView(ctx).apply {
+                        scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                        setImageBitmap(android.graphics.BitmapFactory.decodeFile(cached.absolutePath))
                     }
-                    override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                 }
-                tv
             },
             modifier = Modifier.fillMaxSize()
                 .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
