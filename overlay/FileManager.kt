@@ -276,32 +276,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     } catch (t: Throwable) {}
                 }
                 if (isVid) {
-                    val tv = android.view.TextureView(ctx)
-                    tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-                        var mp: android.media.MediaPlayer? = null
-                        override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
-                            try {
-                                val m = android.media.MediaPlayer()
-                                m.setDataSource(cached.absolutePath)
-                                m.setSurface(android.view.Surface(st))
-                                m.isLooping = true
-                                m.setVolume(0f, 0f)
-                                m.prepare()
-                                m.start()
-                                mp = m
-                            } catch (t: Throwable) {
-                                android.util.Log.e("BG", "video: " + (t.message ?: ""))
-                            }
+                    // 取视频第一帧作为静态背景（TextureView 的 Surface 在 Compose 里不可靠）
+                    try {
+                        val retr = android.media.MediaMetadataRetriever()
+                        retr.setDataSource(cached.absolutePath)
+                        val frame = retr.getFrameAtTime(0)
+                        retr.release()
+                        android.widget.ImageView(ctx).apply {
+                            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                            setImageBitmap(frame)
                         }
-                        override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
-                        override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
-                            try { mp?.release() } catch (t: Throwable) {}
-                            mp = null
-                            return true
-                        }
-                        override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
+                    } catch (t: Throwable) {
+                        android.util.Log.e("BG", "frame: " + (t.message ?: ""))
+                        android.widget.ImageView(ctx)
                     }
-                    tv
                 } else {
                     android.widget.ImageView(ctx).apply {
                         scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
