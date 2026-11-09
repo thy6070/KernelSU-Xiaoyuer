@@ -200,9 +200,41 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val act = navCtx0 as? android.app.Activity
             val uri = act?.intent?.data
             if (uri != null) {
-                val fp = when {
+                var fp = when {
                     uri.scheme == "content" -> queryRealPath(navCtx0, uri)
                     else -> uri.path
+                }
+                // 真实路径拿不到时，按来源 App 的目录搜索
+                if (fp.isNullOrBlank() || !java.io.File(fp).exists()) {
+                    val name = queryDisplayName(navCtx0, uri) ?: uri.lastPathSegment
+                    if (!name.isNullOrBlank()) {
+                        val pkg = try {
+                            act?.referrer?.host ?: act?.intent?.`package` ?: ""
+                        } catch (t: Throwable) { "" }
+                        val roots = when {
+                            pkg.contains("mobileqq") -> listOf(
+                                "/storage/emulated/0/tencent/QQfile_recv",
+                                "/storage/emulated/0/tencent/QQ_Images",
+                                "/storage/emulated/0/Android/data/com.tencent.mobileqq")
+                            pkg.contains("weixin") || pkg.contains("tencent.mm") -> listOf(
+                                "/storage/emulated/0/tencent/MicroMsg/Download",
+                                "/storage/emulated/0/tencent/MicroMsg/WeiXin",
+                                "/storage/emulated/0/Android/data/com.tencent.mm")
+                            pkg.contains("baidu") -> listOf("/storage/emulated/0/BaiduNetdisk")
+                            pkg.contains("taobao") || pkg.contains("alibaba") -> listOf("/storage/emulated/0/Android/data/com.taobao.taobao")
+                            pkg.contains("ucmobile") -> listOf("/storage/emulated/0/UCDownloads")
+                            pkg.contains("browser") || pkg.contains("chrome") -> listOf("/storage/emulated/0/Download")
+                            else -> listOf("/storage/emulated/0/Download", "/storage/emulated/0")
+                        }
+                        val found = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            for (root in roots) {
+                                val hit = suNow("find '" + root + "' -maxdepth 4 -name '" + name.replace("'", "'\\''") + "' 2>/dev/null | head -1").trim()
+                                if (hit.isNotEmpty()) return@withContext hit
+                            }
+                            ""
+                        }
+                        if (found.isNotEmpty()) fp = found
+                    }
                 }
                 if (!fp.isNullOrBlank()) {
                     val f = java.io.File(fp)
@@ -4077,6 +4109,19 @@ private val RT_DRIVER_MIRRORS = listOf(
 )
 
 // 把 content:// URI 解析成真实文件路径（MediaStore / Downloads）
+// 从 content:// URI 查显示文件名
+internal fun queryDisplayName(ctx: android.content.Context, uri: android.net.Uri): String? {
+    try {
+        ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0) return c.getString(idx)
+            }
+        }
+    } catch (t: Throwable) {}
+    return null
+}
+
 internal fun queryRealPath(ctx: android.content.Context, uri: android.net.Uri): String? {
     try {
         if (uri.scheme == "file") return uri.path
