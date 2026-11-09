@@ -275,8 +275,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             },
             modifier = Modifier.fillMaxSize()
-                .graphicsLayer { scaleX = 1.12f; scaleY = 1.12f }
-                .blur(10.dp)
+                .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
+                .blur(15.dp)
         )
         Box(
             modifier = Modifier
