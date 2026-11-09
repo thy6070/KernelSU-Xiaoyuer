@@ -295,7 +295,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0x33000000))
-                .blur(if (panel || termFull || editPath != null) 30.dp else 0.dp)
+                .blur(if (panel || termFull || editPath != null) 15.dp else 0.dp)
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
