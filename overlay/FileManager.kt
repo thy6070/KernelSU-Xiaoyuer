@@ -3727,6 +3727,40 @@ private fun fileAccent(name: String): Color? {
 private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
     val ctx = LocalContext.current
 
+    // 图片/视频缩略图
+    val lowerName = name.lowercase()
+    val isImageFile = lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") ||
+        lowerName.endsWith(".png") || lowerName.endsWith(".gif") ||
+        lowerName.endsWith(".webp") || lowerName.endsWith(".bmp")
+    val isVideoFile = lowerName.endsWith(".mp4") || lowerName.endsWith(".mkv") ||
+        lowerName.endsWith(".avi") || lowerName.endsWith(".mov") ||
+        lowerName.endsWith(".3gp") || lowerName.endsWith(".webm")
+    val mediaThumb by produceState<ImageBitmap?>(null, fullPath) {
+        if (value != null) return@produceState
+        if (isDir) return@produceState
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                if (isImageFile) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(fullPath)
+                    if (bmp != null) {
+                        val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 96, 96, true)
+                        if (scaled !== bmp) bmp.recycle()
+                        scaled.asImageBitmap()
+                    } else null
+                } else if (isVideoFile) {
+                    val retr = android.media.MediaMetadataRetriever()
+                    retr.setDataSource(fullPath)
+                    val bmp = retr.getFrameAtTime(0)
+                    retr.release()
+                    if (bmp != null) {
+                        val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 96, 96, true)
+                        if (scaled !== bmp) bmp.recycle()
+                        scaled.asImageBitmap()
+                    } else null
+                } else null
+            } catch (t: Throwable) { null }
+        }
+    }
     val apkIcon by produceState<ImageBitmap?>(apkIconCache[fullPath], fullPath) {
         if (value != null) return@produceState
         if (isDir || !isApk(name)) return@produceState
@@ -3738,7 +3772,15 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
     }
 
     val apkIconNow = apkIcon
-    if (apkIconNow != null) {
+    val mediaThumbNow = mediaThumb
+    if (mediaThumbNow != null) {
+        Image(
+            bitmap = mediaThumbNow,
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.size(20.dp).clip(RoundedCornerShape(4.dp))
+        )
+    } else if (apkIconNow != null) {
         Image(
             bitmap = apkIconNow,
             contentDescription = null,
