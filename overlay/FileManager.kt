@@ -1503,7 +1503,13 @@ private fun ProMaxIsland(
                 .clip(RoundedCornerShape(21.dp))
                 .background(Color.Black)
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
-                .clickable { if (wingIconExpanded) onOpenTerminal() else onOpen() },
+                .clickable {
+                    if (wingIconExpanded) {
+                        // 先收起岛，再由放大终端接管显示
+                        closeIsland()
+                        onOpenTerminal()
+                    } else onOpen()
+                },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
