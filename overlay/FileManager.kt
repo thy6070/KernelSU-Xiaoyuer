@@ -2015,6 +2015,23 @@ private fun ProMaxIsland(
                                                 onFileOp("share", "")
                                                 closeIsland()
                                             }
+                                            // 图片/视频设为背景
+                                            if (!longPressIsDir && longPressPath != null) {
+                                                val lp = longPressPath.lowercase()
+                                                val isImg = lp.endsWith(".jpg") || lp.endsWith(".jpeg") || lp.endsWith(".png") || lp.endsWith(".webp") || lp.endsWith(".bmp")
+                                                val isVid = lp.endsWith(".mp4") || lp.endsWith(".mkv") || lp.endsWith(".avi") || lp.endsWith(".mov") || lp.endsWith(".webm") || lp.endsWith(".3gp")
+                                                if (isImg || isVid) {
+                                                    IslandActionButton("设为背景", Color(0xFF8E8E93)) {
+                                                        try {
+                                                            navCtx.getSharedPreferences("settings", 0).edit()
+                                                                .putString("bg_path", longPressPath)
+                                                                .putBoolean("bg_video", isVid)
+                                                                .apply()
+                                                        } catch (t: Throwable) {}
+                                                        closeIsland()
+                                                    }
+                                                }
+                                            }
                                         }
                                         if (!longPressIsDir) {
                                             IslandActionButton(
