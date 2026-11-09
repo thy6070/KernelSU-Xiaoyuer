@@ -1508,7 +1508,8 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
                 .clickable {
                     if (wingIconExpanded) {
-                        // 先收起岛，再由放大终端接管显示
+                        // 先关岛内终端 + 收起岛，再由全屏终端接管
+                        onTermClose()
                         closeIsland()
                         onOpenTerminal()
                     } else onOpen()
