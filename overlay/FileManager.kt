@@ -297,6 +297,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
                 }
                 tv
+                }
             },
             modifier = Modifier.fillMaxSize()
                 .blur(10.dp)
