@@ -200,10 +200,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val act = navCtx0 as? android.app.Activity
             val uri = act?.intent?.data
             if (uri != null) {
-                var fp = when {
-                    uri.scheme == "content" -> queryRealPath(navCtx0, uri)
-                    else -> uri.path
-                }
+                // 不用 MediaStore（可能返回同名错误文件），直接按来源 App 目录搜
+                var fp = if (uri.scheme == "file") uri.path else null
                 // 真实路径拿不到时，按来源 App 的目录搜索
                 if (fp.isNullOrBlank() || !java.io.File(fp).exists()) {
                     val name = queryDisplayName(navCtx0, uri) ?: uri.lastPathSegment
