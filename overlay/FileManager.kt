@@ -287,7 +287,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 tv
             },
-            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
+            modifier = Modifier.fillMaxSize()
+                .graphicsLayer { scaleX = 1.05f; scaleY = 1.05f }
+                .blur(16.dp)
         )
         Box(
             modifier = Modifier
@@ -2592,13 +2594,15 @@ private fun TerminalOverlay(
     Box(modifier = Modifier.fillMaxSize().background(Color(0x66000000))) {
       androidx.compose.animation.AnimatedVisibility(
         visible = open,
-        enter = androidx.compose.animation.expandVertically(
-            animationSpec = tween(360, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-            expandFrom = Alignment.CenterVertically
+        enter = androidx.compose.animation.scaleIn(
+            animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+            initialScale = 0.25f,
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.72f, 0.10f)
         ) + androidx.compose.animation.fadeIn(tween(200)),
-        exit = androidx.compose.animation.shrinkVertically(
-            animationSpec = tween(260, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-            shrinkTowards = Alignment.CenterVertically
+        exit = androidx.compose.animation.scaleOut(
+            animationSpec = tween(280, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+            targetScale = 0.25f,
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.72f, 0.10f)
         ) + androidx.compose.animation.fadeOut(tween(160))
       ) {
         Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
