@@ -4406,41 +4406,48 @@ private val RT_DRIVER_MIRRORS = listOf(
 // 改机型（iOS 风格选择 → resetprop 伪装）
 internal fun changeDeviceModel(ctx: android.content.Context) {
     val models = listOf(
-        // 小米
-        "Xiaomi 15 Pro", "Xiaomi 15 Ultra", "Xiaomi 15S Pro", "Xiaomi 14 Ultra",
-        "Xiaomi Pad 8 Pro", "Xiaomi Pad 7 Ultra", "Xiaomi MIX Fold 4",
-        // 红米
-        "Redmi K80 Pro", "Redmi K80 Ultra", "Redmi K70 Pro", "Redmi Turbo 4",
-        "Redmi Pad 2 Pro",
-        // 华为
-        "HUAWEI Mate 70 Pro", "HUAWEI Mate 70 RS", "HUAWEI Pura 70 Ultra",
-        "HUAWEI Mate X6", "HUAWEI MatePad Pro 13.2",
-        // OPPO
-        "OPPO Find X8 Pro", "OPPO Find X8 Ultra", "OPPO Find N5",
-        "OPPO Pad 4 Pro",
-        // 真我
-        "realme GT7 Pro", "realme GT7", "realme GT Neo7", "realme Pad 2 Pro",
-        // 一加
-        "OnePlus 13", "OnePlus 13T", "OnePlus Ace 5 Pro", "OnePlus Pad 3",
-        // iQOO
-        "iQOO 13", "iQOO Neo10 Pro", "iQOO Pad 3 Pro",
-        // 红魔
-        "Nubia RedMagic 10 Pro", "Nubia RedMagic 10", "Nubia RedMagic Pad 3 Pro",
-        // 荣耀
-        "HONOR Magic7 Pro", "HONOR Magic7 RSR", "HONOR Magic V3",
-        "HONOR GT Pro", "HONOR Pad V9",
-        // 其他旗舰
-        "vivo X200 Pro", "vivo X200 Ultra", "vivo Pad 3 Pro",
-        "Samsung S25 Ultra", "Samsung Z Fold 6", "ROG Phone 9 Pro",
-        "vivo X Fold 4 Pro"
+        // ── 小米 ──
+        "【小米】Xiaomi 15 Pro", "【小米】Xiaomi 15 Ultra", "【小米】Xiaomi 15S Pro",
+        "【小米】Xiaomi 14 Ultra", "【小米】Xiaomi Pad 8 Pro", "【小米】Xiaomi Pad 7 Ultra",
+        "【小米】Xiaomi MIX Fold 4",
+        // ── 红米 ──
+        "【红米】Redmi K80 Pro", "【红米】Redmi K80 Ultra", "【红米】Redmi K70 Pro",
+        "【红米】Redmi Turbo 4", "【红米】Redmi Pad 2 Pro",
+        // ── 华为 ──
+        "【华为】Mate 70 Pro", "【华为】Mate 70 RS", "【华为】Pura 70 Ultra",
+        "【华为】Mate X6", "【华为】MatePad Pro 13.2",
+        // ── OPPO ──
+        "【OPPO】Find X8 Pro", "【OPPO】Find X8 Ultra", "【OPPO】Find N5",
+        "【OPPO】Pad 4 Pro",
+        // ── vivo ──
+        "【vivo】X200 Pro", "【vivo】X200 Ultra", "【vivo】X Fold 4 Pro",
+        "【vivo】Pad 3 Pro",
+        // ── 真我 ──
+        "【真我】GT7 Pro", "【真我】GT7", "【真我】GT Neo7", "【真我】Pad 2 Pro",
+        // ── 一加 ──
+        "【一加】OnePlus 13", "【一加】OnePlus 13T", "【一加】OnePlus Ace 5 Pro",
+        "【一加】OnePlus Pad 3",
+        // ── iQOO ──
+        "【iQOO】iQOO 13", "【iQOO】iQOO Neo10 Pro", "【iQOO】iQOO Pad 3 Pro",
+        // ── 红魔 ──
+        "【红魔】RedMagic 10 Pro", "【红魔】RedMagic 10", "【红魔】RedMagic Pad 3 Pro",
+        // ── 荣耀 ──
+        "【荣耀】Magic7 Pro", "【荣耀】Magic7 RSR", "【荣耀】Magic V3",
+        "【荣耀】GT Pro", "【荣耀】Pad V9",
+        // ── 三星 ──
+        "【三星】Galaxy S25 Ultra", "【三星】Galaxy Z Fold 6",
+        // ── ROG ──
+        "【ROG】Phone 9 Pro"
     )
     uiPickerTitle = "选择机型"
     uiPicker = listOf("恢复原样") + models
-    uiPickerAction = pick@{ m ->
-        if (m == "恢复原样") {
+    uiPickerAction = pick@{ sel ->
+        if (sel == "恢复原样") {
             restoreDeviceModel(ctx)
             return@pick
         }
+        // 去掉【厂商】前缀
+        val m = sel.replace(Regex("^【[^】]*】"), "").trim()
         try {
             val sp = ctx.getSharedPreferences("settings", 0)
             // 首次保存原值
@@ -4480,7 +4487,8 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
             pr.waitFor()
             writeOpLog(ctx, "改机型 → " + m + " | fingerprint=" + newFp)
-            android.widget.Toast.makeText(ctx, "已伪装: " + m + "（永久生效）", android.widget.Toast.LENGTH_LONG).show()
+            val fpShow = if (newFp.isNotEmpty()) "\n指纹: " + newFp.take(48) + "..." else ""
+            android.widget.Toast.makeText(ctx, "已伪装: " + m + "（永久生效）" + fpShow, android.widget.Toast.LENGTH_LONG).show()
         } catch (t: Throwable) {
             android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
         }
@@ -4544,12 +4552,42 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 val androidId = hex(16)
                 val hostname = "android-" + hex(8)
                 val serial = "SN" + hex(12).uppercase()
-                val cmd = "rm -rf '/data/data/" + pkg + "/cache'/* 2>/dev/null; " +
-                        "rm -rf '/data/data/" + pkg + "/code_cache'/* 2>/dev/null; " +
-                        "settings put secure android_id " + androidId + " 2>/dev/null; " +
-                        "resetprop net.hostname '" + hostname + "' 2>/dev/null; " +
-                        "resetprop ro.serialno '" + serial + "' 2>/dev/null; " +
-                        "echo \"清理完成 | AndroidID=" + androidId + " | 主机名=" + hostname + " | 序列号=" + serial + "\""
+                // 按原源码：扫描4个目录，只删设备标识文件（<512k，保护obb/资源/so等）
+                val sb = StringBuilder()
+                sb.append("N=0; F=0; ")
+                sb.append("for d in '/data/data/").append(pkg).append("' ")
+                sb.append("'/data/user/0/").append(pkg).append("' ")
+                sb.append("'/sdcard/Android/data/").append(pkg).append("' ")
+                sb.append("'/sdcard/.").append(pkg).append("'; do ")
+                sb.append("[ -d \"\$d\" ] || continue; ")
+                sb.append("for f in \$(find \"\$d\" -type f \\( ")
+                sb.append("-iname '*device*id*' -o -iname '*deviceid*' ")
+                sb.append("-o -iname '*guid*' -o -iname '*uuid*' ")
+                sb.append("-o -iname '*oaid*' -o -iname '*idfa*' ")
+                sb.append("-o -iname '*imei*' -o -iname '*qimei*' ")
+                sb.append("-o -iname '*android_id*' -o -iname '*fingerprint*' ")
+                sb.append("-o -iname '*.did' \\) -size -512k 2>/dev/null); do ")
+                sb.append("case \"\$f\" in */obb/*|*/resources/*|*/assets/*|*.so|*.pak|*.obb|*.dat) continue;; esac; ")
+                sb.append("rm -f \"\$f\" 2>/dev/null && F=\$((F+1)) || N=\$((N+1)); ")
+                sb.append("done; done; ")
+                // 先读原值（供恢复）
+                sb.append("OID=\$(settings get secure android_id 2>/dev/null); ")
+                sb.append("OHOST=\$(getprop net.hostname 2>/dev/null); ")
+                sb.append("OSN=\$(getprop ro.serialno 2>/dev/null); ")
+                sb.append("echo \"ORIG|\$OID|\$OHOST|\$OSN\" > /data/local/tmp/xy_orig_ids.txt; ")
+                sb.append("chmod 644 /data/local/tmp/xy_orig_ids.txt; ")
+                // 全随机
+                sb.append("settings put secure android_id ").append(androidId).append(" 2>/dev/null; ")
+                sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null; ")
+                sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null; ")
+                // 持久化（开机保持）
+                sb.append("cat > /data/adb/service.d/xy_ids.sh <<'XYEOF2'\n#!/system/bin/sh\n")
+                sb.append("settings put secure android_id ").append(androidId).append("\n")
+                sb.append("resetprop net.hostname '").append(hostname).append("'\n")
+                sb.append("resetprop ro.serialno '").append(serial).append("'\n")
+                sb.append("XYEOF2\nchmod 755 /data/adb/service.d/xy_ids.sh; ")
+                sb.append("echo \"清理完成: 删除 \$F 个标识文件, 失败 \$N 个 | AndroidID=").append(androidId).append("\"")
+                val cmd = sb.toString()
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
                 val out = pr.inputStream.bufferedReader().readText()
                 pr.waitFor()
