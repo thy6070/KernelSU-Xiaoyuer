@@ -330,25 +330,36 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val bgMode = try {
                         ctx.getSharedPreferences("settings", 0).getString("bg_mode", "default") ?: "default"
                     } catch (t: Throwable) { "default" }
-                    iv.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    iv.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
                     iv.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)
-                    if (bgMode == "landscape") {
-                        try {
+                    try {
+                        if (bgMode == "landscape") {
+                            // 横屏模式：把图片旋转 90°
                             val raw = android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath)
                             if (raw != null) {
                                 val mtx = android.graphics.Matrix()
                                 mtx.postRotate(90f)
                                 val rotated = android.graphics.Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, mtx, true)
                                 iv.setImageBitmap(rotated)
+                            } else {
+                                iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
                             }
-                        } catch (t: Throwable) {}
-                    }
-                    try {
-                        iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
+                        } else {
+                            iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
+                        }
                     } catch (t: Throwable) {}
                     iv
                 } else {
                 val tv = android.view.TextureView(ctx)
+                // 横屏模式：视频旋转 90°
+                val bgModeV = try {
+                    ctx.getSharedPreferences("settings", 0).getString("bg_mode", "default") ?: "default"
+                } catch (t: Throwable) { "default" }
+                if (bgModeV == "landscape") {
+                    tv.rotation = 90f
+                    tv.scaleX = 1.25f
+                    tv.scaleY = 1.25f
+                }
                 val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
                 if (!cached.exists() || cached.length() == 0L) {
                     // 1) 优先从 小鱼儿/bg.mp4 复制
