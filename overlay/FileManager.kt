@@ -5288,15 +5288,13 @@ class FpsOverlayService : Service() {
     // 启动 root daemon：持续把帧时间写到 /data/local/tmp/fps_live
     private fun startDaemon() {
         try {
-            // 一次 su 启动常驻 daemon：多平台采集（天玑 fpsgo / 高通 measured_fps）
-            val cmd = "while true; do " +
-                "{ " +
-                "cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
-                "cat /sys/class/drm/sde-crtc-0/measured_fps 2>/dev/null; " +
-                "cat /sys/class/graphics/fb0/measured_fps 2>/dev/null; " +
-                "cat /sys/devices/platform/soc/ae00000.qcom,mdss_mdp/drm/card0/card0-sde-crtc-0/measured_fps 2>/dev/null; " +
-                "} > /data/local/tmp/fps_live.tmp; " +
-                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; chmod 644 /data/local/tmp/fps_live; sleep 0.05; done"
+            // 深度优化：用 shell 内置 read 读文件（不 fork cat），支持 0.01s 高频
+            val cmd = "F=/data/local/tmp/fps_live; " +
+                "while true; do " +
+                "TMP=$F.tmp; : > $TMP; " +
+                "while IFS= read -r line; do printf '%s\\n' \"$line\" >> $TMP; done < /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
+                "while IFS= read -r line; do printf '%s\\n' \"$line\" >> $TMP; done < /sys/class/drm/sde-crtc-0/measured_fps 2>/dev/null; " +
+                "mv $TMP $F; chmod 644 $F; sleep 0.01; done"
             Runtime.getRuntime().exec(arrayOf(
                 suBin(), "--mount-master", "-c", cmd
             ))
