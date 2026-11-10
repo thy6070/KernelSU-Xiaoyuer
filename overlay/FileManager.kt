@@ -4488,13 +4488,26 @@ internal fun gameCleanCache(ctx: android.content.Context) {
         uiPicker = apps.map { it.packageName }
         uiPickerAction = { pkg ->
             try {
+                // 随机标识（安卓ID / 主机名 / 序列号）
+                val rnd = java.util.Random()
+                fun hex(n: Int): String {
+                    val sb = StringBuilder()
+                    for (i in 0 until n) sb.append("0123456789abcdef"[rnd.nextInt(16)])
+                    return sb.toString()
+                }
+                val androidId = hex(16)
+                val hostname = "android-" + hex(8)
+                val serial = "SN" + hex(12).uppercase()
                 val cmd = "rm -rf '/data/data/" + pkg + "/cache'/* 2>/dev/null; " +
                         "rm -rf '/data/data/" + pkg + "/code_cache'/* 2>/dev/null; " +
-                        "echo \"已清理 " + pkg + " 的缓存\""
+                        "settings put secure android_id " + androidId + " 2>/dev/null; " +
+                        "resetprop net.hostname '" + hostname + "' 2>/dev/null; " +
+                        "resetprop ro.serialno '" + serial + "' 2>/dev/null; " +
+                        "echo \"清理完成 | AndroidID=" + androidId + " | 主机名=" + hostname + " | 序列号=" + serial + "\""
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
                 val out = pr.inputStream.bufferedReader().readText()
                 pr.waitFor()
-                android.widget.Toast.makeText(ctx, out.take(80), android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(ctx, out.take(120), android.widget.Toast.LENGTH_LONG).show()
             } catch (t: Throwable) {
                 android.widget.Toast.makeText(ctx, "清理失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
             }
