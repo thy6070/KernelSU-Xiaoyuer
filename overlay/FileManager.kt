@@ -420,12 +420,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             },
             modifier = Modifier.fillMaxSize()
-                .blur(10.dp)
+                .blur(20.dp)
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .blur(if (panel || termFull || editPath != null) 10.dp else 0.dp)
+                .blur(if (panel || termFull || editPath != null) 20.dp else 0.dp)
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
@@ -2174,21 +2174,25 @@ private fun ProMaxIsland(
                                     }
                                 }
                                 13 -> {
-                                    Column(
+                                    Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                        IslandActionButton("默认", Color(0xFF3A3A3C)) {
-                                            setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "default")
-                                            bgModePick = null
-                                            onClearLongPress()
-                                            closeIsland()
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            IslandActionButton("默认", Color(0xFF3A3A3C)) {
+                                                setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "default")
+                                                bgModePick = null
+                                                onClearLongPress()
+                                                closeIsland()
+                                            }
                                         }
-                                        IslandActionButton("横屏", Color(0xFF0A84FF)) {
-                                            setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "landscape")
-                                            bgModePick = null
-                                            onClearLongPress()
-                                            closeIsland()
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            IslandActionButton("横屏", Color(0xFF0A84FF)) {
+                                                setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "landscape")
+                                                bgModePick = null
+                                                onClearLongPress()
+                                                closeIsland()
+                                            }
                                         }
                                     }
                                 }
