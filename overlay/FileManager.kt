@@ -2173,6 +2173,25 @@ private fun ProMaxIsland(
                                         }
                                     }
                                 }
+                                13 -> {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        IslandActionButton("默认", Color(0xFF3A3A3C)) {
+                                            setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "default")
+                                            bgModePick = null
+                                            onClearLongPress()
+                                            closeIsland()
+                                        }
+                                        IslandActionButton("横屏", Color(0xFF0A84FF)) {
+                                            setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "landscape")
+                                            bgModePick = null
+                                            onClearLongPress()
+                                            closeIsland()
+                                        }
+                                    }
+                                }
                                 9 -> {
                                     val lp = longPressPath ?: ""
                                     val lowerLp = lp.lowercase()
@@ -2198,7 +2217,7 @@ private fun ProMaxIsland(
                                             closeIsland()
                                         }
                                         IslandActionButton("重命名", Color(0xFF0A84FF)) {
-                                            switchStep(11)
+                                            switchStep(13)
                                         }
                                         IslandActionButton("复制路径", Color(0xFF0A84FF)) {
                                             try {
@@ -2227,25 +2246,11 @@ private fun ProMaxIsland(
                                                 val isImg = lp.endsWith(".jpg") || lp.endsWith(".jpeg") || lp.endsWith(".png") || lp.endsWith(".webp") || lp.endsWith(".bmp")
                                                 val isVid = lp.endsWith(".mp4") || lp.endsWith(".mkv") || lp.endsWith(".avi") || lp.endsWith(".mov") || lp.endsWith(".webm") || lp.endsWith(".3gp")
                                                 if (isImg || isVid) {
-                                                    if (bgModePick == null) {
-                                                        // 点「设为背景」→ 岛内切换成两个模式按钮
-                                                        IslandActionButton("设为背景", Color(0xFF0A84FF)) {
-                                                            bgModePick = longPressPath
-                                                            bgModeIsImg = isImg
-                                                        }
-                                                    } else {
-                                                        IslandActionButton("默认", Color(0xFF3A3A3C)) {
-                                                            setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "default")
-                                                            bgModePick = null
-                                                            onClearLongPress()
-                                                            closeIsland()
-                                                        }
-                                                        IslandActionButton("横屏", Color(0xFF0A84FF)) {
-                                                            setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "landscape")
-                                                            bgModePick = null
-                                                            onClearLongPress()
-                                                            closeIsland()
-                                                        }
+                                                    // 点「设为背景」→ 收起岛 → 展开 → 显示两个模式按钮
+                                                    IslandActionButton("设为背景", Color(0xFF0A84FF)) {
+                                                        bgModePick = longPressPath
+                                                        bgModeIsImg = isImg
+                                                        switchStep(11)
                                                     }
                                                 }
                                             }
