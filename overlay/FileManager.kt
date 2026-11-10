@@ -999,18 +999,36 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
-                        Text(
-                            text = item,
+                        val icon = uiPickerIcons?.getOrNull(i)
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     uiPickerAction?.invoke(item)
                                     uiPicker = null
+                                    uiPickerIcons = null
                                 }
-                                .padding(vertical = 13.dp, horizontal = 16.dp),
-                            fontSize = 15.sp,
-                            color = Color.White
-                        )
+                                .padding(vertical = 11.dp, horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (icon != null) {
+                                Image(
+                                    bitmap = icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(28.dp).clip(RoundedCornerShape(7.dp))
+                                )
+                            } else {
+                                Box(modifier = Modifier.size(28.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = item,
+                                fontSize = 15.sp,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         if (i < pickList.size - 1) {
                             Box(
                                 modifier = Modifier
@@ -1021,15 +1039,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { uiPicker = null }
-                        .padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "取消", fontSize = 15.sp, color = Color(0xFF0A84FF))
-                }
+                // （无取消按钮，点外部关闭）
             }
         }
     }
@@ -4473,9 +4483,25 @@ internal fun gameCleanCache(ctx: android.content.Context) {
             .filter { it.packageName != "android" && !it.packageName.startsWith("com.android.systemui") }
             .sortedBy { it.packageName }
         uiPickerTitle = "选择要重置的应用"
-        uiPicker = apps.map { it.packageName }
-        uiPickerAction = { pkg ->
+        uiPicker = apps.map { it.loadLabel(pm).toString() }
+        uiPickerIcons = apps.map { app ->
             try {
+                val d = app.loadIcon(pm)
+                val bmp = android.graphics.Bitmap.createBitmap(
+                    d.intrinsicWidth.coerceAtLeast(48),
+                    d.intrinsicHeight.coerceAtLeast(48),
+                    android.graphics.Bitmap.Config.ARGB_8888
+                )
+                val cv = android.graphics.Canvas(bmp)
+                d.setBounds(0, 0, cv.width, cv.height)
+                d.draw(cv)
+                bmp.asImageBitmap()
+            } catch (t: Throwable) { null }
+        }
+        uiPickerAction = { label ->
+            try {
+                // 按名字找回包名
+                val pkg = apps.firstOrNull { it.loadLabel(pm).toString() == label }?.packageName ?: label
                 // 随机标识（安卓ID / 主机名 / 序列号）
                 val rnd = java.util.Random()
                 fun hex(n: Int): String {
@@ -4574,6 +4600,7 @@ internal fun writeOpLog(ctx: android.content.Context, msg: String) {
 // iOS 风格选择框的全局状态（Compose 可观察）
 var uiPickerTitle by androidx.compose.runtime.mutableStateOf<String?>(null)
 var uiPicker by androidx.compose.runtime.mutableStateOf<List<String>?>(null)
+var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null)
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
 
 internal fun suBin(): String {
