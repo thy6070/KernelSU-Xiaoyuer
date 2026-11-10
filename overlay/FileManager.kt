@@ -4443,13 +4443,23 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                 origFp.replaceFirst(Regex("^(\\w+)/"), brand.lowercase() + "/")
                     .replaceFirst(Regex("/[^/]+:"), "/" + m.replace(" ", "_") + ":")
             } else ""
+            // 持久化脚本（开机自动执行）
+            val persist = "mkdir -p /data/adb/service.d; " +
+                    "cat > /data/adb/service.d/xy_spoof.sh <<'XYEOF'\n" +
+                    "#!/system/bin/sh\n" +
+                    "resetprop ro.product.model '" + m + "'\n" +
+                    "resetprop ro.product.brand '" + brand + "'\n" +
+                    (if (newFp.isNotEmpty()) "resetprop ro.build.fingerprint '" + newFp + "'\n" else "") +
+                    "XYEOF\n" +
+                    "chmod 755 /data/adb/service.d/xy_spoof.sh; "
             val cmd = "resetprop ro.product.model '" + m + "' 2>&1; " +
                     "resetprop ro.product.brand '" + brand + "' 2>&1; " +
-                    (if (newFp.isNotEmpty()) "resetprop ro.build.fingerprint '" + newFp + "' 2>&1; " else "")
+                    (if (newFp.isNotEmpty()) "resetprop ro.build.fingerprint '" + newFp + "' 2>&1; " else "") +
+                    persist
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
             pr.waitFor()
             writeOpLog(ctx, "改机型 → " + m + " | fingerprint=" + newFp)
-            android.widget.Toast.makeText(ctx, "已伪装: " + m + "（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(ctx, "已伪装: " + m + "（永久生效）", android.widget.Toast.LENGTH_LONG).show()
         } catch (t: Throwable) {
             android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
         }
@@ -4463,13 +4473,14 @@ internal fun restoreDeviceModel(ctx: android.content.Context) {
         val om = sp.getString("orig_model", "") ?: ""
         val ob = sp.getString("orig_brand", "") ?: ""
         val of = sp.getString("orig_fingerprint", "") ?: ""
-        val cmd = "resetprop ro.product.model '" + om + "' 2>&1; " +
+        val cmd = "rm -f /data/adb/service.d/xy_spoof.sh; " +
+                "resetprop ro.product.model '" + om + "' 2>&1; " +
                 "resetprop ro.product.brand '" + ob + "' 2>&1; " +
                 "resetprop ro.build.fingerprint '" + of + "' 2>&1"
         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
         pr.waitFor()
         writeOpLog(ctx, "恢复机型 → " + om + " | " + ob + " | " + of)
-        android.widget.Toast.makeText(ctx, "已恢复原机型（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+        android.widget.Toast.makeText(ctx, "已恢复原机型（永久撤销）", android.widget.Toast.LENGTH_LONG).show()
     } catch (t: Throwable) {
         android.widget.Toast.makeText(ctx, "恢复失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
