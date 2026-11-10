@@ -422,10 +422,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             },
             modifier = Modifier.fillMaxSize()
                 .blur(
-                    if (try {
-                            appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) &&
-                            !(panel || termFull || editPath != null || previewPath != null)
-                        } catch (t: Throwable) { true }) 30.dp else 0.dp
+                    // 背景始终按开关模糊（编辑/终端/预览时也保留，让它们透出模糊背景）
+                    if (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
+                        catch (t: Throwable) { true }) 30.dp else 0.dp
                 )
         )
         Box(
