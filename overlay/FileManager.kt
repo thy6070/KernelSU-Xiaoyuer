@@ -1908,6 +1908,26 @@ private fun ProMaxIsland(
                                             fpsShow = !fpsShow
                                             navCtx.getSharedPreferences("settings", 0).edit()
                                                 .putBoolean("fps_show", fpsShow).apply()
+                                            try {
+                                                if (fpsShow) {
+                                                    if (!android.provider.Settings.canDrawOverlays(navCtx)) {
+                                                        // 需要悬浮窗权限
+                                                        val it = android.content.Intent(
+                                                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                            android.net.Uri.parse("package:" + navCtx.packageName)
+                                                        )
+                                                        it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        navCtx.startActivity(it)
+                                                    }
+                                                    navCtx.startForegroundService(
+                                                        android.content.Intent(navCtx, com.tencent.THY.ui.FpsOverlayService::class.java)
+                                                    )
+                                                } else {
+                                                    navCtx.stopService(
+                                                        android.content.Intent(navCtx, com.tencent.THY.ui.FpsOverlayService::class.java)
+                                                    )
+                                                }
+                                            } catch (t: Throwable) {}
                                         }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
