@@ -5288,7 +5288,11 @@ class FpsOverlayService : Service() {
     private fun startDaemon() {
         try {
             val layer = findActiveLayer() ?: return
-            val cmd = "while true; do dumpsys SurfaceFlinger --latency \"$layer\" 2>/dev/null > /data/local/tmp/fps_live.tmp; " +
+            // 和 Scene 一样：daemon 常驻，持续采集写文件（fpsgo + dumpsys 双通道）
+            val cmd = "while true; do " +
+                "{ cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
+                "dumpsys SurfaceFlinger --latency \"$layer\" 2>/dev/null; } " +
+                "> /data/local/tmp/fps_live.tmp; " +
                 "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; sleep 0.2; done"
             Runtime.getRuntime().exec(arrayOf(
                 "/data/adb/ksu/bin/su", "--mount-master", "-c", cmd
