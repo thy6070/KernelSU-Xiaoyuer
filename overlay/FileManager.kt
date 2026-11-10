@@ -975,6 +975,64 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
         }
 
+    // iOS 风格选择框
+    val pickList = uiPicker
+    val pickTitle = uiPickerTitle
+    if (pickList != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { uiPicker = null }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF2C2C2E))
+            ) {
+                Text(
+                    text = pickTitle ?: "选择",
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                    fontSize = 15.sp,
+                    color = Color(0xFF8E8E93),
+                    textAlign = TextAlign.Center
+                )
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.heightIn(max = 360.dp)
+                ) {
+                    items(pickList.size) { i ->
+                        val item = pickList[i]
+                        Text(
+                            text = item,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    uiPickerAction?.invoke(item)
+                                    uiPicker = null
+                                }
+                                .padding(vertical = 13.dp, horizontal = 16.dp),
+                            fontSize = 15.sp,
+                            color = Color.White
+                        )
+                        if (i < pickList.size - 1) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(0.5.dp)
+                                    .background(Color(0xFF3A3A3C))
+                            )
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { uiPicker = null }
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "取消", fontSize = 15.sp, color = Color(0xFF0A84FF))
+                }
+            }
+        }
+    }
+
     // 图片/视频预览
     val pv = previewPath
     if (pv != null) {
@@ -4334,52 +4392,41 @@ private val RT_DRIVER_MIRRORS = listOf(
 
 // 把 content:// URI 解析成真实文件路径（MediaStore / Downloads）
 // 从 content:// URI 查显示文件名
-// 改机型（resetprop 伪装）：先选机型
+// 改机型（iOS 风格选择 → resetprop 伪装）
 internal fun changeDeviceModel(ctx: android.content.Context) {
-    try {
-        val models = listOf(
-            "Xiaomi 15 Pro", "Xiaomi 14 Ultra", "Xiaomi Pad 8 Pro",
-            "Redmi K80 Pro", "Redmi K Pad",
-            "OnePlus 13", "OnePlus Ace 5", "OnePlus Ace 5 Pro",
-            "vivo X200 Pro", "iQOO 13",
-            "OPPO Find X8 Pro", "realme GT7 Pro",
-            "Samsung S25 Ultra", "ROG Phone 9 Pro"
-        )
-        val builder = android.app.AlertDialog.Builder(ctx)
-        builder.setTitle("选择要伪装的机型")
-        builder.setItems(models.toTypedArray()) { _, which ->
-            val m = models[which]
-            try {
-                val cmd = "resetprop ro.product.model '" + m + "' 2>&1; " +
-                        "resetprop ro.product.brand '" + m.substringBefore(" ") + "' 2>&1; " +
-                        "echo done"
-                val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
-                pr.waitFor()
-                android.widget.Toast.makeText(ctx, "已伪装: " + m + "（重启生效）", android.widget.Toast.LENGTH_LONG).show()
-            } catch (t: Throwable) {
-                android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
-            }
+    val models = listOf(
+        "Xiaomi 15 Pro", "Xiaomi 14 Ultra", "Xiaomi Pad 8 Pro",
+        "Redmi K80 Pro", "Redmi K Pad",
+        "OnePlus 13", "OnePlus Ace 5", "OnePlus Ace 5 Pro",
+        "vivo X200 Pro", "iQOO 13",
+        "OPPO Find X8 Pro", "realme GT7 Pro",
+        "Samsung S25 Ultra", "ROG Phone 9 Pro"
+    )
+    uiPickerTitle = "选择机型"
+    uiPicker = models
+    uiPickerAction = { m ->
+        try {
+            val cmd = "resetprop ro.product.model '" + m + "' 2>&1; " +
+                    "resetprop ro.product.brand '" + m.substringBefore(" ") + "' 2>&1"
+            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+            pr.waitFor()
+            android.widget.Toast.makeText(ctx, "已伪装: " + m + "（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+        } catch (t: Throwable) {
+            android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
         }
-        builder.setNegativeButton("取消", null)
-        builder.show()
-    } catch (t: Throwable) {
-        android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
 // 游戏清理：先选应用再清理该应用缓存
 internal fun gameCleanCache(ctx: android.content.Context) {
     try {
-        // 取已安装应用
         val pm = ctx.packageManager
         val apps = pm.getInstalledApplications(0)
             .filter { it.packageName != "android" && !it.packageName.startsWith("com.android.systemui") }
             .sortedBy { it.packageName }
-        val names = apps.map { it.packageName }.toTypedArray()
-        val builder = android.app.AlertDialog.Builder(ctx)
-        builder.setTitle("选择要清理的应用缓存")
-        builder.setItems(names) { _, which ->
-            val pkg = names[which]
+        uiPickerTitle = "选择要清理缓存的应用"
+        uiPicker = apps.map { it.packageName }
+        uiPickerAction = { pkg ->
             try {
                 val cmd = "rm -rf '/data/data/" + pkg + "/cache'/* 2>/dev/null; " +
                         "rm -rf '/data/data/" + pkg + "/code_cache'/* 2>/dev/null; " +
@@ -4392,8 +4439,6 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 android.widget.Toast.makeText(ctx, "清理失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
             }
         }
-        builder.setNegativeButton("取消", null)
-        builder.show()
     } catch (t: Throwable) {
         android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
@@ -4453,6 +4498,11 @@ internal fun queryRealPath(ctx: android.content.Context, uri: android.net.Uri): 
     } catch (t: Throwable) {}
     return null
 }
+
+// iOS 风格选择框的全局状态（Compose 可观察）
+var uiPickerTitle by androidx.compose.runtime.mutableStateOf<String?>(null)
+var uiPicker by androidx.compose.runtime.mutableStateOf<List<String>?>(null)
+var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
 
 internal fun suBin(): String {
     // Never probe at length here: the first su call may block on the grant dialog.
