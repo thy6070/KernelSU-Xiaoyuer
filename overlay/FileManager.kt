@@ -1011,22 +1011,27 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 .padding(vertical = 11.dp, horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (icon != null) {
-                                Image(
-                                    bitmap = icon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(28.dp).clip(RoundedCornerShape(7.dp))
-                                )
-                            } else {
-                                Box(modifier = Modifier.size(28.dp))
+                            val isRestore = item == "恢复原样"
+                            if (!isRestore) {
+                                if (icon != null) {
+                                    Image(
+                                        bitmap = icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(7.dp))
+                                    )
+                                } else {
+                                    Box(modifier = Modifier.size(28.dp))
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = item,
                                 fontSize = 15.sp,
-                                color = Color.White,
+                                color = if (isRestore) Color(0xFFFF3B30) else Color.White,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = if (isRestore) TextAlign.Center else TextAlign.Start,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                         if (i < pickList.size - 1) {
@@ -1915,9 +1920,15 @@ private fun ProMaxIsland(
                     NavIcon(Icons.Outlined.AdminPanelSettings) { openNav("su") }
                     NavIcon(Icons.Outlined.Layers) { openNav("module") }
                     NavIcon(Icons.Outlined.Tune) {
-                        expanded = true
-                        navMode = true
-                        navTarget = "tweaks"
+                        // 先收起再展开
+                        reopenScope.launch {
+                            navClosing = true
+                            kotlinx.coroutines.delay(110)
+                            navMode = true
+                            navTarget = "tweaks"
+                            navClosing = false
+                            expanded = true
+                        }
                     }
                 }
             }
