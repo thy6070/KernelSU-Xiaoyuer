@@ -4452,6 +4452,7 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                     (if (newFp.isNotEmpty()) "resetprop ro.build.fingerprint '" + newFp + "' 2>&1; " else "")
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
             pr.waitFor()
+            writeOpLog(ctx, "改机型 → " + m + " | fingerprint=" + newFp)
             android.widget.Toast.makeText(ctx, "已伪装: " + m + "（重启生效）", android.widget.Toast.LENGTH_LONG).show()
         } catch (t: Throwable) {
             android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
@@ -4471,6 +4472,7 @@ internal fun restoreDeviceModel(ctx: android.content.Context) {
                 "resetprop ro.build.fingerprint '" + of + "' 2>&1"
         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
         pr.waitFor()
+        writeOpLog(ctx, "恢复机型 → " + om + " | " + ob + " | " + of)
         android.widget.Toast.makeText(ctx, "已恢复原机型（重启生效）", android.widget.Toast.LENGTH_LONG).show()
     } catch (t: Throwable) {
         android.widget.Toast.makeText(ctx, "恢复失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
@@ -4507,6 +4509,7 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
                 val out = pr.inputStream.bufferedReader().readText()
                 pr.waitFor()
+                writeOpLog(ctx, "游戏清理 → " + pkg + " | AndroidID=" + androidId + " | 主机名=" + hostname + " | 序列号=" + serial)
                 android.widget.Toast.makeText(ctx, out.take(120), android.widget.Toast.LENGTH_LONG).show()
             } catch (t: Throwable) {
                 android.widget.Toast.makeText(ctx, "清理失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
@@ -4570,6 +4573,16 @@ internal fun queryRealPath(ctx: android.content.Context, uri: android.net.Uri): 
         }
     } catch (t: Throwable) {}
     return null
+}
+
+// 操作日志
+internal fun writeOpLog(ctx: android.content.Context, msg: String) {
+    try {
+        val f = java.io.File("/storage/emulated/0/小鱼儿/操作日志.txt")
+        f.parentFile?.mkdirs()
+        val ts = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+        f.appendText("[" + ts + "] " + msg + "\n")
+    } catch (t: Throwable) {}
 }
 
 // iOS 风格选择框的全局状态（Compose 可观察）
