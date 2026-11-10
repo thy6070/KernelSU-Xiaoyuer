@@ -41,6 +41,7 @@ class FpsOverlayService : Service() {
         startForegroundCompat()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
+        startDaemon()
         executor = Executors.newSingleThreadScheduledExecutor()
         executor?.scheduleAtFixedRate({ tickFps() }, 0, 1, TimeUnit.SECONDS)
     }
@@ -133,6 +134,18 @@ class FpsOverlayService : Service() {
         }
     }
 
+    // 启动 root daemon：持续把帧时间写到 /data/local/tmp/fps_live
+    private fun startDaemon() {
+        try {
+            val layer = findActiveLayer() ?: return
+            val cmd = "while true; do dumpsys SurfaceFlinger --latency \"$layer\" 2>/dev/null > /data/local/tmp/fps_live.tmp; " +
+                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; sleep 0.3; done"
+            Runtime.getRuntime().exec(arrayOf(
+                "/data/adb/ksu/bin/su", "--mount-master", "-c", cmd
+            ))
+        } catch (t: Throwable) {}
+    }
+
     // 读一次 FPS
     private fun tickFps() {
         try {
@@ -147,18 +160,12 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {}
     }
 
-    // root 执行 dumpsys SurfaceFlinger --latency <主层>，取最近帧时间算 FPS
+    // 读 daemon 写到文件里的帧数据（实时，无需每次 root 调用）
     private fun readFps(): Double? {
         return try {
-            // 找到当前焦点窗口的 layer
-            val layer = findActiveLayer() ?: return null
-            val pr = Runtime.getRuntime().exec(
-                arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c",
-                    "dumpsys SurfaceFlinger --latency \"$layer\" 2>/dev/null")
-            )
-            val out = pr.inputStream.bufferedReader().readText()
-            pr.waitFor()
-            parseFps(out)
+            val f = File("/data/local/tmp/fps_live")
+            if (!f.exists() || f.length() == 0L) return null
+            parseFps(f.readText())
         } catch (t: Throwable) {
             null
         }
