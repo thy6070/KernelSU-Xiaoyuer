@@ -5656,6 +5656,13 @@ class FpsOverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "com.tencent.THY.FPS_CLOSE") {
+            try {
+                getSharedPreferences("settings", 0).edit().putBoolean("fps_show", false).apply()
+            } catch (t: Throwable) {}
+            stopSelf()
+            return START_NOT_STICKY
+        }
         return START_STICKY
     }
 
@@ -5677,9 +5684,19 @@ class FpsOverlayService : Service() {
                 )
                 (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                     .createNotificationChannel(ch)
+                // 关闭广播（通知栏开关）
+                val closeIntent = android.content.Intent(this, FpsOverlayService::class.java)
+                closeIntent.action = "com.tencent.THY.FPS_CLOSE"
+                val pi = android.app.PendingIntent.getService(
+                    this, 1, closeIntent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
                 val n = Notification.Builder(this, "fps_overlay")
-                    .setContentTitle("帧率悬浮窗运行中")
+                    .setContentTitle("帧率悬浮窗")
+                    .setContentText("点击右侧按钮关闭显示")
                     .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                    .addAction(android.R.drawable.ic_menu_close_clear_cancel, "关闭帧率显示", pi)
+                    .setOngoing(true)
                     .build()
                 startForeground(9527, n)
             }
