@@ -5526,7 +5526,9 @@ class FpsOverlayService : Service() {
                 "while true; do " +
                 "TMP=\$F.tmp; : > \$TMP; " +
                 "while IFS= read -r line; do printf '%s\\n' \"\$line\" >> \$TMP; done < /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
-                "while IFS= read -r line; do printf '%s\\n' \"\$line\" >> \$TMP; done < /sys/class/drm/sde-crtc-0/measured_fps 2>/dev/null; " +
+                "for f in /sys/class/drm/*/measured_fps /sys/class/drm/card*/card*-sde-crtc-0/measured_fps; do " +
+                "[ -r \"\$f\" ] || continue; " +
+                "while IFS= read -r line; do printf '%s\\n' \"\$line\" >> \$TMP; done < \"\$f\" 2>/dev/null; break; done; " +
                 "mv \$TMP \$F; chmod 644 \$F; sleep 0.05; done"
             Runtime.getRuntime().exec(arrayOf(
                 suBin(), "--mount-master", "-c", cmd
@@ -5610,11 +5612,21 @@ class FpsOverlayService : Service() {
             android.util.Log.e("FPSD", "live empty")
             return null
         }
-        // 兼容高通：如果内容是纯数字（measured_fps），直接返回
+        // 兼容高通：measured_fps 格式可能是
+        //   纯数字 60.0
+        //   或 "fps: 104.5 duration:1000000 frame_count:106"
         val single = text.toDoubleOrNull()
         if (single != null && single > 1.0) {
             android.util.Log.e("FPSD", "measured_fps=" + single)
             return single
+        }
+        val mFps = Regex("fps:\\s*([0-9]+(?:\\.[0-9]+)?)").find(text)
+        if (mFps != null) {
+            val v = mFps.groupValues[1].toDoubleOrNull()
+            if (v != null && v > 1.0) {
+                android.util.Log.e("FPSD", "measured_fps(fps:)=" + v)
+                return v
+            }
         }
         // 天玑 fpsgo 表格：优先匹配前台包名那一行（最准）；没有则取最大值
         val now = System.currentTimeMillis()
