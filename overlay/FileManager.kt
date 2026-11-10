@@ -599,7 +599,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
         onTermClose = { showTerminal = false },
         onArchiveEnter = {
-            val p = longPressPath ?: selectedFile
+            // 定位（高亮）时没有选中态，回退用 leftHighlight 路径
+            val p = longPressPath ?: selectedFile ?: leftHighlight
             if (p != null) {
                 uiScope.launch {
                     running = true
