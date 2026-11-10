@@ -5189,7 +5189,7 @@ class FpsOverlayService : Service() {
         addOverlay()
         startDaemon()
         executor = Executors.newSingleThreadScheduledExecutor()
-        executor?.scheduleAtFixedRate({ tickFps() }, 0, 200, TimeUnit.MILLISECONDS)
+        executor?.scheduleAtFixedRate({ tickFps() }, 0, 100, TimeUnit.MILLISECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -5291,7 +5291,7 @@ class FpsOverlayService : Service() {
             val cmd = "while true; do " +
                 "cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null " +
                 "> /data/local/tmp/fps_live.tmp; " +
-                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; chmod 644 /data/local/tmp/fps_live; sleep 0.2; done"
+                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; chmod 644 /data/local/tmp/fps_live; sleep 0.1; done"
             Runtime.getRuntime().exec(arrayOf(
                 suBin(), "--mount-master", "-c", cmd
             ))
