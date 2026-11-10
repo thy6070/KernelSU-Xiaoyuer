@@ -422,8 +422,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             },
             modifier = Modifier.fillMaxSize()
                 .blur(
-                    if (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
-                        catch (t: Throwable) { true }) 30.dp else 0.dp
+                    // 编辑/终端/预览时固定 40dp；其余时间按「背景模糊」开关 30dp
+                    if (editPath != null || termFull || previewPath != null) 40.dp
+                    else if (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
+                             catch (t: Throwable) { true }) 30.dp
+                    else 0.dp
                 )
         )
         Box(
