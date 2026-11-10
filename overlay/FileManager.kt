@@ -1029,7 +1029,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable {
-                                    restoreDeviceModel(navCtx)
+                                    restoreDeviceModel(appCtx)
                                     uiPicker = null
                                 }
                                 .padding(vertical = 14.dp),
