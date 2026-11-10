@@ -4610,8 +4610,16 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("settings put secure bluetooth_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
                 sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null; ")
-                // 应用 ID（SSAID）：删除后系统重建，每个应用拿到新 ID
-                sb.append("rm -f /data/system/users/0/settings_ssaid.xml 2>/dev/null; ")
+                // 应用 ID（SSAID）双方案：
+                //  旧系统文本 XML → sed 就地改该应用条目
+                //  新系统 ABX 二进制 → 删文件让系统重建
+                sb.append("SSAID=/data/system/users/0/settings_ssaid.xml; ")
+                sb.append("if [ -f \"\$SSAID\" ]; then ")
+                sb.append("if head -c 3 \"\$SSAID\" 2>/dev/null | grep -q 'ABX'; then ")
+                sb.append("rm -f \"\$SSAID\" 2>/dev/null; ")
+                sb.append("else ")
+                sb.append("sed -i -E 's#(<string name=\"[^\"]*(device_?id|deviceid|guid|uuid|oaid|imei|android_?id|fingerprint|openudid|install_?id|qimei)[^\"]*\">)[^<]*(</string>)#\\1").append(androidId).append("#Ig' \"\$SSAID\" 2>/dev/null; ")
+                sb.append("fi; fi; ")
                 // 持久化（开机保持）
                 sb.append("cat > /data/adb/service.d/xy_ids.sh <<'XYEOF2'\n#!/system/bin/sh\n")
                 sb.append("settings put secure android_id ").append(androidId).append("\n")
