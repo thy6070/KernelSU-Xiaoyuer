@@ -4670,6 +4670,15 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("resetprop net.hostname '").append(hostname).append("'\n")
                 sb.append("resetprop ro.serialno '").append(serial).append("'\n")
                 sb.append("XYEOF2\nchmod 755 /data/adb/service.d/xy_ids.sh; ")
+                // 清理各种上报目录（崩溃/埋点/性能/位置）
+                for (d in listOf("app_crashSight", "app_crashrecord", "app_beacon", "app_apm",
+                        "app_geolocation", "app_appcache", "app_smobawebviewcache")) {
+                    sb.append("rm -rf '/data/data/").append(pkg).append("/").append(d).append("'/* 2>/dev/null; ")
+                }
+                // 清理日志文件
+                sb.append("rm -rf '/data/data/").append(pkg).append("/files/log'/* 2>/dev/null; ")
+                sb.append("rm -rf '/data/data/").append(pkg).append("/files/logs'/* 2>/dev/null; ")
+                sb.append("rm -f '/data/data/").append(pkg).append("/files/'*.log 2>/dev/null; ")
                 // 杀进程让标识重新初始化（同小轩工具箱）
                 sb.append("am force-stop ").append(pkg).append(" 2>/dev/null; ")
                 sb.append("echo \"清理完成: 删除 \$F 个标识文件, 失败 \$N 个 | AndroidID=").append(androidId).append("\"")
