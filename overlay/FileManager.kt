@@ -5207,7 +5207,7 @@ class FpsOverlayService : Service() {
     // 前台通知（Android 8+ 必须）
     private fun startForegroundCompat() {
         try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.android.os.Build.VERSION_CODES.O) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 val ch = NotificationChannel(
                     "fps_overlay", "帧率悬浮窗", NotificationManager.IMPORTANCE_MIN
                 )
@@ -5233,7 +5233,7 @@ class FpsOverlayService : Service() {
             tv.setBackgroundColor(android.graphics.Color.parseColor("#AA000000"))
             tv.setPadding(16, 6, 16, 6)
 
-            val type = if (android.os.Build.VERSION.SDK_INT >= android.os.android.os.Build.VERSION_CODES.O) {
+            val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
                 @Suppress("DEPRECATION")
