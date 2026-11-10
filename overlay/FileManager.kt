@@ -5288,10 +5288,14 @@ class FpsOverlayService : Service() {
     // 启动 root daemon：持续把帧时间写到 /data/local/tmp/fps_live
     private fun startDaemon() {
         try {
-            // 一次 su 启动常驻 daemon：持续读 fpsgo 写文件（App 只读文件，不再调 su）
+            // 一次 su 启动常驻 daemon：多平台采集（天玑 fpsgo / 高通 measured_fps）
             val cmd = "while true; do " +
-                "cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null " +
-                "> /data/local/tmp/fps_live.tmp; " +
+                "{ " +
+                "cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
+                "cat /sys/class/drm/sde-crtc-0/measured_fps 2>/dev/null; " +
+                "cat /sys/class/graphics/fb0/measured_fps 2>/dev/null; " +
+                "cat /sys/devices/platform/soc/ae00000.qcom,mdss_mdp/drm/card0/card0-sde-crtc-0/measured_fps 2>/dev/null; " +
+                "} > /data/local/tmp/fps_live.tmp; " +
                 "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; chmod 644 /data/local/tmp/fps_live; sleep 0.1; done"
             Runtime.getRuntime().exec(arrayOf(
                 suBin(), "--mount-master", "-c", cmd
@@ -5375,7 +5379,13 @@ class FpsOverlayService : Service() {
             android.util.Log.e("FPSD", "live empty")
             return null
         }
-        // 优先匹配前台包名那一行（最准）；没有则取最大值
+        // 兼容高通：如果内容是纯数字（measured_fps），直接返回
+        val single = text.toDoubleOrNull()
+        if (single != null && single > 1.0) {
+            android.util.Log.e("FPSD", "measured_fps=" + single)
+            return single
+        }
+        // 天玑 fpsgo 表格：优先匹配前台包名那一行（最准）；没有则取最大值
         val now = System.currentTimeMillis()
         if (now - lastPkgRefresh > 5000) {
             lastPkgRefresh = now
