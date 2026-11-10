@@ -1539,7 +1539,7 @@ private fun ProMaxIsland(
 
     // Island.kt ball choreography
     val wingPress = remember { Animatable(0f) }
-    // 设为背景：模式选择面板（用小尺寸岛按钮，居中）
+    // 设为背景：模式选择（两个并排全宽按钮，和删除/执行同款）
     val bgPickNow = bgModePick
     if (bgPickNow != null) {
         Box(
@@ -1551,19 +1551,21 @@ private fun ProMaxIsland(
         ) {
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF1A1A1E))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .width(300.dp)
+                    .padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                IslandActionButton("默认", Color(0xFF3A3A3C)) {
-                    setBgBackground(navCtx, bgPickNow, bgModeIsImg, "default")
-                    bgModePick = null
+                Box(modifier = Modifier.weight(1f)) {
+                    IslandActionButton("默认", Color(0xFF3A3A3C)) {
+                        setBgBackground(navCtx, bgPickNow, bgModeIsImg, "default")
+                        bgModePick = null
+                    }
                 }
-                IslandActionButton("横屏", Color(0xFF0A84FF)) {
-                    setBgBackground(navCtx, bgPickNow, bgModeIsImg, "landscape")
-                    bgModePick = null
+                Box(modifier = Modifier.weight(1f)) {
+                    IslandActionButton("横屏", Color(0xFF0A84FF)) {
+                        setBgBackground(navCtx, bgPickNow, bgModeIsImg, "landscape")
+                        bgModePick = null
+                    }
                 }
             }
         }
