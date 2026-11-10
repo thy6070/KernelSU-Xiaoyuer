@@ -60,7 +60,7 @@
         </activity>
 
         <service
-            android:name=".ui.FpsOverlayService"
+            android:name=".ui.screen.FpsOverlayService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
