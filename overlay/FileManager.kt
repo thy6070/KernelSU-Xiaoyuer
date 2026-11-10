@@ -2217,7 +2217,7 @@ private fun ProMaxIsland(
                                             closeIsland()
                                         }
                                         IslandActionButton("重命名", Color(0xFF0A84FF)) {
-                                            switchStep(13)
+                                            switchStep(11)
                                         }
                                         IslandActionButton("复制路径", Color(0xFF0A84FF)) {
                                             try {
@@ -2250,7 +2250,7 @@ private fun ProMaxIsland(
                                                     IslandActionButton("设为背景", Color(0xFF0A84FF)) {
                                                         bgModePick = longPressPath
                                                         bgModeIsImg = isImg
-                                                        switchStep(11)
+                                                        switchStep(13)
                                                     }
                                                 }
                                             }
