@@ -421,16 +421,17 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             },
             modifier = Modifier.fillMaxSize()
-                .blur(30.dp)
+                .blur(
+                    if (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
+                        catch (t: Throwable) { true }) 30.dp else 0.dp
+                )
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .blur(
-                    // 编辑/终端/预览时对文件管理器模糊（开关 bg_blur 控制，40dp）
-                    if ((panel || termFull || editPath != null || previewPath != null) &&
-                        (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
-                         catch (t: Throwable) { true })) 40.dp else 0.dp
+                    // 编辑/终端/预览时对文件管理器固定 40dp 模糊（不受开关控制）
+                    if (panel || termFull || editPath != null || previewPath != null) 40.dp else 0.dp
                 )
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
