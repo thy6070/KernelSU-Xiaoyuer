@@ -5287,7 +5287,6 @@ class FpsOverlayService : Service() {
     // 启动 root daemon：持续把帧时间写到 /data/local/tmp/fps_live
     private fun startDaemon() {
         try {
-            val layer = findActiveLayer() ?: return
             // 一次 su 启动常驻 daemon：持续读 fpsgo 写文件（App 只读文件，不再调 su）
             val cmd = "while true; do " +
                 "cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null " +
