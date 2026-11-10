@@ -1920,11 +1920,11 @@ private fun ProMaxIsland(
                                                         navCtx.startActivity(it)
                                                     }
                                                     navCtx.startForegroundService(
-                                                        android.content.Intent(navCtx, com.tencent.THY.ui.FpsOverlayService::class.java)
+                                                        android.content.Intent(navCtx, FpsOverlayService::class.java)
                                                     )
                                                 } else {
                                                     navCtx.stopService(
-                                                        android.content.Intent(navCtx, com.tencent.THY.ui.FpsOverlayService::class.java)
+                                                        android.content.Intent(navCtx, FpsOverlayService::class.java)
                                                     )
                                                 }
                                             } catch (t: Throwable) {}
