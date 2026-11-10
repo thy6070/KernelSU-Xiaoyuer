@@ -4542,8 +4542,13 @@ internal fun gameCleanCache(ctx: android.content.Context) {
     try {
         val pm = ctx.packageManager
         val apps = pm.getInstalledApplications(0)
-            .filter { it.packageName != "android" && !it.packageName.startsWith("com.android.systemui") }
-            .sortedBy { it.packageName }
+            .filter {
+                // 和超级用户列表同款过滤：必须有代码（排除 overlay/资源包）
+                (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0 &&
+                it.packageName != "android" &&
+                !it.packageName.startsWith("com.android.systemui")
+            }
+            .sortedBy { it.loadLabel(pm).toString() }
         uiPickerTitle = "选择要重置的应用"
         uiPicker = apps.map { it.loadLabel(pm).toString() }
         uiPickerIcons = apps.map { app ->
@@ -4605,6 +4610,8 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("settings put secure bluetooth_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
                 sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null; ")
+                // 应用 ID（SSAID）：删除后系统重建，每个应用拿到新 ID
+                sb.append("rm -f /data/system/users/0/settings_ssaid.xml 2>/dev/null; ")
                 // 持久化（开机保持）
                 sb.append("cat > /data/adb/service.d/xy_ids.sh <<'XYEOF2'\n#!/system/bin/sh\n")
                 sb.append("settings put secure android_id ").append(androidId).append("\n")
