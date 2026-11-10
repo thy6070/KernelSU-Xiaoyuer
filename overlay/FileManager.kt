@@ -5148,3 +5148,194 @@ private val perfGameScript = listOf(
     "    ;;",
     "esac"
 )
+
+/**
+ * 悬浮窗帧率显示（类似 Scene 的 FPS 悬浮窗）
+ *
+ * 实现方式：
+ *   1. WindowManager 加一个 TYPE_APPLICATION_OVERLAY 的 TextView
+ *   2. 定时（1s）用 root 执行 dumpsys SurfaceFlinger --latency 读帧时间
+ *   3. 算 FPS 更新 TextView
+ */
+class FpsOverlayService : Service() {
+
+    private lateinit var windowManager: WindowManager
+    private var fpsView: TextView? = null
+    private var executor: ScheduledExecutorService? = null
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        startForegroundCompat()
+        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        addOverlay()
+        startDaemon()
+        executor = Executors.newSingleThreadScheduledExecutor()
+        executor?.scheduleAtFixedRate({ tickFps() }, 0, 1, TimeUnit.SECONDS)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        try { executor?.shutdownNow() } catch (t: Throwable) {}
+        try {
+            fpsView?.let { windowManager.removeView(it) }
+        } catch (t: Throwable) {}
+        fpsView = null
+        super.onDestroy()
+    }
+
+    // 前台通知（Android 8+ 必须）
+    private fun startForegroundCompat() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val ch = NotificationChannel(
+                    "fps_overlay", "帧率悬浮窗", NotificationManager.IMPORTANCE_MIN
+                )
+                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                    .createNotificationChannel(ch)
+                val n = Notification.Builder(this, "fps_overlay")
+                    .setContentTitle("帧率悬浮窗运行中")
+                    .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                    .build()
+                startForeground(9527, n)
+            }
+        } catch (t: Throwable) {}
+    }
+
+    // 添加悬浮窗
+    private fun addOverlay() {
+        try {
+            val tv = TextView(this)
+            tv.text = "-- FPS"
+            tv.setTextColor(Color.WHITE)
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+            tv.setBackgroundColor(Color.parseColor("#AA000000"))
+            tv.setPadding(16, 6, 16, 6)
+
+            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+            val lp = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                type,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT
+            )
+            lp.gravity = Gravity.TOP or Gravity.START
+            lp.x = 20
+            lp.y = 120
+            var downX = 0f
+            var downY = 0f
+            var startX = 0
+            var startY = 0
+            tv.setOnTouchListener { _, ev ->
+                when (ev.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        downX = ev.rawX
+                        downY = ev.rawY
+                        startX = lp.x
+                        startY = lp.y
+                        true
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        lp.x = startX + (ev.rawX - downX).toInt()
+                        lp.y = startY + (ev.rawY - downY).toInt()
+                        try { windowManager.updateViewLayout(tv, lp) } catch (t: Throwable) {}
+                        true
+                    }
+                    else -> true
+                }
+            }
+            windowManager.addView(tv, lp)
+            fpsView = tv
+        } catch (t: Throwable) {
+            stopSelf()
+        }
+    }
+
+    // 启动 root daemon：持续把帧时间写到 /data/local/tmp/fps_live
+    private fun startDaemon() {
+        try {
+            val layer = findActiveLayer() ?: return
+            val cmd = "while true; do dumpsys SurfaceFlinger --latency \"$layer\" 2>/dev/null > /data/local/tmp/fps_live.tmp; " +
+                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; sleep 0.3; done"
+            Runtime.getRuntime().exec(arrayOf(
+                "/data/adb/ksu/bin/su", "--mount-master", "-c", cmd
+            ))
+        } catch (t: Throwable) {}
+    }
+
+    // 读一次 FPS
+    private fun tickFps() {
+        try {
+            val fps = readFps()
+            if (fps != null && fps > 0) {
+                fpsView?.post {
+                    try {
+                        fpsView?.text = String.format("%.0f FPS", fps)
+                    } catch (t: Throwable) {}
+                }
+            }
+        } catch (t: Throwable) {}
+    }
+
+    // 读 daemon 写到文件里的帧数据（实时，无需每次 root 调用）
+    private fun readFps(): Double? {
+        return try {
+            val f = File("/data/local/tmp/fps_live")
+            if (!f.exists() || f.length() == 0L) return null
+            parseFps(f.readText())
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
+    // 找当前层的名称（简化：从 dumpsys SurfaceFlinger 取第一个可见层）
+    private fun findActiveLayer(): String? {
+        return try {
+            val pr = Runtime.getRuntime().exec(
+                arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c",
+                    "dumpsys SurfaceFlinger --list 2>/dev/null")
+            )
+            val out = pr.inputStream.bufferedReader().readLines()
+            pr.waitFor()
+            // 优先 SurfaceView / 全屏层
+            out.firstOrNull { it.contains("SurfaceView") }
+                ?: out.firstOrNull { it.isNotBlank() }
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
+    // 解析 dumpsys 输出：第一行是刷新率，之后每行是 (desiredPresent, actualPresent, frameReady)
+    private fun parseFps(dump: String): Double? {
+        val lines = dump.lines().filter { it.isNotBlank() }
+        if (lines.size < 2) return null
+        val times = mutableListOf<Long>()
+        for (i in 1 until lines.size) {
+            val parts = lines[i].trim().split('\t', ' ')
+            if (parts.size >= 2) {
+                val t = parts[1].toLongOrNull() ?: continue
+                if (t > 0) times.add(t)
+            }
+        }
+        if (times.size < 2) return null
+        val minT = times.minOrNull() ?: return null
+        val maxT = times.maxOrNull() ?: return null
+        val span = maxT - minT
+        if (span <= 0) return null
+        // times 是纳秒
+        val fps = (times.size - 1).toDouble() / (span.toDouble() / 1_000_000_000.0)
+        return fps.coerceIn(1.0, 240.0)
+    }
+}
