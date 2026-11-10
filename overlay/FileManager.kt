@@ -5189,7 +5189,7 @@ class FpsOverlayService : Service() {
         addOverlay()
         startDaemon()
         executor = Executors.newSingleThreadScheduledExecutor()
-        executor?.scheduleAtFixedRate({ tickFps() }, 0, 1, TimeUnit.SECONDS)
+        executor?.scheduleAtFixedRate({ tickFps() }, 0, 200, TimeUnit.MILLISECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -5285,7 +5285,7 @@ class FpsOverlayService : Service() {
         try {
             val layer = findActiveLayer() ?: return
             val cmd = "while true; do dumpsys SurfaceFlinger --latency \"$layer\" 2>/dev/null > /data/local/tmp/fps_live.tmp; " +
-                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; sleep 0.3; done"
+                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; sleep 0.2; done"
             Runtime.getRuntime().exec(arrayOf(
                 "/data/adb/ksu/bin/su", "--mount-master", "-c", cmd
             ))
