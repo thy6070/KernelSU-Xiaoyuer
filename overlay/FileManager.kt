@@ -5378,19 +5378,22 @@ class FpsOverlayService : Service() {
         )
         for (n in nodes) {
             try {
-                // 用 su 把文件复制到 App 私有目录再读（避免直接读 /sys 权限问题）
-                val tmp = File(cacheDir, "fps_node.tmp")
-                val pr = Runtime.getRuntime().exec(arrayOf(
-                    "/data/adb/ksu/bin/su", "--mount-master", "-c",
-                    "cat '$n' 2>/dev/null > '" + tmp.absolutePath + "' && chmod 644 '" + tmp.absolutePath + "'"
-                ))
-                pr.waitFor()
-                val out = try { tmp.readText().trim() } catch (t: Throwable) { "" }
-                android.util.Log.e("FPSD", "node=" + n + " len=" + out.length)
-                if (out.isEmpty()) continue
+                // 直接读（fpsgo_status 是 444 全局可读，不需要 root）
+                val out = try { File(n).readText().trim() } catch (t: Throwable) { "" }
+                val out2 = if (out.isEmpty()) {
+                    // 回退：用 su 读（其他节点可能需要 root）
+                    val pr = Runtime.getRuntime().exec(
+                        arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c", "cat '$n' 2>/dev/null")
+                    )
+                    val o2 = pr.inputStream.bufferedReader().readText().trim()
+                    pr.waitFor()
+                    o2
+                } else out
+                android.util.Log.e("FPSD", "node=" + n + " len=" + out2.length)
+                if (out2.isEmpty()) continue
                 if (n.contains("fpsgo_status")) {
                     // 和脚本验证过的逻辑一致：每行第 4 列是 currentFPS，取所有行最大值
-                    val lines = out.lines()
+                    val lines = out2.lines()
                     var best = 0.0
                     for (l in lines) {
                         val cols = l.split(Regex("[\\t ]+")).filter { it.isNotBlank() }
@@ -5402,7 +5405,7 @@ class FpsOverlayService : Service() {
                     android.util.Log.e("FPSD", "fpsgo best=" + best)
                     if (best > 0) return best
                 } else {
-                    return out.toDoubleOrNull()
+                    return out2.toDoubleOrNull()
                 }
             } catch (t: Throwable) {}
         }
