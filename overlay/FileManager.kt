@@ -4405,10 +4405,10 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
     )
     uiPickerTitle = "选择机型"
     uiPicker = listOf("恢复原样") + models
-    uiPickerAction = { m ->
+    uiPickerAction = pick@{ m ->
         if (m == "恢复原样") {
             restoreDeviceModel(ctx)
-            return@changeDeviceModel
+            return@pick
         }
         try {
             val sp = ctx.getSharedPreferences("settings", 0)
