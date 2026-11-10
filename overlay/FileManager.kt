@@ -5337,11 +5337,29 @@ class FpsOverlayService : Service() {
                 pr.waitFor()
                 if (out.isEmpty()) continue
                 if (n.contains("fpsgo_status")) {
-                    // 按包名匹配 currentFPS 列
-                    val pkgLine = out.lines().firstOrNull { it.contains(activePkg) } ?: continue
-                    val cols = pkgLine.split(Regex("\\s+"))
-                    val v = cols.lastOrNull()?.toDoubleOrNull() ?: continue
-                    return v
+                    // 表头: tid bufID name currentFPS targetFPS ...
+                    // 按包名匹配，取 currentFPS（第 4 列，索引 3）
+                    val lines = out.lines()
+                    val target = if (activePkg.isNotEmpty()) activePkg
+                                 else lines.firstOrNull { it.contains("shell") || it.contains("SurfaceView") }?.let { "" } ?: ""
+                    for (l in lines) {
+                        if (target.isNotEmpty() && !l.contains(target)) continue
+                        val cols = l.split(Regex("[\\t ]+")).filter { it.isNotBlank() }
+                        if (cols.size >= 4) {
+                            val v = cols[3].toDoubleOrNull()
+                            if (v != null && v > 0) return v
+                        }
+                    }
+                    // 回退：取所有行里最大的 currentFPS（通常是正在渲染的应用）
+                    var best = 0.0
+                    for (l in lines) {
+                        val cols = l.split(Regex("[\\t ]+")).filter { it.isNotBlank() }
+                        if (cols.size >= 4) {
+                            val v = cols[3].toDoubleOrNull() ?: continue
+                            if (v > best) best = v
+                        }
+                    }
+                    if (best > 0) return best
                 } else {
                     return out.toDoubleOrNull()
                 }
