@@ -5367,39 +5367,25 @@ class FpsOverlayService : Service() {
 
     // 帧率通道（读 daemon 写的文件，不调 su）
     private fun sysfsFps(): Double? {
-        android.util.Log.e("FPSD", "sysfsFps enter")
-        val nodes = listOf(
-            "/sys/class/drm/sde-crtc-0/measured_fps",
-            "/sys/class/graphics/fb0/measured_fps",
-            "/sys/kernel/fpsgo/fstb/fpsgo_status",
-            "/sys/devices/platform/soc/ae00000.qcom,mdss_mdp/drm/card0/card0-sde-crtc-0/measured_fps"
-        )
-        for (n in nodes) {
-            try {
-                // 只读 daemon 写的文件（不调 su，避免卡住）
-                val live = File("/data/local/tmp/fps_live")
-                val out2 = try { live.readText().trim() } catch (t: Throwable) { "" }
-                android.util.Log.e("FPSD", "live len=" + out2.length)
-                if (out2.isEmpty()) continue
-                if (n.contains("fpsgo_status")) {
-                    // 和脚本验证过的逻辑一致：每行第 4 列是 currentFPS，取所有行最大值
-                    val lines = out2.lines()
-                    var best = 0.0
-                    for (l in lines) {
-                        val cols = l.split(Regex("[\\t ]+")).filter { it.isNotBlank() }
-                        if (cols.size >= 4) {
-                            val v = cols[3].toDoubleOrNull() ?: continue
-                            if (v > best) best = v
-                        }
-                    }
-                    android.util.Log.e("FPSD", "fpsgo best=" + best)
-                    if (best > 0) return best
-                } else {
-                    return out2.toDoubleOrNull()
-                }
-            } catch (t: Throwable) {}
+        // daemon 已经把 fpsgo 内容写到 fps_live，直接解析表格
+        val live = File("/data/local/tmp/fps_live")
+        val text = try { live.readText().trim() } catch (t: Throwable) { "" }
+        if (text.isEmpty()) {
+            android.util.Log.e("FPSD", "live empty")
+            return null
         }
-        return null
+        // 表头: tid bufID name currentFPS targetFPS ...
+        // 每行第 4 列是 currentFPS，取所有行最大值（脚本验证过的逻辑）
+        var best = 0.0
+        for (l in text.lines()) {
+            val cols = l.split(Regex("[\\t ]+")).filter { it.isNotBlank() }
+            if (cols.size >= 4) {
+                val v = cols[3].toDoubleOrNull() ?: continue
+                if (v > best) best = v
+            }
+        }
+        android.util.Log.e("FPSD", "fpsgo best=" + best)
+        return if (best > 0) best else null
     }
 
     // 找当前层的名称（简化：从 dumpsys SurfaceFlinger 取第一个可见层）
