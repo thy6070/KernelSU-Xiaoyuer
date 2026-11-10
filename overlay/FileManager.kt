@@ -438,10 +438,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             },
             modifier = Modifier.fillMaxSize()
                 .blur(
-                    // 编辑/终端/预览时固定 40dp；其余时间按「背景模糊」开关 30dp
-                    if (editPath != null || termFull || previewPath != null) 40.dp
+                    // 编辑/终端/预览/能量守恒界面 30dp；其余时间按「背景模糊」开关 20dp
+                    if (editPath != null || termFull || previewPath != null || panel) 30.dp
                     else if (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
-                             catch (t: Throwable) { true }) 30.dp
+                             catch (t: Throwable) { true }) 20.dp
                     else 0.dp
                 )
         )
@@ -449,8 +449,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .blur(
-                    // 编辑/终端/预览时对文件管理器固定 40dp 模糊（不受开关控制）
-                    if (panel || termFull || editPath != null || previewPath != null) 40.dp else 0.dp
+                    // 编辑/终端/预览/能量守恒时对文件管理器固定 30dp 模糊（不受开关控制）
+                    if (panel || termFull || editPath != null || previewPath != null) 30.dp else 0.dp
                 )
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
@@ -5227,13 +5227,13 @@ class FpsOverlayService : Service() {
     private fun addOverlay() {
         try {
             val tv = TextView(this)
-            tv.text = "-- FPS"
+            tv.text = "-- 帧"
             tv.setTextColor(android.graphics.Color.WHITE)
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
             // 黄色圆角背景（Scene 同款）
             val bgDrawable = android.graphics.drawable.GradientDrawable()
-            bgDrawable.setColor(android.graphics.Color.parseColor("#CCFFD700"))
+            bgDrawable.setColor(android.graphics.Color.parseColor("#99B8860B"))   // 暗黄 + 高透明
             bgDrawable.cornerRadius = 50f   // 药丸形状
             tv.background = bgDrawable
             tv.setPadding(20, 6, 20, 6)
@@ -5305,7 +5305,7 @@ class FpsOverlayService : Service() {
             if (fps != null && fps > 0) {
                 fpsView?.post {
                     try {
-                        fpsView?.text = String.format("%.0f FPS", fps)
+                        fpsView?.text = String.format("%.0f 帧", fps)
                     } catch (t: Throwable) {}
                 }
             }
