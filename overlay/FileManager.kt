@@ -4406,12 +4406,33 @@ private val RT_DRIVER_MIRRORS = listOf(
 // 改机型（iOS 风格选择 → resetprop 伪装）
 internal fun changeDeviceModel(ctx: android.content.Context) {
     val models = listOf(
-        "Xiaomi 15 Pro", "Xiaomi 14 Ultra", "Xiaomi Pad 8 Pro",
-        "Redmi K80 Pro", "Redmi K Pad",
-        "OnePlus 13", "OnePlus Ace 5", "OnePlus Ace 5 Pro",
-        "vivo X200 Pro", "iQOO 13",
-        "OPPO Find X8 Pro", "realme GT7 Pro",
-        "Samsung S25 Ultra", "ROG Phone 9 Pro"
+        // 小米
+        "Xiaomi 15 Pro", "Xiaomi 15 Ultra", "Xiaomi 15S Pro", "Xiaomi 14 Ultra",
+        "Xiaomi Pad 8 Pro", "Xiaomi Pad 7 Ultra", "Xiaomi MIX Fold 4",
+        // 红米
+        "Redmi K80 Pro", "Redmi K80 Ultra", "Redmi K70 Pro", "Redmi Turbo 4",
+        "Redmi Pad 2 Pro",
+        // 华为
+        "HUAWEI Mate 70 Pro", "HUAWEI Mate 70 RS", "HUAWEI Pura 70 Ultra",
+        "HUAWEI Mate X6", "HUAWEI MatePad Pro 13.2",
+        // OPPO
+        "OPPO Find X8 Pro", "OPPO Find X8 Ultra", "OPPO Find N5",
+        "OPPO Pad 4 Pro",
+        // 真我
+        "realme GT7 Pro", "realme GT7", "realme GT Neo7", "realme Pad 2 Pro",
+        // 一加
+        "OnePlus 13", "OnePlus 13T", "OnePlus Ace 5 Pro", "OnePlus Pad 3",
+        // iQOO
+        "iQOO 13", "iQOO Neo10 Pro", "iQOO Pad 3 Pro",
+        // 红魔
+        "Nubia RedMagic 10 Pro", "Nubia RedMagic 10", "Nubia RedMagic Pad 3 Pro",
+        // 荣耀
+        "HONOR Magic7 Pro", "HONOR Magic7 RSR", "HONOR Magic V3",
+        "HONOR GT Pro", "HONOR Pad V9",
+        // 其他旗舰
+        "vivo X200 Pro", "vivo X200 Ultra", "vivo Pad 3 Pro",
+        "Samsung S25 Ultra", "Samsung Z Fold 6", "ROG Phone 9 Pro",
+        "vivo X Fold 4 Pro"
     )
     uiPickerTitle = "选择机型"
     uiPicker = listOf("恢复原样") + models
