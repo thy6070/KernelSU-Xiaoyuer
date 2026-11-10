@@ -5234,7 +5234,7 @@ class FpsOverlayService : Service() {
             // 黄色圆角背景（Scene 同款）
             val bgDrawable = android.graphics.drawable.GradientDrawable()
             bgDrawable.setColor(android.graphics.Color.parseColor("#CCFFD700"))
-            bgDrawable.cornerRadius = 24f
+            bgDrawable.cornerRadius = 50f   // 药丸形状
             tv.background = bgDrawable
             tv.setPadding(20, 6, 20, 6)
 
