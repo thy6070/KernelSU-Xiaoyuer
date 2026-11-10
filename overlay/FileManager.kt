@@ -5378,20 +5378,12 @@ class FpsOverlayService : Service() {
         )
         for (n in nodes) {
             try {
-                // 直接读（fpsgo_status 是 444 全局可读，不需要 root）
-                val out = try { File(n).readText().trim() } catch (t: Throwable) {
-                    android.util.Log.e("FPSD", "read fail " + n + ": " + (t.message ?: t.javaClass.simpleName))
-                    ""
-                }
-                val out2 = if (out.isEmpty()) {
-                    // 回退：用 su 读（其他节点可能需要 root）
-                    val pr = Runtime.getRuntime().exec(
-                        arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c", "cat '$n' 2>/dev/null")
-                    )
-                    val o2 = pr.inputStream.bufferedReader().readText().trim()
-                    pr.waitFor()
-                    o2
-                } else out
+                // SELinux 阻止 App 直接读 sysfs，必须用 su
+                val pr = Runtime.getRuntime().exec(
+                    arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c", "cat '$n' 2>/dev/null")
+                )
+                val out2 = pr.inputStream.bufferedReader().readText().trim()
+                pr.waitFor()
                 android.util.Log.e("FPSD", "node=" + n + " len=" + out2.length)
                 if (out2.isEmpty()) continue
                 if (n.contains("fpsgo_status")) {
