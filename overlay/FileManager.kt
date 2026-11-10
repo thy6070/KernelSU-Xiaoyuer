@@ -1861,6 +1861,8 @@ private fun ProMaxIsland(
                         "tweaks" -> {
                             var softReboot by remember { mutableStateOf(false) }
                             var selinuxHide by remember { mutableStateOf(false) }
+                            var showModelPicker by remember { mutableStateOf(false) }
+                            var showCleanPicker by remember { mutableStateOf(false) }
                             var fpsShow by remember {
                                 mutableStateOf(
                                     try {
@@ -1978,7 +1980,7 @@ private fun ProMaxIsland(
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                        .clickable { changeDeviceModel(navCtx) }
+                                        .clickable { showModelPicker = true }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -1993,7 +1995,7 @@ private fun ProMaxIsland(
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                        .clickable { gameCleanCache(navCtx) }
+                                        .clickable { showCleanPicker = true }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -4332,34 +4334,68 @@ private val RT_DRIVER_MIRRORS = listOf(
 
 // 把 content:// URI 解析成真实文件路径（MediaStore / Downloads）
 // 从 content:// URI 查显示文件名
-// 改机型（resetprop 伪装）
+// 改机型（resetprop 伪装）：先选机型
 internal fun changeDeviceModel(ctx: android.content.Context) {
     try {
-        val model = android.os.Build.MODEL.replace(" ", "_")
-        val cmd = "resetprop ro.product.model '" + model + "' 2>&1; " +
-                "resetprop ro.product.brand 'Xiaoyuer' 2>&1; " +
-                "resetprop ro.product.manufacturer 'Xiaoyuer' 2>&1; " +
-                "echo done"
-        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
-        val out = pr.inputStream.bufferedReader().readText()
-        pr.waitFor()
-        android.widget.Toast.makeText(ctx, "改机型完成: " + out.take(60), android.widget.Toast.LENGTH_LONG).show()
+        val models = listOf(
+            "Xiaomi 15 Pro", "Xiaomi 14 Ultra", "Xiaomi Pad 8 Pro",
+            "Redmi K80 Pro", "Redmi K Pad",
+            "OnePlus 13", "OnePlus Ace 5", "OnePlus Ace 5 Pro",
+            "vivo X200 Pro", "iQOO 13",
+            "OPPO Find X8 Pro", "realme GT7 Pro",
+            "Samsung S25 Ultra", "ROG Phone 9 Pro"
+        )
+        val builder = android.app.AlertDialog.Builder(ctx)
+        builder.setTitle("选择要伪装的机型")
+        builder.setItems(models.toTypedArray()) { _, which ->
+            val m = models[which]
+            try {
+                val cmd = "resetprop ro.product.model '" + m + "' 2>&1; " +
+                        "resetprop ro.product.brand '" + m.substringBefore(" ") + "' 2>&1; " +
+                        "echo done"
+                val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+                pr.waitFor()
+                android.widget.Toast.makeText(ctx, "已伪装: " + m + "（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+            } catch (t: Throwable) {
+                android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        builder.setNegativeButton("取消", null)
+        builder.show()
     } catch (t: Throwable) {
-        android.widget.Toast.makeText(ctx, "改机型失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
-// 游戏清理（清缓存）
+// 游戏清理：先选应用再清理该应用缓存
 internal fun gameCleanCache(ctx: android.content.Context) {
     try {
-        val cmd = "n=0; for p in /data/data/*/cache; do " +
-                "if [ -d \"\$p\" ]; then rm -rf \"\$p\"/* 2>/dev/null; n=\$((n+1)); fi; done; echo \"清理了 \$n 个缓存目录\""
-        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
-        val out = pr.inputStream.bufferedReader().readText()
-        pr.waitFor()
-        android.widget.Toast.makeText(ctx, out.take(80), android.widget.Toast.LENGTH_LONG).show()
+        // 取已安装应用
+        val pm = ctx.packageManager
+        val apps = pm.getInstalledApplications(0)
+            .filter { it.packageName != "android" && !it.packageName.startsWith("com.android.systemui") }
+            .sortedBy { it.packageName }
+        val names = apps.map { it.packageName }.toTypedArray()
+        val builder = android.app.AlertDialog.Builder(ctx)
+        builder.setTitle("选择要清理的应用缓存")
+        builder.setItems(names) { _, which ->
+            val pkg = names[which]
+            try {
+                val cmd = "rm -rf '/data/data/" + pkg + "/cache'/* 2>/dev/null; " +
+                        "rm -rf '/data/data/" + pkg + "/code_cache'/* 2>/dev/null; " +
+                        "echo \"已清理 " + pkg + " 的缓存\""
+                val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+                val out = pr.inputStream.bufferedReader().readText()
+                pr.waitFor()
+                android.widget.Toast.makeText(ctx, out.take(80), android.widget.Toast.LENGTH_LONG).show()
+            } catch (t: Throwable) {
+                android.widget.Toast.makeText(ctx, "清理失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        builder.setNegativeButton("取消", null)
+        builder.show()
     } catch (t: Throwable) {
-        android.widget.Toast.makeText(ctx, "清理失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -5305,7 +5341,7 @@ class FpsOverlayService : Service() {
             val tv = TextView(this)
             tv.text = "--"
             tv.setTextColor(android.graphics.Color.WHITE)
-            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
             // 黄色圆角背景（Scene 同款）
             val bgDrawable = android.graphics.drawable.GradientDrawable()
