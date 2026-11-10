@@ -5404,15 +5404,19 @@ class FpsOverlayService : Service() {
             try { refreshActivePkg() } catch (t: Throwable) {}
         }
         var best = 0.0
-        var matched = 0.0
+        val matchedValues = mutableListOf<Double>()
         for (l in text.lines()) {
             val cols = l.split(Regex("[\\t ]+")).filter { it.isNotBlank() }
             if (cols.size >= 4) {
                 val v = cols[3].toDoubleOrNull() ?: continue
                 if (v > best) best = v
-                if (activePkg.isNotEmpty() && l.contains(activePkg) && v > matched) matched = v
+                if (activePkg.isNotEmpty() && l.contains(activePkg)) matchedValues.add(v)
             }
         }
+        // 严格取前台游戏那一行的值（如果有多个，取中位数）
+        val matched = if (matchedValues.isNotEmpty()) {
+            matchedValues.sorted()[matchedValues.size / 2]
+        } else 0.0
         android.util.Log.e("FPSD", "fpsgo pkg=" + activePkg + " matched=" + matched + " best=" + best)
         return when {
             matched > 0 -> matched
