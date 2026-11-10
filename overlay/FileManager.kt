@@ -4670,6 +4670,8 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("resetprop net.hostname '").append(hostname).append("'\n")
                 sb.append("resetprop ro.serialno '").append(serial).append("'\n")
                 sb.append("XYEOF2\nchmod 755 /data/adb/service.d/xy_ids.sh; ")
+                // 杀进程让标识重新初始化（同小轩工具箱）
+                sb.append("am force-stop ").append(pkg).append(" 2>/dev/null; ")
                 sb.append("echo \"清理完成: 删除 \$F 个标识文件, 失败 \$N 个 | AndroidID=").append(androidId).append("\"")
                 val cmd = sb.toString()
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
