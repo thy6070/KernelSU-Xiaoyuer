@@ -437,7 +437,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = leftPath,
                 dirScroll = dirScroll,
-                onNavigate = { leftPath = it },
+                onNavigate = { np ->
+                    // 从压缩包临时目录返回 → 回到压缩包原目录
+                    if (leftPath == "/data/local/tmp/yx_arch" && np.startsWith("/data/local/tmp")) {
+                        leftPath = archiveReturnPath ?: np
+                    } else {
+                        leftPath = np
+                    }
+                },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
                         runCatching {
