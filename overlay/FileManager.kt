@@ -1020,33 +1020,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { uiPicker = null }
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (pickTitle == "选择机型") {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    restoreDeviceModel(appCtx)
-                                    uiPicker = null
-                                }
-                                .padding(vertical = 14.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(text = "恢复", fontSize = 15.sp, color = Color(0xFFFF3B30))
-                        }
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { uiPicker = null }
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "取消", fontSize = 15.sp, color = Color(0xFF0A84FF))
-                    }
+                    Text(text = "取消", fontSize = 15.sp, color = Color(0xFF0A84FF))
                 }
             }
         }
@@ -2077,7 +2058,7 @@ private fun ProMaxIsland(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "游戏清理\n清理游戏缓存与临时文件，释放空间",
+                                        text = "游戏清理\n清理游戏标记并修改id",
                                         fontSize = 11.sp,
                                         color = Color.White,
                                         modifier = Modifier.weight(1f)
@@ -4192,7 +4173,7 @@ private fun FsRow(
             .clip(RoundedCornerShape(14.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .background(
-                if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x3300BCD4)
+                if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
                 else Color.Transparent
             )
             .then(
@@ -4422,8 +4403,12 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
         "Samsung S25 Ultra", "ROG Phone 9 Pro"
     )
     uiPickerTitle = "选择机型"
-    uiPicker = models
+    uiPicker = listOf("恢复原样") + models
     uiPickerAction = { m ->
+        if (m == "恢复原样") {
+            restoreDeviceModel(ctx)
+            return@changeDeviceModel
+        }
         try {
             val sp = ctx.getSharedPreferences("settings", 0)
             // 首次保存原值
@@ -4486,7 +4471,7 @@ internal fun gameCleanCache(ctx: android.content.Context) {
         val apps = pm.getInstalledApplications(0)
             .filter { it.packageName != "android" && !it.packageName.startsWith("com.android.systemui") }
             .sortedBy { it.packageName }
-        uiPickerTitle = "选择要清理缓存的应用"
+        uiPickerTitle = "选择要重置的应用"
         uiPicker = apps.map { it.packageName }
         uiPickerAction = { pkg ->
             try {
