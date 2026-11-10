@@ -5668,7 +5668,7 @@ class FpsOverlayService : Service() {
             if (fps != null && fps > 0) {
                 fpsView?.post {
                     try {
-                        fpsView?.text = String.format("%.0f", fps)
+                        fpsView?.text = String.format("%.1f", fps)
                     } catch (t: Throwable) {}
                 }
             }
