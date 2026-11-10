@@ -5228,12 +5228,12 @@ class FpsOverlayService : Service() {
         try {
             val tv = TextView(this)
             tv.text = "-- FPS"
-            tv.setTextColor(android.graphics.Color.BLACK)
+            tv.setTextColor(android.graphics.Color.WHITE)
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
             // 黄色圆角背景（Scene 同款）
             val bgDrawable = android.graphics.drawable.GradientDrawable()
-            bgDrawable.setColor(android.graphics.Color.parseColor("#FFD700"))
+            bgDrawable.setColor(android.graphics.Color.parseColor("#CCFFD700"))
             bgDrawable.cornerRadius = 24f
             tv.background = bgDrawable
             tv.setPadding(20, 6, 20, 6)
