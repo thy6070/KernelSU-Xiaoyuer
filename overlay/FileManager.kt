@@ -5912,10 +5912,14 @@ class FpsOverlayService : Service() {
         } else 0.0
         android.util.Log.e("FPSD", "fpsgo pkg=" + activePkg + " matched=" + matched + " best=" + best)
         // 排除自己（文件管理器静止时只有 20 帧，会误导）
-        if (activePkg == "com.tencent.THY") return null
-        // 严格只用前台包名的值；匹配不到就返回 null（保持上一个显示值，不乱跳）
+        if (activePkg == "com.tencent.THY") {
+            // 自己在前台时保持上个值（不显示静止的 20）
+            return null
+        }
+        // 优先前台匹配值；匹配不到回退到最大值（避免退出 App 后卡住）
         return when {
             matched > 1.0 -> matched
+            best > 1.0 -> best
             else -> null
         }
     }
