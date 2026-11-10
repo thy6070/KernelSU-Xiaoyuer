@@ -1,5 +1,6 @@
 package me.weishu.kernelsu.ui.screen
 
+import android.os.Build
 import android.graphics.Typeface
 import android.view.MotionEvent
 import android.util.TypedValue
@@ -5206,7 +5207,7 @@ class FpsOverlayService : Service() {
     // 前台通知（Android 8+ 必须）
     private fun startForegroundCompat() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.android.os.Build.VERSION_CODES.O) {
                 val ch = NotificationChannel(
                     "fps_overlay", "帧率悬浮窗", NotificationManager.IMPORTANCE_MIN
                 )
@@ -5226,13 +5227,13 @@ class FpsOverlayService : Service() {
         try {
             val tv = TextView(this)
             tv.text = "-- FPS"
-            tv.setTextColor(Color.WHITE)
+            tv.setTextColor(android.graphics.Color.WHITE)
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
-            tv.setBackgroundColor(Color.parseColor("#AA000000"))
+            tv.setBackgroundColor(android.graphics.Color.parseColor("#AA000000"))
             tv.setPadding(16, 6, 16, 6)
 
-            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val type = if (android.os.Build.VERSION.SDK_INT >= android.os.android.os.Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
                 @Suppress("DEPRECATION")
