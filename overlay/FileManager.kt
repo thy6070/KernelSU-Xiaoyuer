@@ -5178,6 +5178,7 @@ class FpsOverlayService : Service() {
     private lateinit var windowManager: WindowManager
     private var fpsView: TextView? = null
     private var executor: ScheduledExecutorService? = null
+    private var activePkg: String = ""
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -5305,8 +5306,11 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {}
     }
 
-    // 读 daemon 写到文件里的帧数据（实时，无需每次 root 调用）
+    // 读帧率：优先 sysfs 快通道（Scene 同款），其次 dumpsys
     private fun readFps(): Double? {
+        // 1) sysfs measured_fps 快通道
+        sysfsFps()?.let { if (it > 1.0) return it }
+        // 2) dumpsys 主路径
         return try {
             val f = File("/data/local/tmp/fps_live")
             if (!f.exists() || f.length() == 0L) return null
@@ -5314,6 +5318,36 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {
             null
         }
+    }
+
+    // sysfs 快通道（天玑 fpsgo / 高通 measured_fps）
+    private fun sysfsFps(): Double? {
+        val nodes = listOf(
+            "/sys/class/drm/sde-crtc-0/measured_fps",
+            "/sys/class/graphics/fb0/measured_fps",
+            "/sys/kernel/fpsgo/fstb/fpsgo_status",
+            "/sys/devices/platform/soc/ae00000.qcom,mdss_mdp/drm/card0/card0-sde-crtc-0/measured_fps"
+        )
+        for (n in nodes) {
+            try {
+                val pr = Runtime.getRuntime().exec(
+                    arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c", "cat '$n' 2>/dev/null")
+                )
+                val out = pr.inputStream.bufferedReader().readText().trim()
+                pr.waitFor()
+                if (out.isEmpty()) continue
+                if (n.contains("fpsgo_status")) {
+                    // 按包名匹配 currentFPS 列
+                    val pkgLine = out.lines().firstOrNull { it.contains(activePkg) } ?: continue
+                    val cols = pkgLine.split(Regex("\\s+"))
+                    val v = cols.lastOrNull()?.toDoubleOrNull() ?: continue
+                    return v
+                } else {
+                    return out.toDoubleOrNull()
+                }
+            } catch (t: Throwable) {}
+        }
+        return null
     }
 
     // 找当前层的名称（简化：从 dumpsys SurfaceFlinger 取第一个可见层）
