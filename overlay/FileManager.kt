@@ -1268,13 +1268,10 @@ private fun ProMaxIsland(
     var expanded by remember { mutableStateOf(false) }
     var bgModePick by remember { mutableStateOf<String?>(null) }
     var bgModeIsImg by remember { mutableStateOf(false) }
+    val bgCtx = androidx.compose.ui.platform.LocalContext.current
     var bgBlurOn by remember {
         mutableStateOf(
-            try {
-                androidx.compose.ui.platform.LocalContext.current
-                    .getSharedPreferences("settings", 0).getBoolean("bg_blur", true)
-            }
-            catch (t: Throwable) { true }
+            bgCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true)
         )
     }
     var showWave by remember { mutableStateOf(false) }
