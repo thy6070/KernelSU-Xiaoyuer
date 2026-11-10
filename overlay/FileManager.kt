@@ -5190,7 +5190,7 @@ class FpsOverlayService : Service() {
         addOverlay()
         startDaemon()
         executor = Executors.newSingleThreadScheduledExecutor()
-        executor?.scheduleAtFixedRate({ tickFps() }, 0, 100, TimeUnit.MILLISECONDS)
+        executor?.scheduleAtFixedRate({ tickFps() }, 0, 50, TimeUnit.MILLISECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -5296,7 +5296,7 @@ class FpsOverlayService : Service() {
                 "cat /sys/class/graphics/fb0/measured_fps 2>/dev/null; " +
                 "cat /sys/devices/platform/soc/ae00000.qcom,mdss_mdp/drm/card0/card0-sde-crtc-0/measured_fps 2>/dev/null; " +
                 "} > /data/local/tmp/fps_live.tmp; " +
-                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; chmod 644 /data/local/tmp/fps_live; sleep 0.1; done"
+                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; chmod 644 /data/local/tmp/fps_live; sleep 0.05; done"
             Runtime.getRuntime().exec(arrayOf(
                 suBin(), "--mount-master", "-c", cmd
             ))
