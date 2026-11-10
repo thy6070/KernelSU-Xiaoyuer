@@ -5897,7 +5897,13 @@ class FpsOverlayService : Service() {
             if (cols.size >= 4) {
                 val v = cols[3].toDoubleOrNull() ?: continue
                 if (v > best) best = v
-                if (activePkg.isNotEmpty() && l.contains(activePkg)) matchedValues.add(v)
+                // fpsgo 的进程名会截断（如 essmobile.shell），用后缀模糊匹配
+                val nameCol = cols.getOrNull(2) ?: ""
+                val isMatch = activePkg.isNotEmpty() && (
+                        l.contains(activePkg) ||
+                        nameCol.isNotEmpty() && (activePkg.endsWith(nameCol) || nameCol.endsWith(activePkg))
+                        )
+                if (isMatch) matchedValues.add(v)
             }
         }
         // 严格取前台游戏那一行的值（如果有多个，取中位数）
@@ -5905,6 +5911,8 @@ class FpsOverlayService : Service() {
             matchedValues.sorted()[matchedValues.size / 2]
         } else 0.0
         android.util.Log.e("FPSD", "fpsgo pkg=" + activePkg + " matched=" + matched + " best=" + best)
+        // 排除自己（文件管理器静止时只有 20 帧，会误导）
+        if (activePkg == "com.tencent.THY") return null
         // 严格只用前台包名的值；匹配不到就返回 null（保持上一个显示值，不乱跳）
         return when {
             matched > 1.0 -> matched
