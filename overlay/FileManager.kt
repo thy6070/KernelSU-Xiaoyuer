@@ -5317,11 +5317,10 @@ class FpsOverlayService : Service() {
     // 读帧率：fpsgo → gfxinfo → dumpsys
     private fun readFps(): Double? {
         android.util.Log.e("FPSD", "readFps start")
-        // 0) 刷新前台包名
-        refreshActivePkg()
-        // 1) sysfs fpsgo/measured_fps
+        // 1) 先直接读 fpsgo（免 root、零开销）
         sysfsFps()?.let { if (it > 1.0) return it }
-        // 2) gfxinfo（应用运行时的帧统计）
+        // 2) 兜底：刷新前台包名后 gfxinfo
+        try { refreshActivePkg() } catch (t: Throwable) {}
         gfxinfoFps()?.let { if (it > 1.0) return it }
         // 3) dumpsys（Android 12 以下有效）
         return try {
