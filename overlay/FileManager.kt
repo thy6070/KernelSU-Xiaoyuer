@@ -4465,6 +4465,7 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
         "【ROG】Phone 9 Pro"
     )
     uiPickerTitle = "选择机型"
+    uiPickerIcons = null
     uiPicker = listOf("恢复原样") + models
     uiPickerAction = pick@{ sel ->
         if (sel == "恢复原样") {
@@ -4564,6 +4565,8 @@ internal fun restoreDeviceModel(ctx: android.content.Context) {
 
 // 游戏清理：先选应用再清理该应用缓存
 internal fun gameCleanCache(ctx: android.content.Context) {
+    // 后台线程加载应用列表，避免卡 UI
+    Thread {
     try {
         val pm = ctx.packageManager
         val apps = pm.getInstalledApplications(0)
@@ -4695,6 +4698,7 @@ internal fun gameCleanCache(ctx: android.content.Context) {
     } catch (t: Throwable) {
         android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
+    }.start()
 }
 
 // 设置背景（图片/视频），mode = default / landscape
