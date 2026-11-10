@@ -1,5 +1,20 @@
 package me.weishu.kernelsu.ui.screen
 
+import android.graphics.Typeface
+import android.view.MotionEvent
+import android.util.TypedValue
+import android.view.Gravity
+import android.graphics.PixelFormat
+import android.app.NotificationManager
+import android.app.NotificationChannel
+import android.app.Notification
+import android.os.IBinder
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import android.widget.TextView
+import android.view.WindowManager
+import android.app.Service
 import android.app.Activity
 import android.content.Context
 import androidx.compose.animation.core.Spring
