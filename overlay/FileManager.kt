@@ -209,6 +209,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var leftPath by remember { mutableStateOf("/storage/emulated/0") }
     var rightPath by remember { mutableStateOf("/data") }
 
+    // 尝试提高刷新率（默认可能锁 60Hz）
+    val refreshCtx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        try {
+            val act = refreshCtx as? android.app.Activity
+            act?.window?.let { w ->
+                val lp = w.attributes
+                lp.preferredRefreshRate = 120f
+                w.attributes = lp
+            }
+        } catch (t: Throwable) {}
+    }
+
     // 处理外部应用传来的文件/目录（ACTION_VIEW）
     val navCtx0 = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(Unit) {
@@ -5180,6 +5193,7 @@ class FpsOverlayService : Service() {
     private var executor: ScheduledExecutorService? = null
     private var activePkg: String = ""
     private var lastPkgRefresh: Long = 0L
+    private var smoothFps: Double = 0.0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
