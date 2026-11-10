@@ -1978,6 +1978,36 @@ private fun ProMaxIsland(
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .clickable { changeDeviceModel(navCtx) }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "改机型\n伪装机型给部分游戏/应用识别",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(text = "执行", fontSize = 12.sp, color = Color(0xFF0A84FF))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .clickable { gameCleanCache(navCtx) }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "游戏清理\n清理游戏缓存与临时文件，释放空间",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(text = "执行", fontSize = 12.sp, color = Color(0xFF0A84FF))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
                                             selinuxHide = !selinuxHide
                                             setFeature("selinux_hide", selinuxHide)
@@ -4302,6 +4332,37 @@ private val RT_DRIVER_MIRRORS = listOf(
 
 // 把 content:// URI 解析成真实文件路径（MediaStore / Downloads）
 // 从 content:// URI 查显示文件名
+// 改机型（resetprop 伪装）
+internal fun changeDeviceModel(ctx: android.content.Context) {
+    try {
+        val model = android.os.Build.MODEL.replace(" ", "_")
+        val cmd = "resetprop ro.product.model '" + model + "' 2>&1; " +
+                "resetprop ro.product.brand 'Xiaoyuer' 2>&1; " +
+                "resetprop ro.product.manufacturer 'Xiaoyuer' 2>&1; " +
+                "echo done"
+        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+        val out = pr.inputStream.bufferedReader().readText()
+        pr.waitFor()
+        android.widget.Toast.makeText(ctx, "改机型完成: " + out.take(60), android.widget.Toast.LENGTH_LONG).show()
+    } catch (t: Throwable) {
+        android.widget.Toast.makeText(ctx, "改机型失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
+// 游戏清理（清缓存）
+internal fun gameCleanCache(ctx: android.content.Context) {
+    try {
+        val cmd = "n=0; for p in /data/data/*/cache; do " +
+                "if [ -d \"$p\" ]; then rm -rf \"$p\"/* 2>/dev/null; n=$((n+1)); fi; done; echo \"清理了 $n 个缓存目录\""
+        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+        val out = pr.inputStream.bufferedReader().readText()
+        pr.waitFor()
+        android.widget.Toast.makeText(ctx, out.take(80), android.widget.Toast.LENGTH_LONG).show()
+    } catch (t: Throwable) {
+        android.widget.Toast.makeText(ctx, "清理失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
 // 设置背景（图片/视频），mode = default / landscape
 internal fun setBgBackground(ctx: android.content.Context, src: String, isImg: Boolean, mode: String) {
     try {
