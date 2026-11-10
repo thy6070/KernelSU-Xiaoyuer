@@ -4471,19 +4471,41 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                 origFp.replaceFirst(Regex("^(\\w+)/"), brand.lowercase() + "/")
                     .replaceFirst(Regex("/[^/]+:"), "/" + m.replace(" ", "_") + ":")
             } else ""
-            // 持久化脚本（开机自动执行）
+            // 按源码优化：7组基础 + 5前缀×4 全量写入
+            val code = m.replace(" ", "_").lowercase()
+            val mfr = brand
+            val baseKeys = listOf("brand", "manufacturer", "model", "device", "name", "marketname")
+            val baseVals = listOf(brand, mfr, m, code, code, m)
+            val propScript = StringBuilder()
+            for (i in baseKeys.indices) {
+                propScript.append("resetprop ro.product.").append(baseKeys[i]).append(" '").append(baseVals[i]).append("' 2>/dev/null\n")
+            }
+            propScript.append("resetprop ro.build.product '").append(code).append("' 2>/dev/null\n")
+            // 前缀扩展 5×4
+            for (pre in listOf("ro.product.", "ro.product.system.", "ro.product.vendor.", "ro.product.odm.", "ro.product.product.")) {
+                for (k in listOf("brand", "manufacturer", "model", "device")) {
+                    val v = when (k) {
+                        "brand" -> brand
+                        "manufacturer" -> mfr
+                        "model" -> m
+                        else -> code
+                    }
+                    propScript.append("resetprop ").append(pre).append(k).append(" '").append(v).append("' 2>/dev/null\n")
+                }
+            }
+            // 指纹：按源码重新生成 brand/code/code:release/id/incremental:user/release-keys
+            propScript.append("REL=\$(getprop ro.build.version.release); ")
+            propScript.append("BID=\$(getprop ro.build.id); ")
+            propScript.append("INC=\$(getprop ro.build.version.incremental); ")
+            propScript.append("NEWFP='").append(brand.lowercase()).append("/").append(code).append("/").append(code)
+                .append(":'\$REL'/\$BID/\$INC:user/release-keys'; ")
+            propScript.append("resetprop ro.build.fingerprint \"\$NEWFP\" 2>/dev/null\n")
+            // 持久化脚本
             val persist = "mkdir -p /data/adb/service.d; " +
-                    "cat > /data/adb/service.d/xy_spoof.sh <<'XYEOF'\n" +
-                    "#!/system/bin/sh\n" +
-                    "resetprop ro.product.model '" + m + "'\n" +
-                    "resetprop ro.product.brand '" + brand + "'\n" +
-                    (if (newFp.isNotEmpty()) "resetprop ro.build.fingerprint '" + newFp + "'\n" else "") +
-                    "XYEOF\n" +
-                    "chmod 755 /data/adb/service.d/xy_spoof.sh; "
-            val cmd = "resetprop ro.product.model '" + m + "' 2>&1; " +
-                    "resetprop ro.product.brand '" + brand + "' 2>&1; " +
-                    (if (newFp.isNotEmpty()) "resetprop ro.build.fingerprint '" + newFp + "' 2>&1; " else "") +
-                    persist
+                    "cat > /data/adb/service.d/xy_spoof.sh <<'XYEOF'\n#!/system/bin/sh\n" +
+                    propScript.toString() +
+                    "XYEOF\nchmod 755 /data/adb/service.d/xy_spoof.sh; "
+            val cmd = propScript.toString() + persist
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
             pr.waitFor()
             writeOpLog(ctx, "改机型 → " + m + " | fingerprint=" + newFp)
@@ -4578,11 +4600,17 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("chmod 644 /data/local/tmp/xy_orig_ids.txt; ")
                 // 全随机
                 sb.append("settings put secure android_id ").append(androidId).append(" 2>/dev/null; ")
+                sb.append("settings put secure advertising_id ").append(hex(16)).append(" 2>/dev/null; ")
+                sb.append("settings put secure device_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
+                sb.append("settings put secure bluetooth_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
                 sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null; ")
                 // 持久化（开机保持）
                 sb.append("cat > /data/adb/service.d/xy_ids.sh <<'XYEOF2'\n#!/system/bin/sh\n")
                 sb.append("settings put secure android_id ").append(androidId).append("\n")
+                sb.append("settings put secure advertising_id ").append(hex(16)).append("\n")
+                sb.append("settings put secure device_name 'Xy-").append(hex(6)).append("'\n")
+                sb.append("settings put secure bluetooth_name 'Xy-").append(hex(6)).append("'\n")
                 sb.append("resetprop net.hostname '").append(hostname).append("'\n")
                 sb.append("resetprop ro.serialno '").append(serial).append("'\n")
                 sb.append("XYEOF2\nchmod 755 /data/adb/service.d/xy_ids.sh; ")
