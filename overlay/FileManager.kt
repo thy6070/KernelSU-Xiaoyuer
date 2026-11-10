@@ -228,6 +228,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         try {
             val act = navCtx0 as? android.app.Activity
             val uri = act?.intent?.data
+            android.util.Log.e("FPSD", "intent uri=" + uri + " act=" + (act != null))
             if (uri != null) {
                 // 不用 MediaStore（可能返回同名错误文件），直接按来源 App 目录搜
                 var fp = if (uri.scheme == "file") uri.path else null
