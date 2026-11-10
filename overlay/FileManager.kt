@@ -5288,12 +5288,11 @@ class FpsOverlayService : Service() {
     private fun startDaemon() {
         try {
             val layer = findActiveLayer() ?: return
-            // 和 Scene 一样：daemon 常驻，持续采集写文件（fpsgo + dumpsys 双通道）
+            // 一次 su 启动常驻 daemon：持续读 fpsgo 写文件（App 只读文件，不再调 su）
             val cmd = "while true; do " +
-                "{ cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
-                "dumpsys SurfaceFlinger --latency \"$layer\" 2>/dev/null; } " +
+                "cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null " +
                 "> /data/local/tmp/fps_live.tmp; " +
-                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; sleep 0.2; done"
+                "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; chmod 644 /data/local/tmp/fps_live; sleep 0.2; done"
             Runtime.getRuntime().exec(arrayOf(
                 "/data/adb/ksu/bin/su", "--mount-master", "-c", cmd
             ))
@@ -5367,7 +5366,7 @@ class FpsOverlayService : Service() {
         }
     }
 
-    // sysfs 快通道（天玑 fpsgo / 高通 measured_fps）
+    // 帧率通道（读 daemon 写的文件，不调 su）
     private fun sysfsFps(): Double? {
         android.util.Log.e("FPSD", "sysfsFps enter")
         val nodes = listOf(
@@ -5378,13 +5377,10 @@ class FpsOverlayService : Service() {
         )
         for (n in nodes) {
             try {
-                // SELinux 阻止 App 直接读 sysfs，必须用 su
-                val pr = Runtime.getRuntime().exec(
-                    arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c", "cat '$n' 2>/dev/null")
-                )
-                val out2 = pr.inputStream.bufferedReader().readText().trim()
-                pr.waitFor()
-                android.util.Log.e("FPSD", "node=" + n + " len=" + out2.length)
+                // 只读 daemon 写的文件（不调 su，避免卡住）
+                val live = File("/data/local/tmp/fps_live")
+                val out2 = try { live.readText().trim() } catch (t: Throwable) { "" }
+                android.util.Log.e("FPSD", "live len=" + out2.length)
                 if (out2.isEmpty()) continue
                 if (n.contains("fpsgo_status")) {
                     // 和脚本验证过的逻辑一致：每行第 4 列是 currentFPS，取所有行最大值
