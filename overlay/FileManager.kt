@@ -2038,7 +2038,7 @@ private fun ProMaxIsland(
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                        .clickable { showModelPicker = true }
+                                        .clickable { changeDeviceModel(navCtx) }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -2053,7 +2053,7 @@ private fun ProMaxIsland(
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                        .clickable { showCleanPicker = true }
+                                        .clickable { gameCleanCache(navCtx) }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
