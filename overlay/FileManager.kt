@@ -5598,13 +5598,23 @@ class FpsOverlayService : Service() {
     // 刷新当前前台包名
     private fun refreshActivePkg() {
         try {
-            val pr = Runtime.getRuntime().exec(
-                arrayOf(suBin(), "--mount-master", "-c",
-                    "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity")
-            )
-            val out = pr.inputStream.bufferedReader().readText()
-            pr.waitFor()
-            val m = Regex("([a-zA-Z0-9_.]+)/").find(out)
+            // 用 ProcessBuilder + 超时，避免 su 卡死阻塞采集线程
+            val pb = ProcessBuilder(suBin(), "--mount-master", "-c",
+                "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity")
+            pb.redirectErrorStream(true)
+            val pr = pb.start()
+            val out = StringBuilder()
+            val th = Thread {
+                try { pr.inputStream.bufferedReader().use { out.append(it.readText()) } } catch (t: Throwable) {}
+            }
+            th.isDaemon = true
+            th.start()
+            val ok = pr.waitFor(3, TimeUnit.SECONDS)
+            if (!ok) {
+                try { pr.destroyForcibly() } catch (t: Throwable) {}
+                return
+            }
+            val m = Regex("([a-zA-Z0-9_.]+)/").find(out.toString())
             if (m != null) activePkg = m.groupValues[1]
         } catch (t: Throwable) {}
     }
