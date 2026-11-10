@@ -5339,6 +5339,7 @@ class FpsOverlayService : Service() {
                 )
                 val out = pr.inputStream.bufferedReader().readText().trim()
                 pr.waitFor()
+                android.util.Log.e("FPSD", "node=" + n + " len=" + out.length)
                 if (out.isEmpty()) continue
                 if (n.contains("fpsgo_status")) {
                     // 表头: tid bufID name currentFPS targetFPS ...
