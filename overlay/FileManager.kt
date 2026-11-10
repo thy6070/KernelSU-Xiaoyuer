@@ -4353,7 +4353,7 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
 internal fun gameCleanCache(ctx: android.content.Context) {
     try {
         val cmd = "n=0; for p in /data/data/*/cache; do " +
-                "if [ -d \"$p\" ]; then rm -rf \"$p\"/* 2>/dev/null; n=$((n+1)); fi; done; echo \"清理了 $n 个缓存目录\""
+                "if [ -d \"\$p\" ]; then rm -rf \"\$p\"/* 2>/dev/null; n=\$((n+1)); fi; done; echo \"清理了 \$n 个缓存目录\""
         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
         val out = pr.inputStream.bufferedReader().readText()
         pr.waitFor()
