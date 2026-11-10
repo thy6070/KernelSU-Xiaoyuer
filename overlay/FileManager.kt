@@ -5316,6 +5316,7 @@ class FpsOverlayService : Service() {
 
     // 读帧率：fpsgo → gfxinfo → dumpsys
     private fun readFps(): Double? {
+        android.util.Log.e("FPSD", "readFps start")
         // 0) 刷新前台包名
         refreshActivePkg()
         // 1) sysfs fpsgo/measured_fps
@@ -5377,11 +5378,14 @@ class FpsOverlayService : Service() {
         )
         for (n in nodes) {
             try {
-                val pr = Runtime.getRuntime().exec(
-                    arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c", "cat '$n' 2>/dev/null")
-                )
-                val out = pr.inputStream.bufferedReader().readText().trim()
+                // 用 su 把文件复制到 App 私有目录再读（避免直接读 /sys 权限问题）
+                val tmp = File(cacheDir, "fps_node.tmp")
+                val pr = Runtime.getRuntime().exec(arrayOf(
+                    "/data/adb/ksu/bin/su", "--mount-master", "-c",
+                    "cat '$n' 2>/dev/null > '" + tmp.absolutePath + "' && chmod 644 '" + tmp.absolutePath + "'"
+                ))
                 pr.waitFor()
+                val out = try { tmp.readText().trim() } catch (t: Throwable) { "" }
                 android.util.Log.e("FPSD", "node=" + n + " len=" + out.length)
                 if (out.isEmpty()) continue
                 if (n.contains("fpsgo_status")) {
