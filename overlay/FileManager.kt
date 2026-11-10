@@ -338,7 +338,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             val raw = android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath)
                             if (raw != null) {
                                 val mtx = android.graphics.Matrix()
-                                mtx.postRotate(90f)
+                                mtx.postRotate(-90f)
                                 val rotated = android.graphics.Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, mtx, true)
                                 iv.setImageBitmap(rotated)
                             } else {
@@ -420,7 +420,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             },
             modifier = Modifier.fillMaxSize()
-                .blur(20.dp)
+                .blur(
+                    if (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
+                        catch (t: Throwable) { true }) 30.dp else 0.dp
+                )
         )
         Box(
             modifier = Modifier
@@ -1265,6 +1268,15 @@ private fun ProMaxIsland(
     var expanded by remember { mutableStateOf(false) }
     var bgModePick by remember { mutableStateOf<String?>(null) }
     var bgModeIsImg by remember { mutableStateOf(false) }
+    var bgBlurOn by remember {
+        mutableStateOf(
+            try {
+                androidx.compose.ui.platform.LocalContext.current
+                    .getSharedPreferences("settings", 0).getBoolean("bg_blur", true)
+            }
+            catch (t: Throwable) { true }
+        )
+    }
     var showWave by remember { mutableStateOf(false) }
     var navMode by remember { mutableStateOf(false) }
     var navTarget by remember { mutableStateOf<String?>(null) }
@@ -2174,25 +2186,46 @@ private fun ProMaxIsland(
                                     }
                                 }
                                 13 -> {
-                                    Row(
+                                    Column(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("默认", Color(0xFF3A3A3C)) {
-                                                setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "default")
-                                                bgModePick = null
-                                                onClearLongPress()
-                                                closeIsland()
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                IslandActionButton("默认", Color(0xFF3A3A3C)) {
+                                                    setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "default")
+                                                    bgModePick = null
+                                                    onClearLongPress()
+                                                    closeIsland()
+                                                }
+                                            }
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                IslandActionButton("横屏", Color(0xFF0A84FF)) {
+                                                    setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "landscape")
+                                                    bgModePick = null
+                                                    onClearLongPress()
+                                                    closeIsland()
+                                                }
                                             }
                                         }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("横屏", Color(0xFF0A84FF)) {
-                                                setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "landscape")
-                                                bgModePick = null
-                                                onClearLongPress()
-                                                closeIsland()
-                                            }
+                                        // 背景模糊开关（默认开）
+                                        IslandActionButton(
+                                            if (bgBlurOn) "背景模糊  开" else "背景模糊  关",
+                                            Color(0xFF3A3A3C)
+                                        ) {
+                                            bgBlurOn = !bgBlurOn
+                                            try {
+                                                navCtx.getSharedPreferences("settings", 0).edit()
+                                                    .putBoolean("bg_blur", bgBlurOn).apply()
+                                            } catch (t: Throwable) {}
+                                            android.widget.Toast.makeText(
+                                                navCtx,
+                                                if (bgBlurOn) "背景模糊：已开启" else "背景模糊：已关闭",
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
                                         }
                                     }
                                 }
