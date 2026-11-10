@@ -264,6 +264,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var panel by remember { mutableStateOf(false) }
     var showTerminal by remember { mutableStateOf(false) }
     var previewPath by remember { mutableStateOf<String?>(null) }
+    var archiveReturnPath by remember { mutableStateOf<String?>(null) }
     var termFull by remember { mutableStateOf(false) }
     var termInput by remember { mutableStateOf("") }
     var termText by remember { mutableStateOf("") }
