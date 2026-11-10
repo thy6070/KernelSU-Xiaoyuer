@@ -5227,7 +5227,7 @@ class FpsOverlayService : Service() {
     private fun addOverlay() {
         try {
             val tv = TextView(this)
-            tv.text = "-- 帧"
+            tv.text = "-- ~"
             tv.setTextColor(android.graphics.Color.WHITE)
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
@@ -5305,7 +5305,7 @@ class FpsOverlayService : Service() {
             if (fps != null && fps > 0) {
                 fpsView?.post {
                     try {
-                        fpsView?.text = String.format("%.0f 帧", fps)
+                        fpsView?.text = String.format("%.0f~", fps)
                     } catch (t: Throwable) {}
                 }
             }
