@@ -1020,14 +1020,33 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { uiPicker = null }
-                        .padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Text(text = "取消", fontSize = 15.sp, color = Color(0xFF0A84FF))
+                    if (pickTitle == "选择机型") {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    restoreDeviceModel(navCtx)
+                                    uiPicker = null
+                                }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = "恢复", fontSize = 15.sp, color = Color(0xFFFF3B30))
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { uiPicker = null }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "取消", fontSize = 15.sp, color = Color(0xFF0A84FF))
+                    }
                 }
             }
         }
@@ -4406,14 +4425,55 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
     uiPicker = models
     uiPickerAction = { m ->
         try {
+            val sp = ctx.getSharedPreferences("settings", 0)
+            // 首次保存原值
+            if (!sp.contains("orig_model")) {
+                val pr0 = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                    "getprop ro.product.model; getprop ro.product.brand; getprop ro.build.fingerprint"))
+                val lines = pr0.inputStream.bufferedReader().readText().lines()
+                pr0.waitFor()
+                if (lines.size >= 3) {
+                    sp.edit()
+                        .putString("orig_model", lines[0].trim())
+                        .putString("orig_brand", lines[1].trim())
+                        .putString("orig_fingerprint", lines[2].trim())
+                        .apply()
+                }
+            }
+            val brand = m.substringBefore(" ")
+            val origFp = sp.getString("orig_fingerprint", "") ?: ""
+            // 指纹：替换 brand/model
+            val newFp = if (origFp.isNotEmpty()) {
+                origFp.replaceFirst(Regex("^(\\w+)/"), brand.lowercase() + "/")
+                    .replaceFirst(Regex("/[^/]+:"), "/" + m.replace(" ", "_") + ":")
+            } else ""
             val cmd = "resetprop ro.product.model '" + m + "' 2>&1; " +
-                    "resetprop ro.product.brand '" + m.substringBefore(" ") + "' 2>&1"
+                    "resetprop ro.product.brand '" + brand + "' 2>&1; " +
+                    (if (newFp.isNotEmpty()) "resetprop ro.build.fingerprint '" + newFp + "' 2>&1; " else "")
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
             pr.waitFor()
             android.widget.Toast.makeText(ctx, "已伪装: " + m + "（重启生效）", android.widget.Toast.LENGTH_LONG).show()
         } catch (t: Throwable) {
             android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+}
+
+// 恢复原机型/指纹
+internal fun restoreDeviceModel(ctx: android.content.Context) {
+    try {
+        val sp = ctx.getSharedPreferences("settings", 0)
+        val om = sp.getString("orig_model", "") ?: ""
+        val ob = sp.getString("orig_brand", "") ?: ""
+        val of = sp.getString("orig_fingerprint", "") ?: ""
+        val cmd = "resetprop ro.product.model '" + om + "' 2>&1; " +
+                "resetprop ro.product.brand '" + ob + "' 2>&1; " +
+                "resetprop ro.build.fingerprint '" + of + "' 2>&1"
+        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+        pr.waitFor()
+        android.widget.Toast.makeText(ctx, "已恢复原机型（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+    } catch (t: Throwable) {
+        android.widget.Toast.makeText(ctx, "恢复失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
