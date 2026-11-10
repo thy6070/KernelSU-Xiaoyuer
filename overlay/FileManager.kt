@@ -421,8 +421,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             },
             modifier = Modifier.fillMaxSize()
                 .blur(
-                    if (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
-                        catch (t: Throwable) { true }) 30.dp else 0.dp
+                    if (try {
+                            appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) &&
+                            !(panel || termFull || editPath != null || previewPath != null)
+                        } catch (t: Throwable) { true }) 30.dp else 0.dp
                 )
         )
         Box(
