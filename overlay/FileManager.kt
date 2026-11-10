@@ -5294,7 +5294,7 @@ class FpsOverlayService : Service() {
                 "TMP=$F.tmp; : > $TMP; " +
                 "while IFS= read -r line; do printf '%s\\n' \"$line\" >> $TMP; done < /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
                 "while IFS= read -r line; do printf '%s\\n' \"$line\" >> $TMP; done < /sys/class/drm/sde-crtc-0/measured_fps 2>/dev/null; " +
-                "mv $TMP $F; chmod 644 $F; sleep 0.01; done"
+                "mv $TMP $F; chmod 644 $F; sleep 0.05; done"
             Runtime.getRuntime().exec(arrayOf(
                 suBin(), "--mount-master", "-c", cmd
             ))
