@@ -5179,6 +5179,7 @@ class FpsOverlayService : Service() {
     private var fpsView: TextView? = null
     private var executor: ScheduledExecutorService? = null
     private var activePkg: String = ""
+    private var lastPkgRefresh: Long = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -5374,18 +5375,28 @@ class FpsOverlayService : Service() {
             android.util.Log.e("FPSD", "live empty")
             return null
         }
-        // 表头: tid bufID name currentFPS targetFPS ...
-        // 每行第 4 列是 currentFPS，取所有行最大值（脚本验证过的逻辑）
+        // 优先匹配前台包名那一行（最准）；没有则取最大值
+        val now = System.currentTimeMillis()
+        if (now - lastPkgRefresh > 5000) {
+            lastPkgRefresh = now
+            try { refreshActivePkg() } catch (t: Throwable) {}
+        }
         var best = 0.0
+        var matched = 0.0
         for (l in text.lines()) {
             val cols = l.split(Regex("[\\t ]+")).filter { it.isNotBlank() }
             if (cols.size >= 4) {
                 val v = cols[3].toDoubleOrNull() ?: continue
                 if (v > best) best = v
+                if (activePkg.isNotEmpty() && l.contains(activePkg) && v > matched) matched = v
             }
         }
-        android.util.Log.e("FPSD", "fpsgo best=" + best)
-        return if (best > 0) best else null
+        android.util.Log.e("FPSD", "fpsgo pkg=" + activePkg + " matched=" + matched + " best=" + best)
+        return when {
+            matched > 0 -> matched
+            best > 0 -> best
+            else -> null
+        }
     }
 
     // 找当前层的名称（简化：从 dumpsys SurfaceFlinger 取第一个可见层）
