@@ -5242,9 +5242,9 @@ class FpsOverlayService : Service() {
     private fun addOverlay() {
         try {
             val tv = TextView(this)
-            tv.text = "-- ~"
+            tv.text = "--"
             tv.setTextColor(android.graphics.Color.WHITE)
-            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
             // 黄色圆角背景（Scene 同款）
             val bgDrawable = android.graphics.drawable.GradientDrawable()
@@ -5322,7 +5322,7 @@ class FpsOverlayService : Service() {
             if (fps != null && fps > 0) {
                 fpsView?.post {
                     try {
-                        fpsView?.text = String.format("%.0f~", fps)
+                        fpsView?.text = String.format("%.0f", fps)
                     } catch (t: Throwable) {}
                 }
             }
