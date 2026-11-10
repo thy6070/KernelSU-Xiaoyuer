@@ -98,13 +98,34 @@ class FpsOverlayService : Service() {
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             )
             lp.gravity = Gravity.TOP or Gravity.START
             lp.x = 20
             lp.y = 120
+            var downX = 0f
+            var downY = 0f
+            var startX = 0
+            var startY = 0
+            tv.setOnTouchListener { _, ev ->
+                when (ev.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        downX = ev.rawX
+                        downY = ev.rawY
+                        startX = lp.x
+                        startY = lp.y
+                        true
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        lp.x = startX + (ev.rawX - downX).toInt()
+                        lp.y = startY + (ev.rawY - downY).toInt()
+                        try { windowManager.updateViewLayout(tv, lp) } catch (t: Throwable) {}
+                        true
+                    }
+                    else -> true
+                }
+            }
             windowManager.addView(tv, lp)
             fpsView = tv
         } catch (t: Throwable) {
