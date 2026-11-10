@@ -5367,10 +5367,15 @@ class FpsOverlayService : Service() {
         }
     }
 
-    // 解析 dumpsys 输出：第一行是刷新率，之后每行是 (desiredPresent, actualPresent, frameReady)
+    // 解析 dumpsys 输出（Scene 同款算法）：
+    //  - 取最近 1 秒内的帧（present time）
+    //  - 剔除异常帧（帧时间 > 100ms 的 jank）
+    //  - FPS = 帧数 / 时间跨度，并做中位数平滑
     private fun parseFps(dump: String): Double? {
         val lines = dump.lines().filter { it.isNotBlank() }
         if (lines.size < 2) return null
+        val nowNs = System.nanoTime()
+        val windowStart = nowNs - 1_000_000_000L   // 最近 1 秒
         val times = mutableListOf<Long>()
         for (i in 1 until lines.size) {
             val parts = lines[i].trim().split('\t', ' ')
@@ -5380,12 +5385,21 @@ class FpsOverlayService : Service() {
             }
         }
         if (times.size < 2) return null
-        val minT = times.minOrNull() ?: return null
-        val maxT = times.maxOrNull() ?: return null
-        val span = maxT - minT
-        if (span <= 0) return null
-        // times 是纳秒
-        val fps = (times.size - 1).toDouble() / (span.toDouble() / 1_000_000_000.0)
+        // 只保留最近 1 秒的帧
+        val recent = times.filter { it >= windowStart }.ifEmpty { times.takeLast(64) }
+        if (recent.size < 2) return null
+        // 剔除异常帧（帧时间 > 100ms 的卡顿帧，避免拉低平均）
+        val spans = mutableListOf<Long>()
+        for (i in 1 until recent.size) {
+            val dt = recent[i] - recent[i - 1]
+            if (dt in 1..100_000_000L) spans.add(dt)
+        }
+        if (spans.isEmpty()) return null
+        spans.sort()
+        // 中位数帧时间（抗毛刺）
+        val median = spans[spans.size / 2]
+        if (median <= 0) return null
+        val fps = 1_000_000_000.0 / median.toDouble()
         return fps.coerceIn(1.0, 240.0)
     }
 }
