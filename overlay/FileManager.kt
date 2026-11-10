@@ -1832,6 +1832,13 @@ private fun ProMaxIsland(
                         "tweaks" -> {
                             var softReboot by remember { mutableStateOf(false) }
                             var selinuxHide by remember { mutableStateOf(false) }
+                            var fpsShow by remember {
+                                mutableStateOf(
+                                    try {
+                                        navCtx.getSharedPreferences("settings", 0).getBoolean("fps_show", false)
+                                    } catch (t: Throwable) { false }
+                                )
+                            }
                             var kernelUmount by remember { mutableStateOf(false) }
                             LaunchedEffect(Unit) {
                                 withContext(Dispatchers.IO) {
@@ -1892,6 +1899,31 @@ private fun ProMaxIsland(
                                         Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
                                         Text(text = "关", fontSize = 12.sp,
                                             color = if (softReboot) Color(0xFF5A5A5E) else Color.White)
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            fpsShow = !fpsShow
+                                            navCtx.getSharedPreferences("settings", 0).edit()
+                                                .putBoolean("fps_show", fpsShow).apply()
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "显示帧率\n在文件管理器顶部实时显示当前帧率",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = "开", fontSize = 12.sp,
+                                            color = if (fpsShow) Color.White else Color(0xFF5A5A5E))
+                                        Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
+                                        Text(text = "关", fontSize = 12.sp,
+                                            color = if (fpsShow) Color(0xFF5A5A5E) else Color.White)
                                     }
                                 }
                                 Row(
