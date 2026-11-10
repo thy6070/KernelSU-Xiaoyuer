@@ -5369,6 +5369,7 @@ class FpsOverlayService : Service() {
 
     // sysfs 快通道（天玑 fpsgo / 高通 measured_fps）
     private fun sysfsFps(): Double? {
+        android.util.Log.e("FPSD", "sysfsFps enter")
         val nodes = listOf(
             "/sys/class/drm/sde-crtc-0/measured_fps",
             "/sys/class/graphics/fb0/measured_fps",
@@ -5378,7 +5379,10 @@ class FpsOverlayService : Service() {
         for (n in nodes) {
             try {
                 // 直接读（fpsgo_status 是 444 全局可读，不需要 root）
-                val out = try { File(n).readText().trim() } catch (t: Throwable) { "" }
+                val out = try { File(n).readText().trim() } catch (t: Throwable) {
+                    android.util.Log.e("FPSD", "read fail " + n + ": " + (t.message ?: t.javaClass.simpleName))
+                    ""
+                }
                 val out2 = if (out.isEmpty()) {
                     // 回退：用 su 读（其他节点可能需要 root）
                     val pr = Runtime.getRuntime().exec(
