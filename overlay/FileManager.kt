@@ -5293,7 +5293,7 @@ class FpsOverlayService : Service() {
                 "> /data/local/tmp/fps_live.tmp; " +
                 "mv /data/local/tmp/fps_live.tmp /data/local/tmp/fps_live; chmod 644 /data/local/tmp/fps_live; sleep 0.2; done"
             Runtime.getRuntime().exec(arrayOf(
-                "/data/adb/ksu/bin/su", "--mount-master", "-c", cmd
+                suBin(), "--mount-master", "-c", cmd
             ))
         } catch (t: Throwable) {}
     }
@@ -5334,7 +5334,7 @@ class FpsOverlayService : Service() {
     private fun refreshActivePkg() {
         try {
             val pr = Runtime.getRuntime().exec(
-                arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c",
+                arrayOf(suBin(), "--mount-master", "-c",
                     "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity")
             )
             val out = pr.inputStream.bufferedReader().readText()
@@ -5349,7 +5349,7 @@ class FpsOverlayService : Service() {
         if (activePkg.isEmpty()) return null
         return try {
             val pr = Runtime.getRuntime().exec(
-                arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c",
+                arrayOf(suBin(), "--mount-master", "-c",
                     "dumpsys gfxinfo $activePkg 2>/dev/null")
             )
             val out = pr.inputStream.bufferedReader().readText()
@@ -5406,7 +5406,7 @@ class FpsOverlayService : Service() {
     private fun findActiveLayer(): String? {
         return try {
             val pr = Runtime.getRuntime().exec(
-                arrayOf("/data/adb/ksu/bin/su", "--mount-master", "-c",
+                arrayOf(suBin(), "--mount-master", "-c",
                     "dumpsys SurfaceFlinger --list 2>/dev/null")
             )
             val out = pr.inputStream.bufferedReader().readLines()
