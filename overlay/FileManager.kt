@@ -4406,32 +4406,57 @@ private val RT_DRIVER_MIRRORS = listOf(
 // 改机型（iOS 风格选择 → resetprop 伪装）
 internal fun changeDeviceModel(ctx: android.content.Context) {
     val models = listOf(
-        // ── 小米 ──
+        // ── 小米（2026）──
+        "【小米】Xiaomi 16 Pro", "【小米】Xiaomi 16 Ultra", "【小米】Xiaomi 16",
+        "【小米】Xiaomi Pad 9 Pro", "【小米】Xiaomi MIX Fold 5",
+        // ── 小米（2025）──
         "【小米】Xiaomi 15 Pro", "【小米】Xiaomi 15 Ultra", "【小米】Xiaomi 15S Pro",
         "【小米】Xiaomi 14 Ultra", "【小米】Xiaomi Pad 8 Pro", "【小米】Xiaomi Pad 7 Ultra",
         "【小米】Xiaomi MIX Fold 4",
-        // ── 红米 ──
+        // ── 红米（2026）──
+        "【红米】Redmi K90 Pro Max", "【红米】Redmi K90 Pro", "【红米】Redmi K90",
+        "【红米】Redmi Turbo 5 Pro", "【红米】Redmi Pad 3 Pro",
+        // ── 红米（2025）──
         "【红米】Redmi K80 Pro", "【红米】Redmi K80 Ultra", "【红米】Redmi K70 Pro",
         "【红米】Redmi Turbo 4", "【红米】Redmi Pad 2 Pro",
-        // ── 华为 ──
+        // ── 华为（2026）──
+        "【华为】Mate 80 Pro Max", "【华为】Mate 80 Pro", "【华为】Mate 80",
+        "【华为】Pura 90 Ultra", "【华为】Mate X7", "【华为】MatePad Pro 14.2",
+        // ── 华为（2025）──
         "【华为】Mate 70 Pro", "【华为】Mate 70 RS", "【华为】Pura 70 Ultra",
         "【华为】Mate X6", "【华为】MatePad Pro 13.2",
-        // ── OPPO ──
+        // ── OPPO（2026）──
+        "【OPPO】Find X9 Pro", "【OPPO】Find X9 Ultra", "【OPPO】Find N6",
+        "【OPPO】Pad 5 Pro",
+        // ── OPPO（2025）──
         "【OPPO】Find X8 Pro", "【OPPO】Find X8 Ultra", "【OPPO】Find N5",
         "【OPPO】Pad 4 Pro",
-        // ── vivo ──
+        // ── vivo（2026）──
+        "【vivo】X300 Pro", "【vivo】X300 Ultra", "【vivo】X Fold 5",
+        "【vivo】Pad 4 Pro",
+        // ── vivo（2025）──
         "【vivo】X200 Pro", "【vivo】X200 Ultra", "【vivo】X Fold 4 Pro",
         "【vivo】Pad 3 Pro",
         // ── 真我 ──
         "【真我】GT7 Pro", "【真我】GT7", "【真我】GT Neo7", "【真我】Pad 2 Pro",
-        // ── 一加 ──
+        // ── 一加（2026）──
+        "【一加】OnePlus 15", "【一加】OnePlus 15T", "【一加】OnePlus Ace 6 Pro",
+        "【一加】OnePlus Pad 4",
+        // ── 一加（2025）──
         "【一加】OnePlus 13", "【一加】OnePlus 13T", "【一加】OnePlus Ace 5 Pro",
         "【一加】OnePlus Pad 3",
-        // ── iQOO ──
+        // ── iQOO（2026）──
+        "【iQOO】iQOO 15", "【iQOO】iQOO Neo11 Pro", "【iQOO】iQOO Pad 4 Pro",
+        // ── iQOO（2025）──
         "【iQOO】iQOO 13", "【iQOO】iQOO Neo10 Pro", "【iQOO】iQOO Pad 3 Pro",
-        // ── 红魔 ──
+        // ── 红魔（2026）──
+        "【红魔】RedMagic 11 Pro+", "【红魔】RedMagic 11 Pro", "【红魔】RedMagic 11",
+        // ── 红魔（2025）──
         "【红魔】RedMagic 10 Pro", "【红魔】RedMagic 10", "【红魔】RedMagic Pad 3 Pro",
-        // ── 荣耀 ──
+        // ── 荣耀（2026）──
+        "【荣耀】Magic8 Pro", "【荣耀】Magic8 RSR", "【荣耀】Magic V4",
+        "【荣耀】GT2 Pro",
+        // ── 荣耀（2025）──
         "【荣耀】Magic7 Pro", "【荣耀】Magic7 RSR", "【荣耀】Magic V3",
         "【荣耀】GT Pro", "【荣耀】Pad V9",
         // ── 三星 ──
@@ -4543,10 +4568,13 @@ internal fun gameCleanCache(ctx: android.content.Context) {
         val pm = ctx.packageManager
         val apps = pm.getInstalledApplications(0)
             .filter {
-                // 和超级用户列表同款过滤：必须有代码（排除 overlay/资源包）
-                (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0 &&
+                // 排除系统应用 + overlay + 无代码资源包
+                val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
+                !isSystem && hasCode &&
                 it.packageName != "android" &&
-                !it.packageName.startsWith("com.android.systemui")
+                !it.packageName.startsWith("com.android.systemui") &&
+                !it.packageName.contains(".overlay.")
             }
             .sortedBy { it.loadLabel(pm).toString() }
         uiPickerTitle = "选择要重置的应用"
@@ -4590,11 +4618,24 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("for f in \$(find \"\$d\" -type f \\( ")
                 sb.append("-iname '*device*id*' -o -iname '*deviceid*' ")
                 sb.append("-o -iname '*guid*' -o -iname '*uuid*' ")
-                sb.append("-o -iname '*oaid*' -o -iname '*idfa*' ")
+                sb.append("-o -iname '*oaid*' -o -iname '*idfa*' -o -iname '*adid*' ")
                 sb.append("-o -iname '*imei*' -o -iname '*qimei*' ")
                 sb.append("-o -iname '*android_id*' -o -iname '*fingerprint*' ")
-                sb.append("-o -iname '*.did' \\) -size -512k 2>/dev/null); do ")
-                sb.append("case \"\$f\" in */obb/*|*/resources/*|*/assets/*|*.so|*.pak|*.obb|*.dat) continue;; esac; ")
+                sb.append("-o -iname '*openudid*' -o -iname '*install_id*' ")
+                sb.append("-o -iname '*client_id*' -o -iname '*user_id*' ")
+                sb.append("-o -iname '*mac_address*' -o -iname '*serial*' ")
+                sb.append("-o -iname '*session*' -o -iname '*token*' ")
+                sb.append("-o -iname '*.did' -o -iname '*.id' ")
+                sb.append("\\) -size -512k 2>/dev/null); do ")
+                // 保护：资源包/资源目录/游戏数据/引擎文件
+                sb.append("case \"\$f\" in ")
+                sb.append("*/obb/*|*/OBB/*|*/resources/*|*/Resources/*|*/assets/*|*/Assets/*) continue;; ")
+                sb.append("*/files/data/*|*/files/Data/*|*/files/il2cpp/*|*/files/Unity/*) continue;; ")
+                sb.append("*/files/*.dat|*/files/*.pak|*/files/*.obb|*/files/*.so|*/files/*.bundle) continue;; ")
+                sb.append("*/cache/*|*/code_cache/*|*/files/log/*|*/files/logs/*) continue;; ")
+                sb.append("*/files/*Cache*|*/files/*cache*|*/files/*_data*|*/files/*Data*) continue;; ")
+                sb.append("*.so|*.pak|*.obb|*.bundle|*.dat|*.assetbundle|*.unity3d|*.mp4|*.mp3|*.png|*.jpg|*.webp) continue;; ")
+                sb.append("esac; ")
                 sb.append("rm -f \"\$f\" 2>/dev/null && F=\$((F+1)) || N=\$((N+1)); ")
                 sb.append("done; done; ")
                 // 先读原值（供恢复）
@@ -4708,6 +4749,39 @@ internal fun writeOpLog(ctx: android.content.Context, msg: String) {
         val ts = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())
         f.appendText("[" + ts + "] " + msg + "\n")
     } catch (t: Throwable) {}
+}
+
+// 原神帧率切换（改 playerprefs.xml）
+internal fun genshinFps(ctx: android.content.Context) {
+    val prefs = "/data/data/com.miHoYo.Yuanshen/shared_prefs/com.miHoYo.Yuanshen.v2.playerprefs.xml"
+    uiPickerTitle = "选择原神帧率"
+    uiPicker = listOf("24 帧", "30 帧", "45 帧", "60 帧")
+    uiPickerAction = { label ->
+        val code = when (label) {
+            "24 帧" -> "0"
+            "30 帧" -> "1"
+            "45 帧" -> "3"
+            else -> "2"
+        }
+        try {
+            // 强制停止游戏
+            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                "am force-stop com.miHoYo.Yuanshen 2>/dev/null"))
+            // 改 prefs
+            val cmd = "F='" + prefs + "'; " +
+                    "[ -f \"\$F\" ] || { echo '找不到原神配置'; exit 1; }; " +
+                    "chmod 644 \"\$F\" 2>/dev/null; " +
+                    "sed -i -E 's#(22index%5C%22%3A)[0-9]+#\\1" + code + "#g' \"\$F\"; " +
+                    "echo \"已设置 " + label + "\""
+            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+            val out = pr.inputStream.bufferedReader().readText()
+            pr.waitFor()
+            writeOpLog(ctx, "原神帧率 → " + label + " (code=" + code + ")")
+            android.widget.Toast.makeText(ctx, out.take(80), android.widget.Toast.LENGTH_LONG).show()
+        } catch (t: Throwable) {
+            android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 }
 
 // iOS 风格选择框的全局状态（Compose 可观察）
@@ -5799,9 +5873,9 @@ class FpsOverlayService : Service() {
             matchedValues.sorted()[matchedValues.size / 2]
         } else 0.0
         android.util.Log.e("FPSD", "fpsgo pkg=" + activePkg + " matched=" + matched + " best=" + best)
+        // 严格只用前台包名的值；匹配不到就返回 null（保持上一个显示值，不乱跳）
         return when {
-            matched > 0 -> matched
-            best > 0 -> best
+            matched > 1.0 -> matched
             else -> null
         }
     }
