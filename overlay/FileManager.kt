@@ -1539,38 +1539,6 @@ private fun ProMaxIsland(
 
     // Island.kt ball choreography
     val wingPress = remember { Animatable(0f) }
-    // 设为背景：模式选择（两个并排全宽按钮，和删除/执行同款）
-    val bgPickNow = bgModePick
-    if (bgPickNow != null) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0x66000000))
-                .clickable { bgModePick = null },
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                modifier = Modifier
-                    .width(300.dp)
-                    .padding(horizontal = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    IslandActionButton("默认", Color(0xFF3A3A3C)) {
-                        setBgBackground(navCtx, bgPickNow, bgModeIsImg, "default")
-                        bgModePick = null
-                    }
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    IslandActionButton("横屏", Color(0xFF0A84FF)) {
-                        setBgBackground(navCtx, bgPickNow, bgModeIsImg, "landscape")
-                        bgModePick = null
-                    }
-                }
-            }
-        }
-    }
-
     LaunchedEffect(panelOpen) {
         if (panelOpen) {
             wingPress.animateTo(1f, tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)))
@@ -2248,12 +2216,25 @@ private fun ProMaxIsland(
                                                 val isImg = lp.endsWith(".jpg") || lp.endsWith(".jpeg") || lp.endsWith(".png") || lp.endsWith(".webp") || lp.endsWith(".bmp")
                                                 val isVid = lp.endsWith(".mp4") || lp.endsWith(".mkv") || lp.endsWith(".avi") || lp.endsWith(".mov") || lp.endsWith(".webm") || lp.endsWith(".3gp")
                                                 if (isImg || isVid) {
-                                                    // 点设为背景 → 收起岛 → 展开模式选择（默认/横屏）
-                                                    IslandActionButton("设为背景", Color(0xFF0A84FF)) {
-                                                        bgModePick = longPressPath
-                                                        bgModeIsImg = isImg
-                                                        onClearLongPress()
-                                                        closeIsland()
+                                                    if (bgModePick == null) {
+                                                        // 点「设为背景」→ 岛内切换成两个模式按钮
+                                                        IslandActionButton("设为背景", Color(0xFF0A84FF)) {
+                                                            bgModePick = longPressPath
+                                                            bgModeIsImg = isImg
+                                                        }
+                                                    } else {
+                                                        IslandActionButton("默认", Color(0xFF3A3A3C)) {
+                                                            setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "default")
+                                                            bgModePick = null
+                                                            onClearLongPress()
+                                                            closeIsland()
+                                                        }
+                                                        IslandActionButton("横屏", Color(0xFF0A84FF)) {
+                                                            setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "landscape")
+                                                            bgModePick = null
+                                                            onClearLongPress()
+                                                            closeIsland()
+                                                        }
                                                     }
                                                 }
                                             }
