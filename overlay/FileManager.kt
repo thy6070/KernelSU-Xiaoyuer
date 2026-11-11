@@ -4690,6 +4690,15 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("settings put secure bluetooth_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
                 sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null; ")
+                // 用户层可改的其余标识（boot序列号 / build.id / OAID系列）
+                sb.append("resetprop ro.boot.serialno '").append(serial).append("' 2>/dev/null; ")
+                sb.append("resetprop ro.boot.bootserialno '").append(serial).append("' 2>/dev/null; ")
+                sb.append("resetprop ro.build.id '").append(hex(12).uppercase()).append("' 2>/dev/null; ")
+                sb.append("resetprop ro.vaid '").append(hex(16)).append("' 2>/dev/null; ")
+                sb.append("resetprop ro.aaid '").append(hex(16)).append("' 2>/dev/null; ")
+                sb.append("settings put secure oaid '").append(hex(24)).append("' 2>/dev/null; ")
+                sb.append("settings put secure vaid '").append(hex(24)).append("' 2>/dev/null; ")
+                sb.append("settings put secure aaid '").append(hex(24)).append("' 2>/dev/null; ")
                 // 应用 ID（SSAID）双方案：
                 //  旧系统文本 XML → sed 就地改该应用条目
                 //  新系统 ABX 二进制 → 删文件让系统重建
