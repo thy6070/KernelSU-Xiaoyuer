@@ -5981,13 +5981,13 @@ class FpsOverlayService : Service() {
             return single
         }
         // 多个 crtc：取所有 fps: 里的最大值（哪个屏幕在刷新就用哪个）
-        val allFps = Regex("fps:\\s*([0-9]+(?:\\.[0-9]+)?)").findAll(text)
+        val maxFps = Regex("fps:\\s*([0-9]+(?:\\.[0-9]+)?)").findAll(text)
             .mapNotNull { it.groupValues[1].toDoubleOrNull() }
             .filter { it > 1.0 }
-        if (allFps.isNotEmpty()) {
-            val v = allFps.max()
-            android.util.Log.e("FPSD", "measured_fps(fps:)=" + v)
-            return v
+            .maxOrNull()
+        if (maxFps != null) {
+            android.util.Log.e("FPSD", "measured_fps=" + maxFps)
+            return maxFps
         }
         // 天玑 fpsgo 表格：优先匹配前台包名那一行（最准）；没有则取最大值
         val now = System.currentTimeMillis()
