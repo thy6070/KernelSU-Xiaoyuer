@@ -5911,7 +5911,7 @@ class FpsOverlayService : Service() {
             "  dumpsys SurfaceFlinger --latency \"" + layer + "\" 2>/dev/null > \"" + d + "/fps_raw.tmp\"\n" +
             "  mv \"" + d + "/fps_raw.tmp\" \"" + d + "/fps_raw\"\n" +
             "  chmod 644 \"" + d + "/fps_raw\"\n" +
-            "  sleep 0.8\n" +
+            "  sleep 0.4\n" +
             "done\n")
         // setsid 让它脱离 su 的进程组，否则 su 退出时守护进程会被一起收走
         sh("setsid sh " + script.absolutePath + " >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
@@ -5961,7 +5961,7 @@ class FpsOverlayService : Service() {
         times.sort()
         val end = times[times.size - 1]
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
-        val start = end - 1_000_000_000L
+        val start = end - 500_000_000L
         var n = 0
         var first = 0L
         for (k in times.indices) {
@@ -6070,7 +6070,7 @@ class FpsOverlayService : Service() {
         // 画面静止：最新一帧距今超过 800ms，说明没有新帧，直接归零
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
         // 600ms 窗口：比 1 秒更跟手，掉帧能更快反映出来
-        val start = end - 1_000_000_000L
+        val start = end - 500_000_000L
         var n = 0
         var first = 0L
         for (k in times.indices) {
@@ -6132,7 +6132,7 @@ class FpsOverlayService : Service() {
                 showFps(fpsRaw)
             }
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 500L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 250L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     private fun showFps(fps: Double) {
