@@ -3299,7 +3299,7 @@ private fun ModeButton(
         val running = withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                    "if [ -f /data/adb/xy_perf_daemon ]; then echo 1; else echo 0; fi"))
+                    "if [ -f /data/adb/xy_perf_daemon ] && ps -A 2>/dev/null | grep -q '[x]y_perf_daemon'; then echo 1; else echo 0; fi"))
                 val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
                 o.trim() == "1"
             }.getOrDefault(false)
