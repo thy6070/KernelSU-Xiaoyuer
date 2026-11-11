@@ -5718,6 +5718,8 @@ class FpsOverlayService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
         startDaemon()
+        // 注册 SurfaceFlinger FPS 监听（真实帧率）
+        try { startSfMonitor() } catch (t: Throwable) {}
         executor = Executors.newSingleThreadScheduledExecutor()
         executor?.scheduleAtFixedRate({ tickFps() }, 0, 50, TimeUnit.MILLISECONDS)
     }
@@ -5734,6 +5736,7 @@ class FpsOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        try { stopSfMonitor() } catch (t: Throwable) {}
         try { executor?.shutdownNow() } catch (t: Throwable) {}
         try {
             fpsView?.let { windowManager.removeView(it) }
@@ -5900,8 +5903,85 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {}
     }
 
+    // ===== SurfaceFlinger FPS 监听（真实帧率，同 Scene）=====
+    private var sfBinder: android.os.IBinder? = null
+    private var sfListener: android.os.IBinder? = null
+    @Volatile private var sfFps: Float = 0f
+    @Volatile private var sfOk: Boolean = false
+
+    private fun getForegroundTaskId(): Int {
+        return try {
+            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity"))
+            val out = pr.inputStream.bufferedReader().readText()
+            pr.waitFor()
+            val m = Regex("\\bt(\\d+)\\}").find(out)
+            m?.groupValues?.get(1)?.toIntOrNull() ?: -1
+        } catch (t: Throwable) { -1 }
+    }
+
+    private fun startSfMonitor() {
+        try {
+            val sm = Class.forName("android.os.ServiceManager")
+            val sf = sm.getMethod("getService", String::class.java)
+                .invoke(null, "SurfaceFlingerAIDL") as? android.os.IBinder
+            if (sf == null) {
+                android.util.Log.e("FPSD", "sf binder null")
+                return
+            }
+            sfBinder = sf
+            val listener = object : android.os.Binder() {
+                override fun onTransact(code: Int, data: android.os.Parcel, reply: android.os.Parcel?, flags: Int): Boolean {
+                    return try {
+                        if (code == 1) {  // onFpsReported(float)
+                            data.enforceInterface("android.gui.IFpsListener")
+                            val v = data.readFloat()
+                            sfFps = v
+                            sfOk = true
+                            android.util.Log.e("FPSD", "sf onFpsReported=" + v)
+                            true
+                        } else super.onTransact(code, data, reply, flags)
+                    } catch (t: Throwable) { false }
+                }
+            }
+            sfListener = listener
+            val taskId = getForegroundTaskId()
+            val d = android.os.Parcel.obtain()
+            val r = android.os.Parcel.obtain()
+            try {
+                d.writeInterfaceToken("android.gui.ISurfaceComposer")
+                d.writeInt(taskId)
+                d.writeStrongBinder(listener)
+                val ok = sf.transact(35, d, r, 0)
+                val replyCode = try { r.readInt() } catch (t: Throwable) { -999 }
+                android.util.Log.e("FPSD", "addFpsListener taskId=" + taskId + " ok=" + ok + " reply=" + replyCode)
+            } finally {
+                d.recycle(); r.recycle()
+            }
+        } catch (t: Throwable) {
+            android.util.Log.e("FPSD", "sf monitor fail: " + (t.message ?: t.javaClass.simpleName))
+        }
+    }
+
+    private fun stopSfMonitor() {
+        try {
+            val sf = sfBinder ?: return
+            val l = sfListener ?: return
+            val d = android.os.Parcel.obtain()
+            val r = android.os.Parcel.obtain()
+            try {
+                d.writeInterfaceToken("android.gui.ISurfaceComposer")
+                d.writeStrongBinder(l)
+                sf.transact(36, d, r, 0)  // removeFpsListener
+            } finally { d.recycle(); r.recycle() }
+            sfBinder = null; sfListener = null; sfOk = false
+        } catch (t: Throwable) {}
+    }
+
     // 读帧率：fpsgo → gfxinfo → dumpsys
     private fun readFps(): Double? {
+        // 优先：SurfaceFlinger FPS 监听（真实帧率）
+        if (sfOk && sfFps > 0f) return sfFps.toDouble()
         android.util.Log.e("FPSD", "readFps start")
         // 1) 先直接读 fpsgo（免 root、零开销）
         sysfsFps()?.let { if (it > 1.0) return it }
