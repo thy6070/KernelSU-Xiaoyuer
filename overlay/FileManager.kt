@@ -1031,7 +1031,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = if (isRestore) TextAlign.Center else TextAlign.Start,
-                                modifier = Modifier.fillMaxWidth().weight(1f)
+                                modifier = Modifier.weight(1f)
                             )
                         }
                         if (i < pickList.size - 1) {
@@ -1944,6 +1944,25 @@ private fun ProMaxIsland(
                                         navCtx.getSharedPreferences("settings", 0).getBoolean("fps_show", false)
                                     } catch (t: Throwable) { false }
                                 )
+                            }
+                            // 进界面时校验：Service 没在跑就同步关闭状态
+                            LaunchedEffect(Unit) {
+                                try {
+                                    val running = withContext(Dispatchers.IO) {
+                                        try {
+                                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                                "dumpsys activity services com.tencent.THY 2>/dev/null | grep -c FpsOverlayService"))
+                                            val o = pr.inputStream.bufferedReader().readText().trim()
+                                            pr.waitFor()
+                                            (o.toIntOrNull() ?: 0) > 0
+                                        } catch (t: Throwable) { false }
+                                    }
+                                    if (!running && fpsShow) {
+                                        fpsShow = false
+                                        navCtx.getSharedPreferences("settings", 0).edit()
+                                            .putBoolean("fps_show", false).apply()
+                                    }
+                                } catch (t: Throwable) {}
                             }
                             var kernelUmount by remember { mutableStateOf(false) }
                             LaunchedEffect(Unit) {
