@@ -3327,7 +3327,7 @@ private fun ModeButton(
         val running = withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                    "if [ -f /data/adb/xy_perf_daemon ] && ps -A 2>/dev/null | grep -q '[x]y_perf_daemon'; then echo 1; else echo 0; fi"))
+                    "if [ -f /data/adb/xy_perf_daemon ] && ps -ef 2>/dev/null | grep -q '[x]y_perf_daemon'; then echo 1; else echo 0; fi"))
                 val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
                 o.trim() == "1"
             }.getOrDefault(false)
@@ -5832,6 +5832,15 @@ class FpsOverlayService : Service() {
     }
 
     // 启动 root daemon：持续把帧时间写到 /data/local/tmp/fps_live
+    // 重启 daemon（避免卡死）
+    private fun restartDaemon() {
+        try {
+            val kill = "for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep 'fps_live' | grep -v grep | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done"
+            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", kill)).waitFor()
+            startDaemon()
+        } catch (t: Throwable) {}
+    }
+
     private fun startDaemon() {
         try {
             // 深度优化：用 shell 内置 read 读文件（不 fork cat），支持 0.01s 高频
@@ -5849,14 +5858,34 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {}
     }
 
+    // 记录上次 fps_live 的修改时间，用于检测 daemon 卡死
+    private var lastLiveMtime = 0L
+
     // 读一次 FPS
     private fun tickFps() {
+        // daemon 自愈：fps_live 超过 3 秒没更新就重启 daemon
+        try {
+            val live = File("/data/local/tmp/fps_live")
+            val m = live.lastModified()
+            if (m > 0L) {
+                if (m == lastLiveMtime) {
+                    val idle = System.currentTimeMillis() - m
+                    if (idle > 3000L) {
+                        android.util.Log.e("FPSD", "daemon stalled " + idle + "ms, restart")
+                        lastLiveMtime = 0L
+                        restartDaemon()
+                    }
+                } else {
+                    lastLiveMtime = m
+                }
+            }
+        } catch (t: Throwable) {}
         try {
             val fps = readFps()
             if (fps != null && fps > 0) {
                 fpsView?.post {
                     try {
-                        fpsView?.text = String.format("%.1f", fps)
+                        fpsView?.text = String.format("%.0f", fps)
                     } catch (t: Throwable) {}
                 }
             }
