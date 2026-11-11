@@ -6089,7 +6089,11 @@ class FpsOverlayService : Service() {
                 lastLayerRefresh = System.currentTimeMillis()
                 refreshLayer()
                 val ln = layerName
-                if (ln != null) startDaemon(ln)
+                if (ln != null) {
+                    // 强制重启：图层可能因刷新率切换/场景切换被系统重建
+                    daemonLayer = null
+                    startDaemon(ln)
+                }
             }
             val fpsRaw = readDaemonFps()
             if (fpsRaw == null) {
@@ -6101,14 +6105,9 @@ class FpsOverlayService : Service() {
                 failCount++
                 if (failCount >= 3) {
                     failCount = 0
-                    if (candidates.size > 1) {
-                        candIdx = (candIdx + 1) % candidates.size
-                        layerName = candidates[candIdx]
-                        startDaemon(candidates[candIdx])
-                    } else {
-                        layerName = null
-                        lastLayerRefresh = 0L
-                    }
+                    // 直接强制下一轮重新扫全部图层（层 id 可能已变）
+                    layerName = null
+                    lastLayerRefresh = 0L
                 }
                 }
             } else {
