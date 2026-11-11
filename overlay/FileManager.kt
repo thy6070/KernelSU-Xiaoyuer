@@ -5946,7 +5946,7 @@ class FpsOverlayService : Service() {
             try {
                 org.lsposed.hiddenapibypass.HiddenApiBypass.addHiddenApiExemptions(
                     "Landroid/os/ServiceManager;",
-                    "Landroid/os/ServiceManager$ServiceNotFoundException;",
+                    "Landroid/os/ServiceManager\$ServiceNotFoundException;",
                     "Landroid/os/IBinder;",
                     "Landroid/os/Parcel;"
                 )
