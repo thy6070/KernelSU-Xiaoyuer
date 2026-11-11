@@ -5891,11 +5891,12 @@ class FpsOverlayService : Service() {
     // 刷新候选图层，并实测挑出真正在出帧的那一层
     // ===== root 采集守护：只启动一次，循环采样写文件，App 侧零 su 开销 =====
     private var daemonLayer: String? = null
+    private var daemonStartedAt = 0L
 
     private fun stopDaemon() {
         try {
             val d = filesDir.absolutePath
-            sh("D=${d}; [ -f \$D/fps_pid ] && kill \$(cat \$D/fps_pid) 2>/dev/null; rm -f \$D/fps_pid", 3L)
+            sh("D=${d}; [ -f \$D/fps_pid ] && kill -9 \$(cat \$D/fps_pid) 2>/dev/null; rm -f \$D/fps_pid", 3L)
         } catch (t: Throwable) {}
         daemonLayer = null
     }
@@ -5904,14 +5905,18 @@ class FpsOverlayService : Service() {
         if (layer == daemonLayer) return
         stopDaemon()
         val d = filesDir.absolutePath
-        val cmd = "D=${d}; L='" + layer + "'; " +
-            "( while true; do " +
-            "dumpsys SurfaceFlinger --latency \"\$L\" 2>/dev/null > \$D/fps_raw.tmp; " +
-            "mv \$D/fps_raw.tmp \$D/fps_raw; chmod 644 \$D/fps_raw; " +
-            "sleep 0.8; " +
-            "done ) & echo \$! > \$D/fps_pid; chmod 644 \$D/fps_pid"
-        sh(cmd, 3L)
+        val script = File(filesDir, "fps_daemon.sh")
+        script.writeText("#!/system/bin/sh\n" +
+            "while true; do\n" +
+            "  dumpsys SurfaceFlinger --latency \"" + layer + "\" 2>/dev/null > \"" + d + "/fps_raw.tmp\"\n" +
+            "  mv \"" + d + "/fps_raw.tmp\" \"" + d + "/fps_raw\"\n" +
+            "  chmod 644 \"" + d + "/fps_raw\"\n" +
+            "  sleep 0.8\n" +
+            "done\n")
+        // setsid 让它脱离 su 的进程组，否则 su 退出时守护进程会被一起收走
+        sh("setsid sh " + script.absolutePath + " >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
         daemonLayer = layer
+        daemonStartedAt = System.currentTimeMillis()
     }
 
     // 读 daemon 写下的最新数据并解析（零 su 开销）
@@ -5975,7 +5980,7 @@ class FpsOverlayService : Service() {
             if (!n.contains("#")) continue
             if (n.contains("ActivityRecord") || n.contains("InputSink") ||
                 n.contains("animation-leash") || n.contains("Surface(name=")) continue
-            if (Regex("^[0-9]+ ").containsMatchIn(n)) continue
+            if (Regex("^[0-9a-fA-F]+ ").containsMatchIn(n)) continue
             var sc = 0
             if (n.contains("SurfaceView")) sc += 100
             if (activePkg.isNotEmpty() && n.contains(activePkg)) sc += 50
@@ -6073,7 +6078,27 @@ class FpsOverlayService : Service() {
                 if (ln != null) startDaemon(ln)
             }
             val fpsRaw = readDaemonFps()
-            if (fpsRaw != null) {
+            if (fpsRaw == null) {
+                // daemon 刚启动的 2 秒内不算失败（文件还没写出来）
+                if (System.currentTimeMillis() - daemonStartedAt < 2000L) {
+                    // 宽限期内，跳过自愈
+                } else {
+                // 文件缺失或解析失败（层已失效 / daemon 没起来）→ 自愈
+                failCount++
+                if (failCount >= 3) {
+                    failCount = 0
+                    if (candidates.size > 1) {
+                        candIdx = (candIdx + 1) % candidates.size
+                        layerName = candidates[candIdx]
+                        startDaemon(candidates[candIdx])
+                    } else {
+                        layerName = null
+                        lastLayerRefresh = 0L
+                    }
+                }
+                }
+            } else {
+                failCount = 0
                 if (fpsRaw < 0.5) {
                     idleCount++
                     if (idleCount >= 3 && System.currentTimeMillis() - lastProbe > 2000L) {
