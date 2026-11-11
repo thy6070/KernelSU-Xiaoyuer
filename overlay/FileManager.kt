@@ -5955,12 +5955,17 @@ class FpsOverlayService : Service() {
                 android.util.Log.e("FPSD", "hidden api exempt fail: " + t)
             }
             val sm = Class.forName("android.os.ServiceManager")
-            val sf = sm.getMethod("getService", String::class.java)
-                .invoke(null, "SurfaceFlingerAIDL") as? android.os.IBinder
+            android.util.Log.e("FPSD", "step1 sm class ok")
+            val gm = sm.getMethod("getService", String::class.java)
+            android.util.Log.e("FPSD", "step2 getMethod ok")
+            val raw = gm.invoke(null, "SurfaceFlingerAIDL")
+            android.util.Log.e("FPSD", "step3 invoke ok, raw=" + (raw?.javaClass?.name ?: "null"))
+            val sf = raw as? android.os.IBinder
             if (sf == null) {
                 android.util.Log.e("FPSD", "sf binder null")
                 return
             }
+            android.util.Log.e("FPSD", "step4 binder ok")
             sfBinder = sf
             val listener = object : android.os.Binder() {
                 override fun onTransact(code: Int, data: android.os.Parcel, reply: android.os.Parcel?, flags: Int): Boolean {
@@ -5978,12 +5983,15 @@ class FpsOverlayService : Service() {
             }
             sfListener = listener
             val taskId = getForegroundTaskId()
+            android.util.Log.e("FPSD", "step5 taskId=" + taskId)
             val d = android.os.Parcel.obtain()
             val r = android.os.Parcel.obtain()
             try {
                 d.writeInterfaceToken("android.gui.ISurfaceComposer")
+                android.util.Log.e("FPSD", "step6 token ok")
                 d.writeInt(taskId)
                 d.writeStrongBinder(listener)
+                android.util.Log.e("FPSD", "step7 parcel ok")
                 val ok = sf.transact(35, d, r, 0)
                 val replyCode = try { r.readInt() } catch (t: Throwable) { -999 }
                 android.util.Log.e("FPSD", "addFpsListener taskId=" + taskId + " ok=" + ok + " reply=" + replyCode)
