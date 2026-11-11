@@ -5733,6 +5733,7 @@ class FpsOverlayService : Service() {
     private var candIdx = 0
     private var failCount = 0
     private var lastProbe = 0L
+    private var idleCount = 0
     private var lastShown: Int = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
