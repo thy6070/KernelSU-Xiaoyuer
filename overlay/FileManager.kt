@@ -5739,7 +5739,7 @@ class FpsOverlayService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
         executor = Executors.newSingleThreadScheduledExecutor()
-        executor?.scheduleWithFixedDelay({ tick() }, 0L, 400L, TimeUnit.MILLISECONDS)
+        executor?.scheduleWithFixedDelay({ tick() }, 0L, 250L, TimeUnit.MILLISECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -5835,8 +5835,11 @@ class FpsOverlayService : Service() {
                         true
                     }
                     android.view.MotionEvent.ACTION_MOVE -> {
-                        lp.x = startX + (ev.rawX - downX).toInt()
-                        lp.y = startY + (ev.rawY - downY).toInt()
+                        val dm = resources.displayMetrics
+                        val maxX = (dm.widthPixels - tv.width).coerceAtLeast(0)
+                        val maxY = (dm.heightPixels - tv.height).coerceAtLeast(0)
+                        lp.x = (startX + (ev.rawX - downX).toInt()).coerceIn(0, maxX)
+                        lp.y = (startY + (ev.rawY - downY).toInt()).coerceIn(0, maxY)
                         try { windowManager.updateViewLayout(tv, lp) } catch (t: Throwable) {}
                         true
                     }
@@ -5936,6 +5939,8 @@ class FpsOverlayService : Service() {
         if (times.size < 3) return null
         times.sort()
         val end = times[times.size - 1]
+        // 画面静止：最新一帧距今超过 800ms，说明没有新帧，直接归零
+        if (System.nanoTime() - end > 800_000_000L) return 0.0
         val start = end - 1_000_000_000L
         var n = 0
         var first = 0L
@@ -5945,7 +5950,7 @@ class FpsOverlayService : Service() {
                 n++
             }
         }
-        if (n < 2 || end <= first) return null
+        if (n < 2 || end <= first) return 0.0
         return (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
     }
 
@@ -5961,7 +5966,7 @@ class FpsOverlayService : Service() {
             if (v <= 1.0) continue
             if (activePkg.isNotEmpty() &&
                 (l.contains(activePkg) || activePkg.endsWith(cols[2]))) return v
-            if (v > fallback) fallback = v
+            if (activePkg.isEmpty() && v > fallback) fallback = v
         }
         return if (fallback > 1.0) fallback else null
     }
@@ -5973,12 +5978,12 @@ class FpsOverlayService : Service() {
                 refreshLayer()
             }
             val fps = readSfFps() ?: readFpsgo()
-            if (fps != null && fps > 0.5) showFps(fps)
+            if (fps != null) showFps(fps)
         } catch (t: Throwable) {}
     }
 
     private fun showFps(fps: Double) {
-        val v = Math.round(fps).toInt().coerceIn(1, 240)
+        val v = Math.round(fps).toInt().coerceIn(0, 240)
         if (v == lastShown) return
         lastShown = v
         fpsView?.post {
