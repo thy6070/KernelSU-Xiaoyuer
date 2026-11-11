@@ -5942,6 +5942,18 @@ class FpsOverlayService : Service() {
 
     private fun startSfMonitor() {
         try {
+            // 解除 hidden API 限制（ServiceManager 是 @hide）
+            try {
+                org.lsposed.hiddenapibypass.HiddenApiBypass.addHiddenApiExemptions(
+                    "Landroid/os/ServiceManager;",
+                    "Landroid/os/ServiceManager$ServiceNotFoundException;",
+                    "Landroid/os/IBinder;",
+                    "Landroid/os/Parcel;"
+                )
+                android.util.Log.e("FPSD", "hidden api exempted")
+            } catch (t: Throwable) {
+                android.util.Log.e("FPSD", "hidden api exempt fail: " + t)
+            }
             val sm = Class.forName("android.os.ServiceManager")
             val sf = sm.getMethod("getService", String::class.java)
                 .invoke(null, "SurfaceFlingerAIDL") as? android.os.IBinder
