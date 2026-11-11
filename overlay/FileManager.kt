@@ -5732,7 +5732,7 @@ class FpsOverlayService : Service() {
     private var candidates: List<String> = emptyList()
     private var candIdx = 0
     private var failCount = 0
-    private var lastShown: Double = -1.0
+    private var lastShown: Int = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -5788,16 +5788,15 @@ class FpsOverlayService : Service() {
         try {
             val tv = TextView(this)
             tv.text = "--"
-            tv.setTextColor(android.graphics.Color.parseColor("#FFF2F2F2"))
+            // 白底 + 金色字 + 灰色胶囊描边
+            tv.setTextColor(android.graphics.Color.parseColor("#FFC107"))
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
             tv.gravity = Gravity.CENTER
-            tv.setShadowLayer(3f, 0f, 1f, android.graphics.Color.parseColor("#99000000"))
-            // 深色磨砂胶囊 + 细描边（Scene 风格）
             val bgDrawable = android.graphics.drawable.GradientDrawable()
-            bgDrawable.setColor(android.graphics.Color.parseColor("#CC16161A"))
+            bgDrawable.setColor(android.graphics.Color.parseColor("#F2FFFFFF"))
             bgDrawable.cornerRadius = 200f
-            bgDrawable.setStroke(2, android.graphics.Color.parseColor("#40FFFFFF"))
+            bgDrawable.setStroke(3, android.graphics.Color.parseColor("#B8B8B8"))
             tv.background = bgDrawable
             tv.setPadding(22, 8, 22, 8)
             tv.minWidth = 150
@@ -5852,66 +5851,32 @@ class FpsOverlayService : Service() {
         }
     }
 
-    // 常驻 root shell：只启动一次 su，之后复用连接，省掉每次 fork 的开销
-    private var shellProc: Process? = null
-    private var shellWriter: java.io.BufferedWriter? = null
-    private var shellReader: java.io.BufferedReader? = null
-
-    private fun ensureShell(): Boolean {
-        val p = shellProc
-        if (p != null && p.isAlive && shellWriter != null && shellReader != null) return true
-        return try {
-            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", "sh")
-            pb.redirectErrorStream(true)
-            val np = pb.start()
-            shellProc = np
-            shellWriter = np.outputStream.bufferedWriter()
-            shellReader = np.inputStream.bufferedReader()
-            true
-        } catch (t: Throwable) {
-            closeShell()
-            false
-        }
-    }
-
-    private fun closeShell() {
-        try { shellWriter?.close() } catch (t: Throwable) {}
-        try { shellReader?.close() } catch (t: Throwable) {}
-        try { shellProc?.destroy() } catch (t: Throwable) {}
-        shellWriter = null
-        shellReader = null
-        shellProc = null
-    }
-
-    @Synchronized
+    // 执行一条 root 命令（带超时；每次独立进程，避免常驻 shell 卡死后无法恢复）
     private fun sh(cmd: String, timeoutSec: Long = 2L): String {
-        if (!ensureShell()) return ""
-        val w = shellWriter ?: return ""
-        val r = shellReader ?: return ""
-        val deadline = System.currentTimeMillis() + timeoutSec * 1000L
         return try {
-            w.write(cmd)
-            w.write("; echo __DSH_END__\n")
-            w.flush()
+            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
+            pb.redirectErrorStream(true)
+            val pr = pb.start()
             val sb = StringBuilder()
-            while (System.currentTimeMillis() < deadline) {
-                if (r.ready()) {
-                    val line = r.readLine() ?: break
-                    if (line == "__DSH_END__") break
-                    sb.append(line).append('\n')
-                } else {
-                    Thread.sleep(4)
-                }
+            val th = Thread {
+                try { sb.append(pr.inputStream.bufferedReader().readText()) } catch (e: Throwable) {}
             }
-            sb.toString()
-        } catch (t: Throwable) {
-            closeShell()
+            th.isDaemon = true
+            th.start()
+            if (!pr.waitFor(timeoutSec, TimeUnit.SECONDS)) {
+                try { pr.destroyForcibly() } catch (e: Throwable) {}
+                th.join(200)
+                sb.toString()
+            } else {
+                th.join(500)
+                sb.toString()
+            }
+        } catch (e: Throwable) {
             ""
         }
     }
 
     override fun onDestroy() {
-        try { closeShell() } catch (t: Throwable) {}
         try { executor?.shutdownNow() } catch (t: Throwable) {}
         try {
             fpsView?.let { windowManager.removeView(it) }
@@ -5920,7 +5885,6 @@ class FpsOverlayService : Service() {
         super.onDestroy()
     }
 
-    // 刷新前台包名 + 图层名
     private fun refreshLayer() {
         val now = System.currentTimeMillis()
         if (activePkg.isEmpty() || now - lastPkgRefresh > 5000L) {
@@ -6028,14 +5992,12 @@ class FpsOverlayService : Service() {
     private var idleCount = 0
 
     private fun showFps(fps: Double) {
-        // 保留一位小数：60.0 / 114.9
-        val v = (Math.round(fps * 10.0) / 10.0).coerceIn(0.0, 240.0)
+        // 整数取值，后面拼一段纯文字 ".0"（不参与计算）
+        val v = Math.round(fps).toInt().coerceIn(0, 240)
         if (v == lastShown) return
         lastShown = v
         fpsView?.post {
-            try {
-                fpsView?.text = String.format(java.util.Locale.US, "%.1f", v)
-            } catch (t: Throwable) {}
+            try { fpsView?.text = "$v.0" } catch (t: Throwable) {}
         }
     }
 }
