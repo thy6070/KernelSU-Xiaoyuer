@@ -5739,7 +5739,7 @@ class FpsOverlayService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
         executor = Executors.newSingleThreadScheduledExecutor()
-        executor?.scheduleWithFixedDelay({ tick() }, 0L, 250L, TimeUnit.MILLISECONDS)
+        executor?.scheduleWithFixedDelay({ tick() }, 0L, 150L, TimeUnit.MILLISECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -5941,7 +5941,8 @@ class FpsOverlayService : Service() {
         val end = times[times.size - 1]
         // 画面静止：最新一帧距今超过 800ms，说明没有新帧，直接归零
         if (System.nanoTime() - end > 800_000_000L) return 0.0
-        val start = end - 1_000_000_000L
+        // 600ms 窗口：比 1 秒更跟手，掉帧能更快反映出来
+        val start = end - 600_000_000L
         var n = 0
         var first = 0L
         for (k in times.indices) {
