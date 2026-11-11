@@ -5900,10 +5900,19 @@ class FpsOverlayService : Service() {
             layerName = null
             return
         }
-        // 优先 SurfaceView（游戏内容层），其次主窗口层
-        layerName = names.firstOrNull { it.contains("SurfaceView") }
-            ?: names.firstOrNull { it.contains(activePkg) }
-            ?: names.firstOrNull()
+        // 评分选层：SurfaceView > 标准窗口层；排除父层/输入层/动画层（这些没有帧数据）
+        var best: String? = null
+        var bestScore = Int.MIN_VALUE
+        for (n in names) {
+            var s = 0
+            if (n.contains("SurfaceView")) s += 100
+            if (n.startsWith(activePkg + "/")) s += 50
+            if (n.contains("ActivityRecord") || n.contains("InputSink") ||
+                n.contains("animation-leash") || n.contains("Surface(name=")) s -= 100
+            if (Regex("^[0-9]+ ").containsMatchIn(n)) s -= 100
+            if (s > bestScore) { bestScore = s; best = n }
+        }
+        layerName = best
     }
 
     // 主数据源：SurfaceFlinger present 时间戳
