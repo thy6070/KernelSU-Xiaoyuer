@@ -5732,7 +5732,7 @@ class FpsOverlayService : Service() {
     private var candidates: List<String> = emptyList()
     private var candIdx = 0
     private var failCount = 0
-    private var lastShown: Double = -1.0
+    private var lastShown: Int = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -5788,15 +5788,19 @@ class FpsOverlayService : Service() {
         try {
             val tv = TextView(this)
             tv.text = "--"
-            tv.setTextColor(android.graphics.Color.WHITE)
-            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            tv.setTextColor(android.graphics.Color.parseColor("#FFF2F2F2"))
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
-            // 黄色圆角背景（Scene 同款）
+            tv.gravity = Gravity.CENTER
+            tv.setShadowLayer(3f, 0f, 1f, android.graphics.Color.parseColor("#99000000"))
+            // 深色磨砂胶囊 + 细描边（Scene 风格）
             val bgDrawable = android.graphics.drawable.GradientDrawable()
-            bgDrawable.setColor(android.graphics.Color.parseColor("#99B8860B"))
-            bgDrawable.cornerRadius = 50f
+            bgDrawable.setColor(android.graphics.Color.parseColor("#CC16161A"))
+            bgDrawable.cornerRadius = 200f
+            bgDrawable.setStroke(2, android.graphics.Color.parseColor("#40FFFFFF"))
             tv.background = bgDrawable
-            tv.setPadding(20, 6, 20, 6)
+            tv.setPadding(22, 8, 22, 8)
+            tv.minWidth = 150
 
             val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -6024,14 +6028,11 @@ class FpsOverlayService : Service() {
     private var idleCount = 0
 
     private fun showFps(fps: Double) {
-        // 保留一位小数显示，例如 60.0 / 114.9
-        val v = (Math.round(fps * 10.0) / 10.0).coerceIn(0.0, 240.0)
+        val v = Math.round(fps).toInt().coerceIn(0, 240)
         if (v == lastShown) return
         lastShown = v
         fpsView?.post {
-            try {
-                fpsView?.text = String.format(java.util.Locale.US, "%.1f", v)
-            } catch (t: Throwable) {}
+            try { fpsView?.text = v.toString() } catch (t: Throwable) {}
         }
     }
 }
