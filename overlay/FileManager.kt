@@ -5996,35 +5996,6 @@ class FpsOverlayService : Service() {
         return (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
     }
 
-    // 兜底：高通 drm measured_fps
-    private fun readDrm(): Double? {
-        val out = sh("cat /sys/class/drm/*/measured_fps /sys/class/drm/card*/card*-sde-crtc-*/measured_fps 2>/dev/null", 2L)
-        if (out.isBlank()) return null
-        val single = out.trim().toDoubleOrNull()
-        if (single != null && single > 1.0) return single
-        return Regex("fps:\\s*([0-9]+(?:\\.[0-9]+)?)").findAll(out)
-            .mapNotNull { it.groupValues[1].toDoubleOrNull() }
-            .filter { it > 1.0 }
-            .maxOrNull()
-    }
-
-    // 兜底：MTK fpsgo
-    private fun readFpsgo(): Double? {
-        val txt = sh("cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null", 2L)
-        if (txt.isBlank()) return null
-        var fallback = 0.0
-        for (l in txt.lines()) {
-            val cols = l.split('\t').map { it.trim() }.filter { it.isNotEmpty() }
-            if (cols.size < 4) continue
-            val v = cols[3].toDoubleOrNull() ?: continue
-            if (v <= 1.0) continue
-            if (activePkg.isNotEmpty() &&
-                (l.contains(activePkg) || activePkg.endsWith(cols[2]))) return v
-            if (activePkg.isEmpty() && v > fallback) fallback = v
-        }
-        return if (fallback > 1.0) fallback else null
-    }
-
     private fun tick() {
         try {
             if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 2000L) {
@@ -6045,10 +6016,7 @@ class FpsOverlayService : Service() {
                 if (fpsRaw < 0.5) idleCount++ else idleCount = 0
                 showFps(fpsRaw)
             }
-            if (fpsRaw == null) {
-                val fb = readDrm() ?: readFpsgo()
-                if (fb != null && fb > 0.5) showFps(fb)
-            }
+
         } catch (t: Throwable) {}
         try { executor?.schedule({ tick() }, if (idleCount >= 2) 1500L else 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
