@@ -5729,6 +5729,9 @@ class FpsOverlayService : Service() {
     private var lastPkgRefresh: Long = 0L
     @Volatile private var layerName: String? = null
     private var lastLayerRefresh: Long = 0L
+    private var candidates: List<String> = emptyList()
+    private var candIdx = 0
+    private var failCount = 0
     private var lastShown: Int = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -5937,19 +5940,23 @@ class FpsOverlayService : Service() {
             layerName = null
             return
         }
-        // 评分选层：SurfaceView > 标准窗口层；排除父层/输入层/动画层（这些没有帧数据）
-        var best: String? = null
-        var bestScore = Int.MIN_VALUE
+        // 评分生成候选列表：SurfaceView 优先；黑名单（无帧的父层/输入层/动画层）直接剔除。
+        // 注意部分 ROM（小米）真实图层带 VRI- 前缀，所以用 contains 而不是 startsWith。
+        val scored = ArrayList<Pair<String, Int>>()
         for (n in names) {
-            var s = 0
-            if (n.contains("SurfaceView")) s += 100
-            if (n.startsWith(activePkg + "/")) s += 50
+            var sc = 0
+            if (n.contains("SurfaceView")) sc += 100
+            if (n.contains(activePkg + "/")) sc += 50
             if (n.contains("ActivityRecord") || n.contains("InputSink") ||
-                n.contains("animation-leash") || n.contains("Surface(name=")) s -= 100
-            if (Regex("^[0-9]+ ").containsMatchIn(n)) s -= 100
-            if (s > bestScore) { bestScore = s; best = n }
+                n.contains("animation-leash") || n.contains("Surface(name=")) sc -= 100
+            if (Regex("^[0-9]+ ").containsMatchIn(n)) sc -= 100
+            if (sc >= 0) scored.add(n to sc)
         }
-        layerName = best
+        scored.sortByDescending { it.second }
+        candidates = scored.map { it.first }
+        candIdx = 0
+        failCount = 0
+        layerName = candidates.firstOrNull()
     }
 
     // 主数据源：SurfaceFlinger present 时间戳
@@ -5989,6 +5996,18 @@ class FpsOverlayService : Service() {
         return (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
     }
 
+    // 兜底：高通 drm measured_fps
+    private fun readDrm(): Double? {
+        val out = sh("cat /sys/class/drm/*/measured_fps /sys/class/drm/card*/card*-sde-crtc-*/measured_fps 2>/dev/null", 2L)
+        if (out.isBlank()) return null
+        val single = out.trim().toDoubleOrNull()
+        if (single != null && single > 1.0) return single
+        return Regex("fps:\\s*([0-9]+(?:\\.[0-9]+)?)").findAll(out)
+            .mapNotNull { it.groupValues[1].toDoubleOrNull() }
+            .filter { it > 1.0 }
+            .maxOrNull()
+    }
+
     // 兜底：MTK fpsgo
     private fun readFpsgo(): Double? {
         val txt = sh("cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null", 2L)
@@ -6012,11 +6031,23 @@ class FpsOverlayService : Service() {
                 lastLayerRefresh = System.currentTimeMillis()
                 refreshLayer()
             }
-            val fps = readSfFps() ?: readFpsgo()
-            if (fps != null) {
-                // 连续两次读到 0 视为静止，降低采集频率省电
-                if (fps < 0.5) idleCount++ else idleCount = 0
-                showFps(fps)
+            val fpsRaw = readSfFps()
+            if (fpsRaw == null) {
+                // 当前层读不到帧（空壳层），换下一个候选
+                failCount++
+                if (failCount >= 2 && candidates.size > 1) {
+                    candIdx = (candIdx + 1) % candidates.size
+                    layerName = candidates[candIdx]
+                    failCount = 0
+                }
+            } else {
+                failCount = 0
+                if (fpsRaw < 0.5) idleCount++ else idleCount = 0
+                showFps(fpsRaw)
+            }
+            if (fpsRaw == null) {
+                val fb = readDrm() ?: readFpsgo()
+                if (fb != null && fb > 0.5) showFps(fb)
             }
         } catch (t: Throwable) {}
         try { executor?.schedule({ tick() }, if (idleCount >= 2) 1500L else 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
