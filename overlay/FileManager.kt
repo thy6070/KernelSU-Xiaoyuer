@@ -1921,12 +1921,12 @@ private fun ProMaxIsland(
                     NavIcon(Icons.Outlined.AdminPanelSettings) { openNav("su") }
                     NavIcon(Icons.Outlined.Layers) { openNav("module") }
                     NavIcon(Icons.Outlined.Tune) {
-                        // 先真正收起（清 navTarget 让岛消失），再展开到设置
+                        // 先回 home（岛收缩回胶囊）→ 延迟 → 再切到设置
                         reopenScope.launch {
-                            navTarget = null
-                            expanded = false
-                            kotlinx.coroutines.delay(320)
                             navMode = true
+                            navTarget = "home"
+                            expanded = false
+                            kotlinx.coroutines.delay(340)
                             navTarget = "tweaks"
                             expanded = true
                         }
