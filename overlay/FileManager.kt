@@ -5708,40 +5708,38 @@ private val perfGameScript = listOf(
 )
 
 /**
- * 悬浮窗帧率显示（类似 Scene 的 FPS 悬浮窗）
+ * 帧率悬浮窗（对标 Scene 的 FPS 悬浮窗）
  *
- * 实现方式：
- *   1. WindowManager 加一个 TYPE_APPLICATION_OVERLAY 的 TextView
- *   2. 定时（1s）用 root 执行 dumpsys SurfaceFlinger --latency 读帧时间
- *   3. 算 FPS 更新 TextView
+ * 数据源（按优先级）：
+ *   1. dumpsys SurfaceFlinger --latency <layer>
+ *      直接读每一帧的 present 时间戳，取最近 1 秒窗口内的帧数换算 FPS
+ *      —— 与 Scene 同源，是目前安卓上最准的实时帧率
+ *   2. /sys/kernel/fpsgo/fstb/fpsgo_status（MTK 兜底）
+ *
+ * 采样 400ms 一次；前台应用和图层名每 2 秒刷新一次。
+ * 不做档位吸附、不做慢速 EMA，显示实测值。
  */
 class FpsOverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var fpsView: TextView? = null
     private var executor: ScheduledExecutorService? = null
+
     private var activePkg: String = ""
     private var lastPkgRefresh: Long = 0L
-    private var smoothFps: Double = 0.0
+    @Volatile private var layerName: String? = null
+    private var lastLayerRefresh: Long = 0L
+    private var lastShown: Int = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        android.util.Log.e("FPSD", "onCreate ENTER")
         startForegroundCompat()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
-        android.util.Log.e("FPSD", "onCreate after addOverlay")
-        startDaemon()
-        android.util.Log.e("FPSD", "onCreate before startSfMonitor")
-        // 注册 SurfaceFlinger FPS 监听（真实帧率）
-        try { startSfMonitor() } catch (t: Throwable) {
-            android.util.Log.e("FPSD", "sf OUTER fail: " + (t.message ?: t.javaClass.simpleName))
-        }
-        android.util.Log.e("FPSD", "onCreate after startSfMonitor")
         executor = Executors.newSingleThreadScheduledExecutor()
-        executor?.scheduleAtFixedRate({ tickFps() }, 0, 50, TimeUnit.MILLISECONDS)
+        executor?.scheduleWithFixedDelay({ tick() }, 0L, 400L, TimeUnit.MILLISECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -5756,7 +5754,6 @@ class FpsOverlayService : Service() {
     }
 
     override fun onDestroy() {
-        try { stopSfMonitor() } catch (t: Throwable) {}
         try { executor?.shutdownNow() } catch (t: Throwable) {}
         try {
             fpsView?.let { windowManager.removeView(it) }
@@ -5774,7 +5771,6 @@ class FpsOverlayService : Service() {
                 )
                 (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                     .createNotificationChannel(ch)
-                // 关闭广播（通知栏开关）
                 val closeIntent = android.content.Intent(this, FpsOverlayService::class.java)
                 closeIntent.action = "com.tencent.THY.FPS_CLOSE"
                 val pi = android.app.PendingIntent.getService(
@@ -5803,8 +5799,8 @@ class FpsOverlayService : Service() {
             tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
             // 黄色圆角背景（Scene 同款）
             val bgDrawable = android.graphics.drawable.GradientDrawable()
-            bgDrawable.setColor(android.graphics.Color.parseColor("#99B8860B"))   // 暗黄 + 高透明
-            bgDrawable.cornerRadius = 50f   // 药丸形状
+            bgDrawable.setColor(android.graphics.Color.parseColor("#99B8860B"))
+            bgDrawable.cornerRadius = 50f
             tv.background = bgDrawable
             tv.setPadding(20, 6, 20, 6)
 
@@ -5850,357 +5846,134 @@ class FpsOverlayService : Service() {
             windowManager.addView(tv, lp)
             fpsView = tv
         } catch (t: Throwable) {
+            android.util.Log.e("FPSD", "addOverlay fail: " + t)
             stopSelf()
         }
     }
 
-    // 启动 root daemon：持续把帧时间写到 /data/local/tmp/fps_live
-    // 重启 daemon（避免卡死）
-    private fun restartDaemon() {
-        try {
-            val kill = "for p in \$(ps -A -o PID,ARGS 2>/dev/null | grep 'fps_live' | grep -v grep | awk '{print \$1}'); do kill -9 \$p 2>/dev/null; done"
-            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", kill)).waitFor()
-            startDaemon()
-        } catch (t: Throwable) {}
-    }
-
-    private fun startDaemon() {
-        try {
-            // 深度优化：用 shell 内置 read 读文件（不 fork cat），支持 0.01s 高频
-            val cmd = "F=/data/local/tmp/fps_live; " +
-                "while true; do " +
-                "TMP=\$F.tmp; : > \$TMP; " +
-                "while IFS= read -r line; do printf '%s\\n' \"\$line\" >> \$TMP; done < /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
-                "for f in /sys/class/drm/*/measured_fps /sys/class/drm/card*/card*-sde-crtc-*/measured_fps; do " +
-                "[ -r \"\$f\" ] || continue; " +
-                "while IFS= read -r line; do printf '%s\\n' \"\$line\" >> \$TMP; done < \"\$f\" 2>/dev/null; done; " +
-                "mv \$TMP \$F; chmod 644 \$F; sleep 0.05; done"
-            Runtime.getRuntime().exec(arrayOf(
-                suBin(), "--mount-master", "-c", cmd
-            ))
-        } catch (t: Throwable) {}
-    }
-
-    // 记录上次 fps_live 的修改时间，用于检测 daemon 卡死
-    private var lastLiveMtime = 0L
-
-    // 读一次 FPS
-    private fun tickFps() {
-        // daemon 自愈：fps_live 超过 3 秒没更新就重启 daemon
-        try {
-            val live = File("/data/local/tmp/fps_live")
-            val m = live.lastModified()
-            if (m > 0L) {
-                if (m == lastLiveMtime) {
-                    val idle = System.currentTimeMillis() - m
-                    if (idle > 3000L) {
-                        android.util.Log.e("FPSD", "daemon stalled " + idle + "ms, restart")
-                        lastLiveMtime = 0L
-                        restartDaemon()
-                    }
-                } else {
-                    lastLiveMtime = m
-                }
-            }
-        } catch (t: Throwable) {}
-        try {
-            val raw = readFps()
-            if (raw != null && raw > 0) {
-                // EMA 平滑（防跳）
-                smoothFps = if (smoothFps <= 0.0) raw else smoothFps * 0.75 + raw * 0.25
-                // 吸附到常见帧率档位（±2 内），避免 58/59/61 乱跳
-                var shown = Math.round(smoothFps).toInt()
-                for (tier in intArrayOf(24, 30, 45, 60, 90, 120, 144, 165)) {
-                    if (Math.abs(shown - tier) <= 2) { shown = tier; break }
-                }
-                val finalShown = shown
-                fpsView?.post {
-                    try {
-                        fpsView?.text = finalShown.toString()
-                    } catch (t: Throwable) {}
-                }
-            }
-        } catch (t: Throwable) {}
-    }
-
-    // ===== SurfaceFlinger FPS 监听（真实帧率，同 Scene）=====
-    private var sfBinder: android.os.IBinder? = null
-    private var sfListener: android.os.IBinder? = null
-    @Volatile private var sfFps: Float = 0f
-    @Volatile private var sfOk: Boolean = false
-
-    private fun getForegroundTaskId(): Int {
+    // 执行一条 root 命令（带超时，避免 su 卡死拖住采集线程）
+    private fun sh(cmd: String, timeoutSec: Long = 2L): String {
         return try {
-            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity"))
-            val out = pr.inputStream.bufferedReader().readText()
-            pr.waitFor()
-            val m = Regex("\\bt(\\d+)\\}").find(out)
-            m?.groupValues?.get(1)?.toIntOrNull() ?: -1
-        } catch (t: Throwable) { -1 }
-    }
-
-    private fun startSfMonitor() {
-        try {
-            // 解除 hidden API 限制（ServiceManager 是 @hide）
-            try {
-                org.lsposed.hiddenapibypass.HiddenApiBypass.addHiddenApiExemptions(
-                    "Landroid/os/ServiceManager;",
-                    "Landroid/os/ServiceManager\$ServiceNotFoundException;",
-                    "Landroid/os/IBinder;",
-                    "Landroid/os/Parcel;"
-                )
-                android.util.Log.e("FPSD", "hidden api exempted")
-            } catch (t: Throwable) {
-                android.util.Log.e("FPSD", "hidden api exempt fail: " + t)
-            }
-            val sm = Class.forName("android.os.ServiceManager")
-            android.util.Log.e("FPSD", "step1 sm class ok")
-            val gm = sm.getMethod("getService", String::class.java)
-            android.util.Log.e("FPSD", "step2 getMethod ok")
-            val raw = gm.invoke(null, "SurfaceFlingerAIDL")
-            android.util.Log.e("FPSD", "step3 invoke ok, raw=" + (raw?.javaClass?.name ?: "null"))
-            val sf = raw as? android.os.IBinder
-            if (sf == null) {
-                android.util.Log.e("FPSD", "sf binder null")
-                return
-            }
-            android.util.Log.e("FPSD", "step4 binder ok")
-            sfBinder = sf
-            val listener = object : android.os.Binder() {
-                override fun onTransact(code: Int, data: android.os.Parcel, reply: android.os.Parcel?, flags: Int): Boolean {
-                    return try {
-                        if (code == 1) {  // onFpsReported(float)
-                            data.enforceInterface("android.gui.IFpsListener")
-                            val v = data.readFloat()
-                            sfFps = v
-                            sfOk = true
-                            android.util.Log.e("FPSD", "sf onFpsReported=" + v)
-                            true
-                        } else super.onTransact(code, data, reply, flags)
-                    } catch (t: Throwable) { false }
-                }
-            }
-            sfListener = listener
-            val taskId = getForegroundTaskId()
-            android.util.Log.e("FPSD", "step5 taskId=" + taskId)
-            val d = android.os.Parcel.obtain()
-            val r = android.os.Parcel.obtain()
-            try {
-                d.writeInterfaceToken("android.gui.ISurfaceComposer")
-                android.util.Log.e("FPSD", "step6 token ok")
-                d.writeInt(taskId)
-                d.writeStrongBinder(listener)
-                android.util.Log.e("FPSD", "step7 parcel ok alive=" + sf.isBinderAlive +
-                    " size=" + d.dataSize() + " desc=" + sf.interfaceDescriptor)
-                var ok = false
-                try {
-                    ok = sf.transact(35, d, r, 0)
-                } catch (e: Throwable) {
-                    android.util.Log.e("FPSD", "transact EX: " + e + " | " + e.stackTrace.take(3).joinToString(" <- "))
-                    throw e
-                }
-                val replyCode = try { r.readInt() } catch (t: Throwable) { -999 }
-                android.util.Log.e("FPSD", "addFpsListener taskId=" + taskId + " ok=" + ok + " reply=" + replyCode)
-            } finally {
-                d.recycle(); r.recycle()
-            }
-        } catch (t: Throwable) {
-            android.util.Log.e("FPSD", "sf monitor fail: " + (t.message ?: t.javaClass.simpleName))
-        }
-    }
-
-    private fun stopSfMonitor() {
-        try {
-            val sf = sfBinder ?: return
-            val l = sfListener ?: return
-            val d = android.os.Parcel.obtain()
-            val r = android.os.Parcel.obtain()
-            try {
-                d.writeInterfaceToken("android.gui.ISurfaceComposer")
-                d.writeStrongBinder(l)
-                sf.transact(36, d, r, 0)  // removeFpsListener
-            } finally { d.recycle(); r.recycle() }
-            sfBinder = null; sfListener = null; sfOk = false
-        } catch (t: Throwable) {}
-    }
-
-    // 读帧率：fpsgo → gfxinfo → dumpsys
-    private fun readFps(): Double? {
-        // 优先：SurfaceFlinger FPS 监听（真实帧率）
-        if (sfOk && sfFps > 0f) return sfFps.toDouble()
-        android.util.Log.e("FPSD", "readFps start")
-        // 1) 先直接读 fpsgo（免 root、零开销）
-        sysfsFps()?.let { if (it > 1.0) return it }
-        // 2) 兜底：刷新前台包名后 gfxinfo
-        try { refreshActivePkg() } catch (t: Throwable) {}
-        gfxinfoFps()?.let { if (it > 1.0) return it }
-        // 3) dumpsys（Android 12 以下有效）
-        return try {
-            val f = File("/data/local/tmp/fps_live")
-            if (!f.exists() || f.length() == 0L) return null
-            parseFps(f.readText())
-        } catch (t: Throwable) {
-            null
-        }
-    }
-
-    // 刷新当前前台包名
-    private fun refreshActivePkg() {
-        try {
-            // 用 ProcessBuilder + 超时，避免 su 卡死阻塞采集线程
-            val pb = ProcessBuilder(suBin(), "--mount-master", "-c",
-                "dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity")
+            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
             pb.redirectErrorStream(true)
             val pr = pb.start()
-            val out = StringBuilder()
+            val sb = StringBuilder()
             val th = Thread {
-                try { pr.inputStream.bufferedReader().use { out.append(it.readText()) } } catch (t: Throwable) {}
+                try { sb.append(pr.inputStream.bufferedReader().readText()) } catch (e: Throwable) {}
             }
             th.isDaemon = true
             th.start()
-            val ok = pr.waitFor(3, TimeUnit.SECONDS)
-            if (!ok) {
-                try { pr.destroyForcibly() } catch (t: Throwable) {}
-                return
+            if (!pr.waitFor(timeoutSec, TimeUnit.SECONDS)) {
+                try { pr.destroyForcibly() } catch (e: Throwable) {}
+                th.join(200)
+                sb.toString()
+            } else {
+                th.join(500)
+                sb.toString()
             }
-            val m = Regex("([a-zA-Z0-9_.]+)/").find(out.toString())
+        } catch (e: Throwable) {
+            ""
+        }
+    }
+
+    // 刷新前台包名 + 图层名
+    private fun refreshLayer() {
+        val now = System.currentTimeMillis()
+        if (activePkg.isEmpty() || now - lastPkgRefresh > 5000L) {
+            lastPkgRefresh = now
+            val out = sh("dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity", 2L)
+            val m = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(out)
             if (m != null) activePkg = m.groupValues[1]
+        }
+        if (activePkg.isEmpty()) {
+            layerName = null
+            return
+        }
+        val out = sh("dumpsys SurfaceFlinger --list 2>/dev/null | grep -F '$activePkg'", 3L)
+        val names = ArrayList<String>()
+        for (l in out.lines()) {
+            val i = l.indexOf('{')
+            val j = l.indexOf(" parentId=")
+            if (i >= 0 && j > i) names.add(l.substring(i + 1, j).trim())
+        }
+        if (names.isEmpty()) {
+            layerName = null
+            return
+        }
+        // 优先 SurfaceView（游戏内容层），其次主窗口层
+        layerName = names.firstOrNull { it.contains("SurfaceView") }
+            ?: names.firstOrNull { it.contains(activePkg) }
+            ?: names.firstOrNull()
+    }
+
+    // 主数据源：SurfaceFlinger present 时间戳
+    private fun readSfFps(): Double? {
+        val name = layerName ?: return null
+        val out = sh("dumpsys SurfaceFlinger --latency '$name' 2>/dev/null", 3L)
+        if (out.isBlank()) return null
+        val lines = out.lines()
+        if (lines.size < 6) return null
+        val times = ArrayList<Long>(lines.size)
+        for (k in 1 until lines.size) {
+            val line = lines[k]
+            if (line.isBlank()) continue
+            val parts = line.split('\t')
+            if (parts.size < 2) continue
+            val v = parts[1].trim().toLongOrNull() ?: continue
+            // 过滤空槽位（Long.MAX_VALUE）和未呈现的帧
+            if (v <= 0L || v == Long.MAX_VALUE) continue
+            times.add(v)
+        }
+        if (times.size < 3) return null
+        times.sort()
+        val end = times[times.size - 1]
+        val start = end - 1_000_000_000L
+        var n = 0
+        var first = 0L
+        for (k in times.indices) {
+            if (times[k] >= start) {
+                if (n == 0) first = times[k]
+                n++
+            }
+        }
+        if (n < 2 || end <= first) return null
+        return (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
+    }
+
+    // 兜底：MTK fpsgo
+    private fun readFpsgo(): Double? {
+        val txt = sh("cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null", 2L)
+        if (txt.isBlank()) return null
+        var fallback = 0.0
+        for (l in txt.lines()) {
+            val cols = l.split('\t').map { it.trim() }.filter { it.isNotEmpty() }
+            if (cols.size < 4) continue
+            val v = cols[3].toDoubleOrNull() ?: continue
+            if (v <= 1.0) continue
+            if (activePkg.isNotEmpty() &&
+                (l.contains(activePkg) || activePkg.endsWith(cols[2]))) return v
+            if (v > fallback) fallback = v
+        }
+        return if (fallback > 1.0) fallback else null
+    }
+
+    private fun tick() {
+        try {
+            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 2000L) {
+                lastLayerRefresh = System.currentTimeMillis()
+                refreshLayer()
+            }
+            val fps = readSfFps() ?: readFpsgo()
+            if (fps != null && fps > 0.5) showFps(fps)
         } catch (t: Throwable) {}
     }
 
-    // gfxinfo 帧统计（应用运行时有）
-    private fun gfxinfoFps(): Double? {
-        if (activePkg.isEmpty()) return null
-        return try {
-            val pr = Runtime.getRuntime().exec(
-                arrayOf(suBin(), "--mount-master", "-c",
-                    "dumpsys gfxinfo $activePkg 2>/dev/null")
-            )
-            val out = pr.inputStream.bufferedReader().readText()
-            pr.waitFor()
-            // 解析 "Total frames rendered: N" 与 "Janky frames"
-            val total = Regex("Total frames rendered: (\\d+)").find(out)?.groupValues?.get(1)?.toIntOrNull()
-            val janky = Regex("Janky frames: (\\d+)").find(out)?.groupValues?.get(1)?.toIntOrNull()
-            if (total == null || janky == null || total <= 0) return null
-            // 简化：用总帧数估算（需要时间窗口，此处仅作兜底）
-            null
-        } catch (t: Throwable) {
-            null
+    private fun showFps(fps: Double) {
+        val v = Math.round(fps).toInt().coerceIn(1, 240)
+        if (v == lastShown) return
+        lastShown = v
+        fpsView?.post {
+            try { fpsView?.text = v.toString() } catch (t: Throwable) {}
         }
-    }
-
-    // 帧率通道（读 daemon 写的文件，不调 su）
-    private fun sysfsFps(): Double? {
-        // daemon 已经把 fpsgo 内容写到 fps_live，直接解析表格
-        val live = File("/data/local/tmp/fps_live")
-        val text = try { live.readText().trim() } catch (t: Throwable) { "" }
-        if (text.isEmpty()) {
-            android.util.Log.e("FPSD", "live empty")
-            return null
-        }
-        // 兼容高通：measured_fps 格式可能是
-        //   纯数字 60.0
-        //   或 "fps: 104.5 duration:1000000 frame_count:106"
-        val single = text.toDoubleOrNull()
-        if (single != null && single > 1.0) {
-            android.util.Log.e("FPSD", "measured_fps=" + single)
-            return single
-        }
-        // 多个 crtc：取所有 fps: 里的最大值（哪个屏幕在刷新就用哪个）
-        val maxFps = Regex("fps:\\s*([0-9]+(?:\\.[0-9]+)?)").findAll(text)
-            .mapNotNull { it.groupValues[1].toDoubleOrNull() }
-            .filter { it > 1.0 }
-            .maxOrNull()
-        if (maxFps != null) {
-            android.util.Log.e("FPSD", "measured_fps=" + maxFps)
-            return maxFps
-        }
-        // 天玑 fpsgo 表格：优先匹配前台包名那一行（最准）；没有则取最大值
-        val now = System.currentTimeMillis()
-        if (now - lastPkgRefresh > 5000) {
-            lastPkgRefresh = now
-            try { refreshActivePkg() } catch (t: Throwable) {}
-        }
-        var best = 0.0
-        val matchedValues = mutableListOf<Double>()
-        for (l in text.lines()) {
-            val cols = l.split(Regex("[\\t ]+")).filter { it.isNotBlank() }
-            if (cols.size >= 4) {
-                val v = cols[3].toDoubleOrNull() ?: continue
-                if (v > best) best = v
-                // fpsgo 的进程名会截断（如 essmobile.shell），用后缀模糊匹配
-                val nameCol = cols.getOrNull(2) ?: ""
-                val isMatch = activePkg.isNotEmpty() && (
-                        l.contains(activePkg) ||
-                        nameCol.isNotEmpty() && (activePkg.endsWith(nameCol) || nameCol.endsWith(activePkg))
-                        )
-                if (isMatch) matchedValues.add(v)
-            }
-        }
-        // 严格取前台游戏那一行的值（如果有多个，取中位数）
-        val matched = if (matchedValues.isNotEmpty()) {
-            matchedValues.sorted()[matchedValues.size / 2]
-        } else 0.0
-        android.util.Log.e("FPSD", "fpsgo pkg=" + activePkg + " matched=" + matched + " best=" + best)
-        // 优先前台匹配值；匹配不到回退到最大值（避免退出 App 后卡住）
-        return when {
-            matched > 1.0 -> matched
-            best > 1.0 -> best
-            else -> null
-        }
-    }
-
-    // 找当前层的名称（简化：从 dumpsys SurfaceFlinger 取第一个可见层）
-    private fun findActiveLayer(): String? {
-        return try {
-            val pr = Runtime.getRuntime().exec(
-                arrayOf(suBin(), "--mount-master", "-c",
-                    "dumpsys SurfaceFlinger --list 2>/dev/null")
-            )
-            val out = pr.inputStream.bufferedReader().readLines()
-            pr.waitFor()
-            // 优先 SurfaceView / 全屏层
-            out.firstOrNull { it.contains("SurfaceView") }
-                ?: out.firstOrNull { it.isNotBlank() }
-        } catch (t: Throwable) {
-            null
-        }
-    }
-
-    // 解析 dumpsys 输出（Scene 同款算法）：
-    //  - 取最近 1 秒内的帧（present time）
-    //  - 剔除异常帧（帧时间 > 100ms 的 jank）
-    //  - FPS = 帧数 / 时间跨度，并做中位数平滑
-    private fun parseFps(dump: String): Double? {
-        val lines = dump.lines().filter { it.isNotBlank() }
-        if (lines.size < 2) return null
-        val nowNs = System.nanoTime()
-        val windowStart = nowNs - 1_000_000_000L   // 最近 1 秒
-        val times = mutableListOf<Long>()
-        for (i in 1 until lines.size) {
-            val parts = lines[i].trim().split('\t', ' ')
-            if (parts.size >= 2) {
-                val t = parts[1].toLongOrNull() ?: continue
-                if (t > 0) times.add(t)
-            }
-        }
-        if (times.size < 2) return null
-        // 只保留最近 1 秒的帧
-        val recent = times.filter { it >= windowStart }.ifEmpty { times.takeLast(64) }
-        if (recent.size < 2) return null
-        // 剔除异常帧（帧时间 > 100ms 的卡顿帧，避免拉低平均）
-        val spans = mutableListOf<Long>()
-        for (i in 1 until recent.size) {
-            val dt = recent[i] - recent[i - 1]
-            if (dt in 1..100_000_000L) spans.add(dt)
-        }
-        if (spans.isEmpty()) return null
-        spans.sort()
-        // 中位数帧时间（抗毛刺）
-        val median = spans[spans.size / 2]
-        if (median <= 0) return null
-        val fps = 1_000_000_000.0 / median.toDouble()
-        return fps.coerceIn(1.0, 240.0)
     }
 }
