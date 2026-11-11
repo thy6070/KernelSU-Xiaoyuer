@@ -5983,6 +5983,8 @@ class FpsOverlayService : Service() {
             if (Regex("^[0-9a-fA-F]+ ").containsMatchIn(n)) continue
             var sc = 0
             if (n.contains("SurfaceView")) sc += 100
+            // 游戏真正出帧的是带 (BLAST) 后缀的那个 SurfaceView 层
+            if (n.contains("(BLAST)")) sc += 60
             if (activePkg.isNotEmpty() && n.contains(activePkg)) sc += 50
             scored.add(n to sc)
         }
