@@ -1027,11 +1027,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             Text(
                                 text = item,
                                 fontSize = 15.sp,
-                                color = if (isRestore) Color(0xFFFF3B30) else Color.White,
+                                color = if (isRestore) Color(0xFF0A84FF) else Color.White,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = if (isRestore) TextAlign.Center else TextAlign.Start,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.fillMaxWidth().weight(1f)
                             )
                         }
                         if (i < pickList.size - 1) {
@@ -3511,26 +3511,36 @@ private fun ModeButton(
             }
         }
         if (title == "放开通行") {
-            // 检测自己的文件是否存在（存在=开，不存在=关）
+            // 标记文件：/data/adb/xy_open_access.on
             val exists = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "[ -f /data/adb/service.d/xy_open_access.sh ] && echo 1 || echo 0"))
+                        "[ -f /data/adb/xy_open_access.on ] && echo 1 || echo 0"))
                     val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
                     o == "1"
                 } catch (t: Throwable) { false }
             }
-            if (on && exists) {
-                // 关闭：删文件
+            if (on && !exists) {
+                // 开启：执行一次解除隐藏/启用（不循环）
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
                     runCatching {
                         Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "rm -f /data/adb/service.d/xy_open_access.sh")).waitFor()
+                            "pm list packages 2>/dev/null | sed 's/^package://' | while read pk; do pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done; " +
+                            "mkdir -p /data/adb; echo \"$(date)\" > /data/adb/xy_open_access.on; chmod 644 /data/adb/xy_open_access.on; echo done")).waitFor()
+                    }
+                }
+                latencyMsg = "已放开（执行一次）"
+            } else if (on && exists) {
+                latencyMsg = "已放开"
+            } else if (!on && exists) {
+                // 关闭：删标记（已生效的解除不回滚）
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                            "rm -f /data/adb/xy_open_access.on")).waitFor()
                     }
                 }
                 latencyMsg = "已关闭"
-            } else if (on && !exists) {
-                latencyMsg = "放开通行未部署"
             } else {
                 latencyMsg = "已关闭"
             }
