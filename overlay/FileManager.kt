@@ -1921,10 +1921,15 @@ private fun ProMaxIsland(
                     NavIcon(Icons.Outlined.AdminPanelSettings) { openNav("su") }
                     NavIcon(Icons.Outlined.Layers) { openNav("module") }
                     NavIcon(Icons.Outlined.Tune) {
-                        // 先收起再展开（和之前可用版本一致）
-                        foldAndReopen()
-                        navMode = true
-                        navTarget = "tweaks"
+                        // 先真正收起（清 navTarget 让岛消失），再展开到设置
+                        reopenScope.launch {
+                            navTarget = null
+                            expanded = false
+                            kotlinx.coroutines.delay(320)
+                            navMode = true
+                            navTarget = "tweaks"
+                            expanded = true
+                        }
                     }
                 }
             }
