@@ -223,13 +223,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
     // App 启动时：如果之前开着帧率，自动拉起 Service（避免重启后消失）
+    val autoFpsCtx = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(Unit) {
         try {
-            val sp = navCtx0.getSharedPreferences("settings", 0)
+            val sp = autoFpsCtx.getSharedPreferences("settings", 0)
             if (sp.getBoolean("fps_show", false) &&
-                android.provider.Settings.canDrawOverlays(navCtx0)) {
-                navCtx0.startForegroundService(
-                    android.content.Intent(navCtx0, FpsOverlayService::class.java)
+                android.provider.Settings.canDrawOverlays(autoFpsCtx)) {
+                autoFpsCtx.startForegroundService(
+                    android.content.Intent(autoFpsCtx, FpsOverlayService::class.java)
                 )
             }
         } catch (t: Throwable) {}
