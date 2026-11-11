@@ -1656,8 +1656,9 @@ private fun ProMaxIsland(
         reopenScope.launch {
             // 打开导航/步骤面板前先收起终端，避免重叠
             onTermClose()
+            navTarget = null           // 先清空旧界面，避免收起时闪旧内容
             navClosing = true
-            kotlinx.coroutines.delay(150)
+            kotlinx.coroutines.delay(320)   // 收起动画 260ms，留余量
             navMode = true
             navTarget = target
             navClosing = false
