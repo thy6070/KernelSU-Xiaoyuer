@@ -5753,15 +5753,6 @@ class FpsOverlayService : Service() {
         return START_STICKY
     }
 
-    override fun onDestroy() {
-        try { executor?.shutdownNow() } catch (t: Throwable) {}
-        try {
-            fpsView?.let { windowManager.removeView(it) }
-        } catch (t: Throwable) {}
-        fpsView = null
-        super.onDestroy()
-    }
-
     // 前台通知（Android 8+ 必须）
     private fun startForegroundCompat() {
         try {
@@ -5854,29 +5845,72 @@ class FpsOverlayService : Service() {
         }
     }
 
-    // 执行一条 root 命令（带超时，避免 su 卡死拖住采集线程）
-    private fun sh(cmd: String, timeoutSec: Long = 2L): String {
+    // 常驻 root shell：只启动一次 su，之后复用连接，省掉每次 fork 的开销
+    private var shellProc: Process? = null
+    private var shellWriter: java.io.BufferedWriter? = null
+    private var shellReader: java.io.BufferedReader? = null
+
+    private fun ensureShell(): Boolean {
+        val p = shellProc
+        if (p != null && p.isAlive && shellWriter != null && shellReader != null) return true
         return try {
-            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
+            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", "sh")
             pb.redirectErrorStream(true)
-            val pr = pb.start()
+            val np = pb.start()
+            shellProc = np
+            shellWriter = np.outputStream.bufferedWriter()
+            shellReader = np.inputStream.bufferedReader()
+            true
+        } catch (t: Throwable) {
+            closeShell()
+            false
+        }
+    }
+
+    private fun closeShell() {
+        try { shellWriter?.close() } catch (t: Throwable) {}
+        try { shellReader?.close() } catch (t: Throwable) {}
+        try { shellProc?.destroy() } catch (t: Throwable) {}
+        shellWriter = null
+        shellReader = null
+        shellProc = null
+    }
+
+    @Synchronized
+    private fun sh(cmd: String, timeoutSec: Long = 2L): String {
+        if (!ensureShell()) return ""
+        val w = shellWriter ?: return ""
+        val r = shellReader ?: return ""
+        val deadline = System.currentTimeMillis() + timeoutSec * 1000L
+        return try {
+            w.write(cmd)
+            w.write("; echo __DSH_END__\n")
+            w.flush()
             val sb = StringBuilder()
-            val th = Thread {
-                try { sb.append(pr.inputStream.bufferedReader().readText()) } catch (e: Throwable) {}
+            while (System.currentTimeMillis() < deadline) {
+                if (r.ready()) {
+                    val line = r.readLine() ?: break
+                    if (line == "__DSH_END__") break
+                    sb.append(line).append('\n')
+                } else {
+                    Thread.sleep(4)
+                }
             }
-            th.isDaemon = true
-            th.start()
-            if (!pr.waitFor(timeoutSec, TimeUnit.SECONDS)) {
-                try { pr.destroyForcibly() } catch (e: Throwable) {}
-                th.join(200)
-                sb.toString()
-            } else {
-                th.join(500)
-                sb.toString()
-            }
-        } catch (e: Throwable) {
+            sb.toString()
+        } catch (t: Throwable) {
+            closeShell()
             ""
         }
+    }
+
+    override fun onDestroy() {
+        try { closeShell() } catch (t: Throwable) {}
+        try { executor?.shutdownNow() } catch (t: Throwable) {}
+        try {
+            fpsView?.let { windowManager.removeView(it) }
+        } catch (t: Throwable) {}
+        fpsView = null
+        super.onDestroy()
     }
 
     // 刷新前台包名 + 图层名
