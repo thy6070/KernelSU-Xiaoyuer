@@ -5991,8 +5991,15 @@ class FpsOverlayService : Service() {
                 android.util.Log.e("FPSD", "step6 token ok")
                 d.writeInt(taskId)
                 d.writeStrongBinder(listener)
-                android.util.Log.e("FPSD", "step7 parcel ok")
-                val ok = sf.transact(35, d, r, 0)
+                android.util.Log.e("FPSD", "step7 parcel ok alive=" + sf.isBinderAlive +
+                    " size=" + d.dataSize() + " desc=" + sf.interfaceDescriptor)
+                var ok = false
+                try {
+                    ok = sf.transact(35, d, r, 0)
+                } catch (e: Throwable) {
+                    android.util.Log.e("FPSD", "transact EX: " + e + " | " + e.stackTrace.take(3).joinToString(" <- "))
+                    throw e
+                }
                 val replyCode = try { r.readInt() } catch (t: Throwable) { -999 }
                 android.util.Log.e("FPSD", "addFpsListener taskId=" + taskId + " ok=" + ok + " reply=" + replyCode)
             } finally {
