@@ -5797,7 +5797,7 @@ class FpsOverlayService : Service() {
             val bgDrawable = android.graphics.drawable.GradientDrawable()
             bgDrawable.setColor(android.graphics.Color.parseColor("#F2FFFFFF"))
             bgDrawable.cornerRadius = 200f
-            bgDrawable.setStroke(3, android.graphics.Color.parseColor("#B8B8B8"))
+            bgDrawable.setStroke(3, android.graphics.Color.parseColor("#000000"))
             tv.background = bgDrawable
             tv.setPadding(22, 8, 22, 8)
             tv.minWidth = 150
@@ -5878,6 +5878,7 @@ class FpsOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        try { stopDaemon() } catch (t: Throwable) {}
         try { executor?.shutdownNow() } catch (t: Throwable) {}
         try {
             fpsView?.let { windowManager.removeView(it) }
@@ -5887,6 +5888,74 @@ class FpsOverlayService : Service() {
     }
 
     // 刷新候选图层，并实测挑出真正在出帧的那一层
+    // ===== root 采集守护：只启动一次，循环采样写文件，App 侧零 su 开销 =====
+    private var daemonLayer: String? = null
+
+    private fun stopDaemon() {
+        try {
+            val d = filesDir.absolutePath
+            sh("D=${d}; [ -f \$D/fps_pid ] && kill \$(cat \$D/fps_pid) 2>/dev/null; rm -f \$D/fps_pid", 3L)
+        } catch (t: Throwable) {}
+        daemonLayer = null
+    }
+
+    private fun startDaemon(layer: String) {
+        if (layer == daemonLayer) return
+        stopDaemon()
+        val d = filesDir.absolutePath
+        val cmd = "D=${d}; L='" + layer + "'; " +
+            "( while true; do " +
+            "dumpsys SurfaceFlinger --latency \"\$L\" 2>/dev/null > \$D/fps_raw.tmp; " +
+            "mv \$D/fps_raw.tmp \$D/fps_raw; chmod 644 \$D/fps_raw; " +
+            "sleep 0.8; " +
+            "done ) & echo \$! > \$D/fps_pid; chmod 644 \$D/fps_pid"
+        sh(cmd, 3L)
+        daemonLayer = layer
+    }
+
+    // 读 daemon 写下的最新数据并解析（零 su 开销）
+    private fun readDaemonFps(): Double? {
+        return try {
+            val f = File(filesDir, "fps_raw")
+            if (!f.exists() || f.length() == 0L) return null
+            parseLatencyText(f.readText())
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
+    // 解析 --latency 文本：600ms 窗口内的实际呈现帧率；画面静止返回 0
+    private fun parseLatencyText(out: String): Double? {
+        if (out.isBlank()) return null
+        val lines = out.lines()
+        if (lines.size < 3) return null
+        val times = ArrayList<Long>(lines.size)
+        for (k in 1 until lines.size) {
+            val line = lines[k]
+            if (line.isBlank()) continue
+            val parts = line.split('\t')
+            if (parts.size < 2) continue
+            val v = parts[1].trim().toLongOrNull() ?: continue
+            if (v <= 0L || v == Long.MAX_VALUE) continue
+            times.add(v)
+        }
+        if (times.size < 3) return null
+        times.sort()
+        val end = times[times.size - 1]
+        if (System.nanoTime() - end > 800_000_000L) return 0.0
+        val start = end - 600_000_000L
+        var n = 0
+        var first = 0L
+        for (k in times.indices) {
+            if (times[k] >= start) {
+                if (n == 0) first = times[k]
+                n++
+            }
+        }
+        if (n < 2 || end <= first) return 0.0
+        return (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
+    }
+
     private fun refreshLayer() {
         val now = System.currentTimeMillis()
         if (activePkg.isEmpty() || now - lastPkgRefresh > 5000L) {
@@ -5927,9 +5996,11 @@ class FpsOverlayService : Service() {
     private fun probeLayer(maxTry: Int): String? {
         if (candidates.size <= 1) return null
         var tried = 0
+        val deadline = System.currentTimeMillis() + 1000L
         for (n in candidates) {
             if (n == layerName) continue
             if (tried >= maxTry) break
+            if (System.currentTimeMillis() > deadline) break
             tried++
             val lat = sh("dumpsys SurfaceFlinger --latency '$n' 2>/dev/null", 3L)
             if (latestFrameAge(lat) < 800_000_000L) return n
@@ -5994,30 +6065,25 @@ class FpsOverlayService : Service() {
 
     private fun tick() {
         try {
-            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 2000L) {
+            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 5000L) {
                 lastLayerRefresh = System.currentTimeMillis()
                 refreshLayer()
+                val ln = layerName
+                if (ln != null) startDaemon(ln)
             }
-            val fpsRaw = readSfFps()
-            if (fpsRaw == null) {
-                // 当前层读不到帧（空壳层），换下一个候选
-                failCount++
-                if (failCount >= 2 && candidates.size > 1) {
-                    candIdx = (candIdx + 1) % candidates.size
-                    layerName = candidates[candIdx]
-                    failCount = 0
-                }
-            } else {
-                failCount = 0
+            val fpsRaw = readDaemonFps()
+            if (fpsRaw != null) {
                 if (fpsRaw < 0.5) {
                     idleCount++
-                    // 连续静止：可能选错了层，主动探测其它候选（最多 3 个）
                     if (idleCount >= 3 && System.currentTimeMillis() - lastProbe > 2000L) {
                         lastProbe = System.currentTimeMillis()
-                        val alt = probeLayer(3)
+                        val alt = probeLayer(10)
                         if (alt != null) {
                             layerName = alt
+                            startDaemon(alt)
                             idleCount = 0
+                        } else {
+                            lastProbe = System.currentTimeMillis() + 8000L
                         }
                     }
                 } else {
@@ -6025,12 +6091,9 @@ class FpsOverlayService : Service() {
                 }
                 showFps(fpsRaw)
             }
-
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 500L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
-
-    private var idleCount = 0
 
     private fun showFps(fps: Double) {
         // 整数取值，后面拼一段纯文字 ".0"（不参与计算）
