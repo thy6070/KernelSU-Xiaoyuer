@@ -5848,9 +5848,9 @@ class FpsOverlayService : Service() {
                 "while true; do " +
                 "TMP=\$F.tmp; : > \$TMP; " +
                 "while IFS= read -r line; do printf '%s\\n' \"\$line\" >> \$TMP; done < /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null; " +
-                "for f in /sys/class/drm/*/measured_fps /sys/class/drm/card*/card*-sde-crtc-0/measured_fps; do " +
+                "for f in /sys/class/drm/*/measured_fps /sys/class/drm/card*/card*-sde-crtc-*/measured_fps; do " +
                 "[ -r \"\$f\" ] || continue; " +
-                "while IFS= read -r line; do printf '%s\\n' \"\$line\" >> \$TMP; done < \"\$f\" 2>/dev/null; break; done; " +
+                "while IFS= read -r line; do printf '%s\\n' \"\$line\" >> \$TMP; done < \"\$f\" 2>/dev/null; done; " +
                 "mv \$TMP \$F; chmod 644 \$F; sleep 0.05; done"
             Runtime.getRuntime().exec(arrayOf(
                 suBin(), "--mount-master", "-c", cmd
@@ -5881,11 +5881,19 @@ class FpsOverlayService : Service() {
             }
         } catch (t: Throwable) {}
         try {
-            val fps = readFps()
-            if (fps != null && fps > 0) {
+            val raw = readFps()
+            if (raw != null && raw > 0) {
+                // EMA 平滑（防跳）
+                smoothFps = if (smoothFps <= 0.0) raw else smoothFps * 0.75 + raw * 0.25
+                // 吸附到常见帧率档位（±2 内），避免 58/59/61 乱跳
+                var shown = Math.round(smoothFps).toInt()
+                for (tier in intArrayOf(24, 30, 45, 60, 90, 120, 144, 165)) {
+                    if (Math.abs(shown - tier) <= 2) { shown = tier; break }
+                }
+                val finalShown = shown
                 fpsView?.post {
                     try {
-                        fpsView?.text = String.format("%.0f", fps)
+                        fpsView?.text = finalShown.toString()
                     } catch (t: Throwable) {}
                 }
             }
@@ -5972,13 +5980,14 @@ class FpsOverlayService : Service() {
             android.util.Log.e("FPSD", "measured_fps=" + single)
             return single
         }
-        val mFps = Regex("fps:\\s*([0-9]+(?:\\.[0-9]+)?)").find(text)
-        if (mFps != null) {
-            val v = mFps.groupValues[1].toDoubleOrNull()
-            if (v != null && v > 1.0) {
-                android.util.Log.e("FPSD", "measured_fps(fps:)=" + v)
-                return v
-            }
+        // 多个 crtc：取所有 fps: 里的最大值（哪个屏幕在刷新就用哪个）
+        val allFps = Regex("fps:\\s*([0-9]+(?:\\.[0-9]+)?)").findAll(text)
+            .mapNotNull { it.groupValues[1].toDoubleOrNull() }
+            .filter { it > 1.0 }
+        if (allFps.isNotEmpty()) {
+            val v = allFps.max()
+            android.util.Log.e("FPSD", "measured_fps(fps:)=" + v)
+            return v
         }
         // 天玑 fpsgo 表格：优先匹配前台包名那一行（最准）；没有则取最大值
         val now = System.currentTimeMillis()
