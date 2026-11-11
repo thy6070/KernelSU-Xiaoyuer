@@ -5798,7 +5798,7 @@ class FpsOverlayService : Service() {
             val bgDrawable = android.graphics.drawable.GradientDrawable()
             bgDrawable.setColor(android.graphics.Color.parseColor("#F2FFFFFF"))
             bgDrawable.cornerRadius = 200f
-            bgDrawable.setStroke(3, android.graphics.Color.parseColor("#000000"))
+            bgDrawable.setStroke(3, android.graphics.Color.parseColor("#FFC107"))
             tv.background = bgDrawable
             tv.setPadding(22, 8, 22, 8)
             tv.minWidth = 150
