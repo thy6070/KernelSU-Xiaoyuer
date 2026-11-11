@@ -6140,7 +6140,7 @@ class FpsOverlayService : Service() {
         if (v == lastShown) return
         lastShown = v
         fpsView?.post {
-            try { fpsView?.text = "$v.0" } catch (t: Throwable) {}
+            try { fpsView?.text = v.toString() } catch (t: Throwable) {}
         }
     }
 }
