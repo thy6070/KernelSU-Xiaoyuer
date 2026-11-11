@@ -5732,6 +5732,7 @@ class FpsOverlayService : Service() {
     private var candidates: List<String> = emptyList()
     private var candIdx = 0
     private var failCount = 0
+    private var lastProbe = 0L
     private var lastShown: Int = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -5885,6 +5886,7 @@ class FpsOverlayService : Service() {
         super.onDestroy()
     }
 
+    // 刷新候选图层，并实测挑出真正在出帧的那一层
     private fun refreshLayer() {
         val now = System.currentTimeMillis()
         if (activePkg.isEmpty() || now - lastPkgRefresh > 5000L) {
@@ -5893,38 +5895,64 @@ class FpsOverlayService : Service() {
             val m = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(out)
             if (m != null) activePkg = m.groupValues[1]
         }
-        if (activePkg.isEmpty()) {
-            layerName = null
-            return
-        }
-        val out = sh("dumpsys SurfaceFlinger --list 2>/dev/null | grep -F '$activePkg'", 3L)
-        val names = ArrayList<String>()
+        val out = sh("dumpsys SurfaceFlinger --list 2>/dev/null", 3L)
+        val scored = ArrayList<Pair<String, Int>>()
         for (l in out.lines()) {
             val i = l.indexOf('{')
             val j = l.indexOf(" parentId=")
-            if (i >= 0 && j > i) names.add(l.substring(i + 1, j).trim())
-        }
-        if (names.isEmpty()) {
-            layerName = null
-            return
-        }
-        // 评分生成候选列表：SurfaceView 优先；黑名单（无帧的父层/输入层/动画层）直接剔除。
-        // 注意部分 ROM（小米）真实图层带 VRI- 前缀，所以用 contains 而不是 startsWith。
-        val scored = ArrayList<Pair<String, Int>>()
-        for (n in names) {
+            if (i < 0 || j <= i) continue
+            val n = l.substring(i + 1, j).trim()
+            if (!n.contains("#")) continue
+            if (n.contains("ActivityRecord") || n.contains("InputSink") ||
+                n.contains("animation-leash") || n.contains("Surface(name=")) continue
+            if (Regex("^[0-9]+ ").containsMatchIn(n)) continue
             var sc = 0
             if (n.contains("SurfaceView")) sc += 100
-            if (n.contains(activePkg + "/")) sc += 50
-            if (n.contains("ActivityRecord") || n.contains("InputSink") ||
-                n.contains("animation-leash") || n.contains("Surface(name=")) sc -= 100
-            if (Regex("^[0-9]+ ").containsMatchIn(n)) sc -= 100
-            if (sc >= 0) scored.add(n to sc)
+            if (activePkg.isNotEmpty() && n.contains(activePkg)) sc += 50
+            scored.add(n to sc)
+        }
+        if (scored.isEmpty()) {
+            candidates = emptyList()
+            layerName = null
+            return
         }
         scored.sortByDescending { it.second }
         candidates = scored.map { it.first }
         candIdx = 0
         failCount = 0
         layerName = candidates.firstOrNull()
+    }
+
+    // 主动探测其它候选层，找出真正在出帧的那一层（只在当前层疑似静止时用）
+    private fun probeLayer(maxTry: Int): String? {
+        if (candidates.size <= 1) return null
+        var tried = 0
+        for (n in candidates) {
+            if (n == layerName) continue
+            if (tried >= maxTry) break
+            tried++
+            val lat = sh("dumpsys SurfaceFlinger --latency '$n' 2>/dev/null", 3L)
+            if (latestFrameAge(lat) < 800_000_000L) return n
+        }
+        return null
+    }
+
+    // 解析 --latency 输出里最新一帧距今多久（ns）
+    private fun latestFrameAge(out: String): Long {
+        if (out.isBlank()) return Long.MAX_VALUE
+        var maxT = 0L
+        val lines = out.lines()
+        for (k in 1 until lines.size) {
+            val line = lines[k]
+            if (line.isBlank()) continue
+            val parts = line.split('\t')
+            if (parts.size < 2) continue
+            val v = parts[1].trim().toLongOrNull() ?: continue
+            if (v <= 0L || v == Long.MAX_VALUE) continue
+            if (v > maxT) maxT = v
+        }
+        if (maxT == 0L) return Long.MAX_VALUE
+        return System.nanoTime() - maxT
     }
 
     // 主数据源：SurfaceFlinger present 时间戳
@@ -5981,12 +6009,25 @@ class FpsOverlayService : Service() {
                 }
             } else {
                 failCount = 0
-                if (fpsRaw < 0.5) idleCount++ else idleCount = 0
+                if (fpsRaw < 0.5) {
+                    idleCount++
+                    // 连续静止：可能选错了层，主动探测其它候选（最多 3 个）
+                    if (idleCount >= 3 && System.currentTimeMillis() - lastProbe > 2000L) {
+                        lastProbe = System.currentTimeMillis()
+                        val alt = probeLayer(3)
+                        if (alt != null) {
+                            layerName = alt
+                            idleCount = 0
+                        }
+                    }
+                } else {
+                    idleCount = 0
+                }
                 showFps(fpsRaw)
             }
 
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, if (idleCount >= 2) 1500L else 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     private var idleCount = 0
