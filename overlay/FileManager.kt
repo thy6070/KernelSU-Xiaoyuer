@@ -5732,7 +5732,7 @@ class FpsOverlayService : Service() {
     private var candidates: List<String> = emptyList()
     private var candIdx = 0
     private var failCount = 0
-    private var lastShown: Int = -1
+    private var lastShown: Double = -1.0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -6024,11 +6024,14 @@ class FpsOverlayService : Service() {
     private var idleCount = 0
 
     private fun showFps(fps: Double) {
-        val v = Math.round(fps).toInt().coerceIn(0, 240)
+        // 保留一位小数显示，例如 60.0 / 114.9
+        val v = (Math.round(fps * 10.0) / 10.0).coerceIn(0.0, 240.0)
         if (v == lastShown) return
         lastShown = v
         fpsView?.post {
-            try { fpsView?.text = v.toString() } catch (t: Throwable) {}
+            try {
+                fpsView?.text = String.format(java.util.Locale.US, "%.1f", v)
+            } catch (t: Throwable) {}
         }
     }
 }
