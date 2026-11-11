@@ -5739,7 +5739,7 @@ class FpsOverlayService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
         executor = Executors.newSingleThreadScheduledExecutor()
-        executor?.scheduleWithFixedDelay({ tick() }, 0L, 150L, TimeUnit.MILLISECONDS)
+        executor?.schedule({ tick() }, 0L, TimeUnit.MILLISECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -5979,9 +5979,16 @@ class FpsOverlayService : Service() {
                 refreshLayer()
             }
             val fps = readSfFps() ?: readFpsgo()
-            if (fps != null) showFps(fps)
+            if (fps != null) {
+                // 连续两次读到 0 视为静止，降低采集频率省电
+                if (fps < 0.5) idleCount++ else idleCount = 0
+                showFps(fps)
+            }
         } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, if (idleCount >= 2) 1500L else 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
+
+    private var idleCount = 0
 
     private fun showFps(fps: Double) {
         val v = Math.round(fps).toInt().coerceIn(0, 240)
