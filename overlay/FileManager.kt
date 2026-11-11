@@ -1009,6 +1009,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     uiPickerIcons = null
                                 }
                                 .padding(vertical = 11.dp, horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.Start,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val isRestore = item == "恢复原样"
