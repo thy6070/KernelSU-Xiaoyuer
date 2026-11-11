@@ -5920,10 +5920,22 @@ class FpsOverlayService : Service() {
     }
 
     // 读 daemon 写下的最新数据并解析（零 su 开销）
+    private var lastRawMtime = 0L
+    private var lastRawChange = 0L
+
     private fun readDaemonFps(): Double? {
         return try {
             val f = File(filesDir, "fps_raw")
             if (!f.exists() || f.length() == 0L) return null
+            val mt = f.lastModified()
+            val now = System.currentTimeMillis()
+            if (mt != lastRawMtime) {
+                lastRawMtime = mt
+                lastRawChange = now
+            } else if (now - lastRawChange > 3000L) {
+                // 3 秒没更新：daemon 可能已死（脚本被删/层失效），交给上层自愈
+                return null
+            }
             parseLatencyText(f.readText())
         } catch (t: Throwable) {
             null
