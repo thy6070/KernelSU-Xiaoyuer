@@ -4,11 +4,13 @@
 #include <android/binder_ibinder.h>
 #include <android/binder_parcel.h>
 #include <android/binder_status.h>
-#include <android/binder_manager.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+// NDK 无 binder_manager.h：手动声明
+__attribute__((weak)) AIBinder* AServiceManager_getService(const char* instance);
 
 int main(int argc, char **argv) {
     if (argc < 2) {
