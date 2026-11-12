@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     fprintf(stderr, "parcel ok\n");
+    binder_status_t st;
 
     // AOSP BpSurfaceComposer::dump:
     //   writeInterfaceToken; writeInt32(1); writeFileDescriptor(fd);
