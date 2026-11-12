@@ -166,8 +166,34 @@ jobs:
           }
           MIRROR
 
+      - uses: nttld/setup-ndk@v1
+        id: ndk2
+        with:
+          ndk-version: r29
+
+      - name: Build fpsbinder (direct binder SurfaceFlinger)
+        run: |
+          CC="${{ steps.ndk2.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          "$CC" -O2 -w native/fpsbinder.c -o fpsbinder 2>&1 | tail -20
+          ls -lh fpsbinder
+          mkdir -p src/manager/app/src/main/assets
+          cp fpsbinder src/manager/app/src/main/assets/fpsbinder
+
+      - name: Build fpsbind (native proc-connector binder)
+        run: |
+          CC="${{ steps.ndk2.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          "$CC" -O2 -static native/fpsbind.c -o fpsbind || "$CC" -O2 native/fpsbind.c -o fpsbind
+          ls -lh fpsbind
+          mkdir -p src/manager/app/src/main/assets
+          cp fpsbind src/manager/app/src/main/assets/fpsbind
+
       - name: Build APK
         run: |
+          # 确保 native 二进制在 assets 里（在 gradle 打包前）
+          mkdir -p src/manager/app/src/main/assets
+          cp -f fpsbinder src/manager/app/src/main/assets/fpsbinder 2>/dev/null || true
+          cp -f fpsbind src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
+          ls -lh src/manager/app/src/main/assets/fpsbinder src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
           cd src/manager
           # 用腾讯镜像下载 Gradle（services.gradle.org 经常超时）
           sed -i 's|services.gradle.org/distributions|mirrors.cloud.tencent.com/gradle|' gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true
