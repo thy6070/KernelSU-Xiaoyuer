@@ -25,11 +25,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "binder=%p\n", (void *)sf);
 
     AParcel *in = NULL;
-    binder_status_t st = AIBinder_prepareTransaction(sf, &in);
+    binder_status_t st = AParcel_create(&in);
     if (st != STATUS_OK || !in) {
-        fprintf(stderr, "prepareTransaction failed: %d\n", (int)st);
+        fprintf(stderr, "AParcel_create failed: %d\n", (int)st);
         return 1;
     }
+    fprintf(stderr, "parcel ok\n");
 
     // AOSP BpSurfaceComposer::dump:
     //   writeInterfaceToken; writeInt32(1); writeFileDescriptor(fd);
