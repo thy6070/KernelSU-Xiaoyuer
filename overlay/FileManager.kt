@@ -116,6 +116,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.TaskAlt
@@ -4183,15 +4184,21 @@ private fun BrowserPane(
 
         LazyColumn(
             state = listState,
-            modifier = modifier.fillMaxSize().nestedScroll(pullConn),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+            modifier = modifier
+                .fillMaxSize()
+                .nestedScroll(pullConn)
+                .padding(horizontal = 12.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF17171A)),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
         item {
+            Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = parent != path) { onNavigate(parent) }
-                    .padding(horizontal = 6.dp, vertical = 5.dp),
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -4211,8 +4218,18 @@ private fun BrowserPane(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = "..", color = Color(TEXT_COLOR), fontSize = 15.sp)
             }
+            if (entries.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 54.dp)
+                        .height(0.5.dp)
+                        .background(Color(0x33FFFFFF))
+                )
+            }
+            }
         }
-        items(entries) { entry ->
+        itemsIndexed(entries) { idx, entry ->
             val rowPath = joinPath(path, entry.name)
             FsRow(
                 name = entry.name,
@@ -4220,6 +4237,7 @@ private fun BrowserPane(
                 fullPath = rowPath,
                 selected = selectedPath == rowPath,
                 highlight = highlightName,
+                isLast = idx == entries.lastIndex,
                 onClick = {
                     if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
@@ -4236,40 +4254,44 @@ private fun FsRow(
     fullPath: String,
     selected: Boolean = false,
     highlight: String? = null,
+    isLast: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
-    // ZySU row: rounded 14dp, no tile behind the glyph, 12sp monospace, outline on the row
-    val accent = if (isDir) null else fileAccent(name)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .background(
-                if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
-                else Color.Transparent
+    // iOS Inset Grouped：整体卡片 + 行间 0.5dp 分隔线
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .background(
+                    if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
+                    else Color.Transparent
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RowIcon(isDir = isDir, name = name, fullPath = fullPath)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = name,
+                modifier = Modifier.weight(1f),
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = FontFamily.Monospace,
+                color = Color(TEXT_COLOR)
             )
-            .then(
-                if (accent != null) {
-                    Modifier.border(1.dp, accent.copy(alpha = 0.38f), RoundedCornerShape(14.dp))
-                } else Modifier
+        }
+        if (!isLast) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 54.dp)
+                    .height(0.5.dp)
+                    .background(Color(0x33FFFFFF))
             )
-            .padding(horizontal = 8.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RowIcon(isDir = isDir, name = name, fullPath = fullPath)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = name,
-            modifier = Modifier.weight(1f),
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontFamily = FontFamily.Monospace,
-            color = Color(TEXT_COLOR)
-        )
+        }
     }
 }
 
