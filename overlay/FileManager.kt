@@ -6174,7 +6174,8 @@ class FpsOverlayService : Service() {
             bin.setExecutable(true)
             val m = bigCoreMask()
             if (m.isEmpty()) return
-            sh("pkill -f fpsbind 2>/dev/null; chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " 0x" + m + " " + activePkg + " >/dev/null 2>&1 &", 3L)
+            val logF = File(filesDir, "fpsbind.log").absolutePath
+            sh("pkill -f fpsbind 2>/dev/null; chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " 0x" + m + " " + activePkg + " >> " + logF + " 2>&1 &", 3L)
             fpsBindPkg = activePkg
             logLine("fpsbind 启动: mask=0x$m pkg=$activePkg")
         } catch (t: Throwable) {
