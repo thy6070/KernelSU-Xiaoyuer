@@ -6160,6 +6160,25 @@ class FpsOverlayService : Service() {
             pkg.startsWith("com.mojang.") || pkg.startsWith("com.epicgames.")
     }
 
+    // 计算大核 mask（最高频两档 policy 的核），用于 FPS+ 绑核
+    private fun bigCoreMask(): String {
+        return try {
+            val out = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do f=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); c=\$(cat \$p/related_cpus 2>/dev/null); echo \"\$f \$c\"; done", 3L)
+            val entries = out.lines().mapNotNull { line ->
+                val parts = line.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+                if (parts.size < 2) null else {
+                    val f = parts[0].toLongOrNull() ?: return@mapNotNull null
+                    val cpus = parts.drop(1).mapNotNull { it.toIntOrNull() }
+                    if (cpus.isEmpty()) null else f to cpus
+                }
+            }
+            if (entries.isEmpty()) return ""
+            val sorted = entries.sortedByDescending { it.first }
+            val mask = sorted.take(2).flatMap { it.second }.fold(0L) { acc, c -> acc or (1L shl c) }
+            java.lang.Long.toHexString(mask)
+        } catch (t: Throwable) { "" }
+    }
+
     private fun maybeFpsPlusBoost(fps: Double) {
         val on = try {
             getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
@@ -6200,6 +6219,9 @@ class FpsOverlayService : Service() {
             "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
             "[ -f /proc/sys/kernel/sched_boost ] && echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
             "am kill-all >/dev/null 2>&1; " +
+            (bigCoreMask().takeIf { it.isNotEmpty() }?.let { m ->
+                "for pid in \$(pidof " + activePkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -p 0x" + m + " \${t##*/} 2>/dev/null; done; done; "
+            } ?: "") +
             "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
     }
 
