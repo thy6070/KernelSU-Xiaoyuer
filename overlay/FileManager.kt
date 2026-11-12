@@ -6142,7 +6142,10 @@ class FpsOverlayService : Service() {
             }
         } catch (t: Throwable) { 0.0 }
         if (refresh <= 0.0) return
-        if (fps > 0.0 && fps < refresh * 0.95) fpsPlusLow++ else { fpsPlusLow = 0; return }
+        // 过滤 63 帧以下：60 帧游戏不参与判断
+        if (fps <= 63.0) { fpsPlusLow = 0; return }
+        // 掉 5 帧触发
+        if (fps < refresh - 5.0) fpsPlusLow++ else { fpsPlusLow = 0; return }
         if (fpsPlusLow < 3) return
         fpsPlusLow = 0
         val now = System.currentTimeMillis()
