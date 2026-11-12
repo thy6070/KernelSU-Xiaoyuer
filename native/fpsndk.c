@@ -4,7 +4,6 @@
 #include <android/binder_ibinder.h>
 #include <android/binder_parcel.h>
 #include <android/binder_status.h>
-#include <android/binder_process.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +11,8 @@
 
 // NDK 无 binder_manager.h：手动声明
 __attribute__((weak)) AIBinder* AServiceManager_getService(const char* instance);
+void ABinderProcess_setThreadPoolMaxThreadCount(uint32_t numThreads);
+void ABinderProcess_startThreadPool(void);
 
 int main(int argc, char **argv) {
     if (argc < 2) {
