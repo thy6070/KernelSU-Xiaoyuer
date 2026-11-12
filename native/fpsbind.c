@@ -5,6 +5,8 @@
 //   mask_hex：目标核掩码，如 0xF0 表示 cpu4-7
 //   包名：匹配 /proc/<pid>/comm 前缀（游戏进程名通常等于包名）
 
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,7 +125,7 @@ int main(int argc, char **argv) {
     cn->id.idx = CN_IDX_PROC;
     cn->id.val = CN_VAL_PROC;
     cn->len = sizeof(*mc);
-    *mc = PROC_CN_MCAST_LISTEN;
+    mc->op = PROC_CN_MCAST_LISTEN;
     if (send(s, nlh, nlh->nlmsg_len, 0) < 0) {
         fprintf(stderr, "subscribe: %s\n", strerror(errno));
         close(s);
@@ -178,7 +180,7 @@ int main(int argc, char **argv) {
     cn->id.idx = CN_IDX_PROC;
     cn->id.val = CN_VAL_PROC;
     cn->len = sizeof(*mc);
-    *mc = PROC_CN_MCAST_IGNORE;
+    mc->op = PROC_CN_MCAST_IGNORE;
     send(s, nlh, nlh->nlmsg_len, 0);
 
     close(s);
