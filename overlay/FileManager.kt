@@ -4510,7 +4510,7 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
         "【小米】Xiaomi 14 Ultra", "【小米】Xiaomi Pad 8 Pro", "【小米】Xiaomi Pad 7 Ultra",
         "【小米】Xiaomi MIX Fold 4",
         // ── 红米（2026）──
-        "【红米】Redmi K90 Pro Max", "【红米】Redmi K90 Pro", "【红米】Redmi K90",
+        "【红米】Redmi K Pad", "【红米】Redmi K90 Pro Max", "【红米】Redmi K90 Pro", "【红米】Redmi K90",
         "【红米】Redmi Turbo 5 Pro", "【红米】Redmi Pad 3 Pro",
         // ── 红米（2025）──
         "【红米】Redmi K80 Pro", "【红米】Redmi K80 Ultra", "【红米】Redmi K70 Pro",
@@ -4587,17 +4587,23 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                 }
             }
             val brand = m.substringBefore(" ")
+            // 显示名 -> 真实型号（游戏按 ro.product.model 识别）
+            val realModel = when (m) {
+                "Redmi K Pad" -> "25079RPDCC"
+                "Xiaomi Pad 8 Pro" -> "25091RP04C"
+                else -> m
+            }
             val origFp = sp.getString("orig_fingerprint", "") ?: ""
             // 指纹：替换 brand/model
             val newFp = if (origFp.isNotEmpty()) {
                 origFp.replaceFirst(Regex("^(\\w+)/"), brand.lowercase() + "/")
-                    .replaceFirst(Regex("/[^/]+:"), "/" + m.replace(" ", "_") + ":")
+                    .replaceFirst(Regex("/[^/]+:"), "/" + realModel.replace(" ", "_") + ":")
             } else ""
             // 按源码优化：7组基础 + 5前缀×4 全量写入
-            val code = m.replace(" ", "_").lowercase()
+            val code = realModel.replace(" ", "_").lowercase()
             val mfr = brand
             val baseKeys = listOf("brand", "manufacturer", "model", "device", "name", "marketname")
-            val baseVals = listOf(brand, mfr, m, code, code, m)
+            val baseVals = listOf(brand, mfr, realModel, code, code, realModel)
             val propScript = StringBuilder()
             for (i in baseKeys.indices) {
                 propScript.append("resetprop ro.product.").append(baseKeys[i]).append(" '").append(baseVals[i]).append("' 2>/dev/null\n")
