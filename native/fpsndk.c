@@ -11,18 +11,12 @@
 
 // NDK 无 binder_manager.h：手动声明
 __attribute__((weak)) AIBinder* AServiceManager_getService(const char* instance);
-void ABinderProcess_setThreadPoolMaxThreadCount(uint32_t numThreads);
-void ABinderProcess_startThreadPool(void);
 
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: %s <layer>\n", argv[0]);
         return 1;
     }
-    // NDK 客户端标准初始化：启动 binder 线程池
-    ABinderProcess_setThreadPoolMaxThreadCount(1);
-    ABinderProcess_startThreadPool();
-
     AIBinder *sf = AServiceManager_getService("SurfaceFlinger");
     if (!sf) {
         fprintf(stderr, "getService SurfaceFlinger failed\n");
@@ -58,6 +52,8 @@ int main(int argc, char **argv) {
     AParcel_writeString(in, "--latency", (int32_t)strlen("--latency"));
     AParcel_writeString(in, argv[1], (int32_t)strlen(argv[1]));
 
+    // 发送前把 data position 归零
+    AParcel_setDataPosition(in, 0);
     AParcel *out = NULL;
     st = AIBinder_transact(sf, 1, &in, &out, 0);
     fprintf(stderr, "transact=%d out=%p\n", (int)st, (void *)out);
