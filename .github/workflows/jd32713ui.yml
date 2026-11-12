@@ -185,7 +185,7 @@ jobs:
           echo "NDK=$NDK"
           find "$NDK" -name "binder_ndk.h" 2>/dev/null | head -5
           ls "$NDK/sysroot/usr/include/android/" 2>/dev/null | head -20
-          CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang"
           "$CC" -O2 -I"$NDK/sysroot/usr/include" native/fpsndk.c -o fpsndk -lbinder_ndk 2>&1 | tail -20
           ls -lh fpsndk
           mkdir -p src/manager/app/src/main/assets
