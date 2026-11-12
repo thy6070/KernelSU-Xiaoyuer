@@ -4228,45 +4228,20 @@ private fun BrowserPane(
         }
         itemsIndexed(entries) { idx, entry ->
             val rowPath = joinPath(path, entry.name)
-            AnimatedRow(if (idx < 8) idx else 0) {
-                FsRow(
-                    name = entry.name,
-                    isDir = entry.isDir,
-                    fullPath = rowPath,
-                    selected = selectedPath == rowPath,
-                    highlight = highlightName,
-                    isLast = idx == entries.lastIndex,
-                    onClick = {
-                        if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
-                    },
-                    onLongClick = { onLongPress(rowPath) }
-                )
-            }
+            FsRow(
+                name = entry.name,
+                isDir = entry.isDir,
+                fullPath = rowPath,
+                selected = selectedPath == rowPath,
+                highlight = highlightName,
+                isLast = idx == entries.lastIndex,
+                onClick = {
+                    if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
+                },
+                onLongClick = { onLongPress(rowPath) }
+            )
         }
     }
-}
-
-@Composable
-private fun AnimatedRow(index: Int, content: @Composable () -> Unit) {
-    // 交错渐入：每个文件项依次淡入 + 轻微上滑，index 越大延迟越长
-    var shown by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        if (index > 0) delay(index * 10L)
-        shown = true
-    }
-    AnimatedVisibility(
-        visible = shown,
-        enter = fadeIn(
-            androidx.compose.animation.core.tween(
-                200, easing = androidx.compose.animation.core.LinearOutSlowInEasing
-            )
-        ) + androidx.compose.animation.slideInVertically(
-            animationSpec = androidx.compose.animation.core.tween(
-                200, easing = androidx.compose.animation.core.LinearOutSlowInEasing
-            ),
-            initialOffsetY = { it / 10 }
-        )
-    ) { content() }
 }
 
 @Composable
