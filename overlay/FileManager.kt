@@ -5920,7 +5920,7 @@ class FpsOverlayService : Service() {
             "  dumpsys SurfaceFlinger --latency \"" + layer + "\" 2>/dev/null > \"" + d + "/fps_raw.tmp\"\n" +
             "  mv \"" + d + "/fps_raw.tmp\" \"" + d + "/fps_raw\"\n" +
             "  chmod 644 \"" + d + "/fps_raw\"\n" +
-            "  sleep 0.4\n" +
+            "  sleep 0.2\n" +
             "done\n")
         // setsid 让它脱离 su 的进程组，否则 su 退出时守护进程会被一起收走
         sh("setsid sh " + script.absolutePath + " >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
@@ -5988,7 +5988,10 @@ class FpsOverlayService : Service() {
         val first = times.firstOrNull { it >= start } ?: return 0.0
         if (n < 2 || end <= first) return 0.0
         // Scene 口径：窗口内帧数 ÷ 窗口秒数（1 秒内的帧数）
-        return n.toDouble() * 1_000_000_000.0 / winNs.toDouble()
+        val fps = n.toDouble() * 1_000_000_000.0 / winNs.toDouble()
+        // 上限 = 面板刷新率（--latency 第一行），避免边界帧算出超过面板的假值
+        val maxFps = 1_000_000_000.0 / refreshNs.toDouble()
+        return if (fps > maxFps) maxFps else fps
     }
 
     private fun refreshLayer() {
@@ -6012,11 +6015,12 @@ class FpsOverlayService : Service() {
             // 带前导 layer id 的条目（RequestedLayerState{<hex> <name>}）--latency 读不到数据，
             // 必须跳过；真正能出帧的层名不带 hex 前缀（实测验证过）
             if (Regex("^[0-9a-fA-F]+ ").containsMatchIn(n)) continue
+            // 强约束：只认前台应用自己的层，避免选中壁纸/系统动画层算出假帧率
+            if (activePkg.isNotEmpty() && !n.contains(activePkg)) continue
             var sc = 0
             if (n.contains("SurfaceView")) sc += 100
             // 游戏真正出帧的是带 (BLAST) 后缀的那个 SurfaceView 层
             if (n.contains("(BLAST)")) sc += 60
-            if (activePkg.isNotEmpty() && n.contains(activePkg)) sc += 50
             scored.add(n to sc)
         }
         if (scored.isEmpty()) {
