@@ -6105,7 +6105,7 @@ class FpsOverlayService : Service() {
                 showFps(fpsRaw)
             }
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 1000L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, if (idleCount >= 6) 3000L else 1500L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     private fun showFps(fps: Double) {
