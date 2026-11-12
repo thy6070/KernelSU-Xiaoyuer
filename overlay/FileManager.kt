@@ -5974,9 +5974,15 @@ class FpsOverlayService : Service() {
         times.sort()
         val end = times[times.size - 1]
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
-        var start = end - 800_000_000L
+        // 按面板刷新间隔定窗口，目标帧数恒定 ~90：60Hz→1200ms 72帧 / 90Hz→1000ms 90帧
+        // 120Hz→750ms 90帧 / 144Hz→625ms 90帧。这样每个窗口帧数稳定，误差最小，
+        // 同时 144Hz 也不会超过 --latency 的 128 帧缓存上限。
+        val refreshNs = lines[0].trim().toLongOrNull()?.takeIf { it in 1_000_000L..50_000_000L } ?: 16_666_667L
+        val winNs = (refreshNs * 90).coerceIn(625_000_000L, 1_200_000_000L)
+        var start = end - winNs
         var n = times.count { it >= start }
         if (n < 4) {
+            // 帧率很低时窗口不够，放宽到缓存允许的 1/2
             start = end - 1_200_000_000L
             n = times.count { it >= start }
         }
