@@ -168,15 +168,23 @@ static int binder_call(const struct parcel *p, size_t code, size_t handle,
 static int get_service(const char *name, uint32_t *out_handle) {
     struct parcel p;
     p_init(&p);
-    p_i32(&p, 0); /* strict mode policy */
+    /* AOSP: writeInterfaceToken + writeString16(name) */
+    p_string16(&p, "android.os.IServiceManager");
     p_string16(&p, name);
     struct parcel rep;
     if (binder_call(&p, 1, 0, NULL, 0, &rep) < 0) return -1;
-    if (rep.len < 8) return -1;
-    int32_t status;
-    memcpy(&status, rep.buf, 4);
-    if (status != 0) return -1;
-    memcpy(out_handle, rep.buf + 4, 4);
+    if (rep.len < 4) return -1;
+    /* 回复可能是 flat_binder_object(BINDER_TYPE_HANDLER) 或直接 int32 handle */
+    uint32_t type = 0;
+    memcpy(&type, rep.buf, 4);
+    if (type == 0x73685d42u || type == 0x73622a85u) {
+        /* type 4 + flags 4 = 8，binder 字段从 8 开始；取低 32 位作 handle */
+        if (rep.len < 12) return -1;
+        memcpy(out_handle, rep.buf + 8, 4);
+        return 0;
+    }
+    /* 直接 int32 */
+    memcpy(out_handle, rep.buf, 4);
     return 0;
 }
 
