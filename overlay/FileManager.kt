@@ -5987,7 +5987,8 @@ class FpsOverlayService : Service() {
         }
         val first = times.firstOrNull { it >= start } ?: return 0.0
         if (n < 2 || end <= first) return 0.0
-        return (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
+        // Scene 口径：窗口内帧数 ÷ 窗口秒数（1 秒内的帧数）
+        return n.toDouble() * 1_000_000_000.0 / winNs.toDouble()
     }
 
     private fun refreshLayer() {
@@ -6110,7 +6111,7 @@ class FpsOverlayService : Service() {
                 showFps(fpsRaw)
             }
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, if (idleCount >= 6) 3000L else 1500L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, 1000L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     private fun showFps(fps: Double) {
