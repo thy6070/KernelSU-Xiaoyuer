@@ -1,7 +1,10 @@
 // fpsndk: 用 NDK 的 libbinder_ndk（C API）直连 SurfaceFlinger dump，零 fork。
 // 编译（CI/NDK）：aarch64-linux-android26-clang -O2 native/fpsndk.c -o fpsndk -lbinder_ndk -llog
 // 用法：fpsndk <layer>
-#include <android/binder_ndk.h>
+#include <android/binder_ibinder.h>
+#include <android/binder_parcel.h>
+#include <android/binder_status.h>
+#include <android/binder_manager.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
