@@ -5737,6 +5737,7 @@ class FpsOverlayService : Service() {
     private var lastProbe = 0L
     private var idleCount = 0
     private var lastShown: Int = -1
+    private var lastSource: Int = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -6140,8 +6141,12 @@ class FpsOverlayService : Service() {
                     startDaemon(ln)
                 }
             }
-            // 数据源优先级：MTK FPSGO（逐应用）→ 高通 DRM measured_fps（刷新率）→ --latency 兜底
-            val fpsRaw = readFpsgoFps() ?: readDrmFps() ?: readDaemonFps()
+            // 数据源：0=MTK FPSGO(内核逐应用) 1=DRM measured_fps(内核刷新率) 2=--latency(推算)
+            val fpsgo = readFpsgoFps()
+            val drm = if (fpsgo == null) readDrmFps() else null
+            val lat = if (fpsgo == null && drm == null) readDaemonFps() else null
+            val fpsRaw = fpsgo ?: drm ?: lat
+            val src = if (fpsgo != null) 0 else if (drm != null) 1 else 2
             if (fpsRaw == null) {
                 // daemon 刚启动的 2 秒内不算失败（文件还没写出来）
                 if (System.currentTimeMillis() - daemonStartedAt < 2000L) {
@@ -6174,19 +6179,29 @@ class FpsOverlayService : Service() {
                 } else {
                     idleCount = 0
                 }
-                showFps(fpsRaw)
+                showFps(fpsRaw, src)
             }
         } catch (t: Throwable) {}
         try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 1000L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
-    private fun showFps(fps: Double) {
-        // 整数取值，后面拼一段纯文字 ".0"（不参与计算）
+    private fun showFps(fps: Double, source: Int) {
         val v = Math.round(fps).toInt().coerceIn(0, 240)
-        if (v == lastShown) return
+        if (v == lastShown && source == lastSource) return
         lastShown = v
+        lastSource = source
         fpsView?.post {
-            try { fpsView?.text = v.toString() } catch (t: Throwable) {}
+            try {
+                // 数据源标识：金色无后缀 = 内核逐应用；金色 r = 内核刷新率；灰色 ~ = 推算
+                fpsView?.text = when (source) {
+                    0 -> v.toString()
+                    1 -> v.toString() + "r"
+                    else -> v.toString() + "~"
+                }
+                fpsView?.setTextColor(
+                    android.graphics.Color.parseColor(if (source == 2) "#9E9E9E" else "#FFC107")
+                )
+            } catch (t: Throwable) {}
         }
     }
 }
