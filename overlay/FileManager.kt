@@ -5973,7 +5973,10 @@ class FpsOverlayService : Service() {
                 // 3 秒没更新：daemon 可能已死（脚本被删/层失效），交给上层自愈
                 return null
             }
-            parseLatencyText(f.readText())
+            val text = f.readText()
+            val ns = text.lineSequence().firstOrNull()?.trim()?.toLongOrNull() ?: 0L
+            if (ns > 0L) panelHz = 1_000_000_000.0 / ns
+            parseLatencyText(text)
         } catch (t: Throwable) {
             null
         }
@@ -6103,15 +6106,37 @@ class FpsOverlayService : Service() {
                 }
                 showFps(fpsRaw)
                 maybeFpsPlusBoost(fpsRaw)
+                val nowT = System.currentTimeMillis()
+                if (nowT - lastStatLog > 5000L) {
+                    lastStatLog = nowT
+                    logLine("fps=${String.format("%.1f", fpsRaw)} 层=${layerName ?: "-"} 面板=${String.format("%.0f", panelHz)}Hz fpsPlus=${fpsPlusBoosted}")
+                }
             }
-        } catch (t: Throwable) {}
+        } catch (t: Throwable) {
+            logLine("tick 异常: " + t)
+        }
         try { executor?.schedule({ tick() }, 100L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+    }
+
+    // ===== 日志：帧率 + FPS+ 全链路 =====
+    private var lastStatLog = 0L
+    private fun logLine(msg: String) {
+        try {
+            val f = File(filesDir, "fps_display.log")
+            if (f.length() > 512 * 1024) f.writeText("")
+            f.appendText(
+                java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
+                    .format(java.util.Date()) + " " + msg + "\n"
+            )
+        } catch (t: Throwable) {}
     }
 
     // ===== FPS+：独立于能量守恒，按实时帧率调节 =====
     private var lastBoost = 0L
     private var fpsPlusLow = 0
     private var fpsPlusBoosted = false
+    @Volatile private var panelHz = 0.0
+    private val fpsHist = ArrayDeque<Double>()
 
     private fun isGamePkg(pkg: String): Boolean {
         if (pkg.isEmpty()) return false
@@ -6134,23 +6159,21 @@ class FpsOverlayService : Service() {
         if (!on) { fpsPlusLow = 0; return }
         // 只在游戏时生效
         if (!isGamePkg(activePkg)) { fpsPlusLow = 0; return }
-        // 目标帧率 = 面板刷新率（fps_raw 第一行），阈值 95%
-        val refresh = try {
-            val f = File(filesDir, "fps_raw")
-            if (!f.exists()) 0.0 else {
-                val ns = f.readText().lineSequence().firstOrNull()?.trim()?.toLongOrNull() ?: 0L
-                if (ns > 0L) 1_000_000_000.0 / ns else 0.0
-            }
-        } catch (t: Throwable) { 0.0 }
-        if (refresh <= 0.0) return
+        if (panelHz <= 0.0) return
         // 过滤 63 帧以下：60 帧游戏不参与判断
         if (fps <= 63.0) { fpsPlusLow = 0; return }
+        // 自适应目标：最近 5 秒（50 次）内的帧率峰值，避免 90 帧游戏被 120 面板误判
+        fpsHist.addLast(fps)
+        if (fpsHist.size > 50) fpsHist.removeFirst()
+        val peak = fpsHist.maxOrNull() ?: fps
+        val target = minOf(panelHz, peak)
         // 掉 5 帧触发
-        if (fps >= refresh - 5.0) {
+        if (fps >= target - 5.0) {
             // 恢复：解除 boost
             fpsPlusLow = 0
             if (fpsPlusBoosted) {
                 fpsPlusBoosted = false
+                logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)}，解除 boost")
                 sh("[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null", 2L)
             }
             return
@@ -6162,6 +6185,7 @@ class FpsOverlayService : Service() {
         if (now - lastBoost < 2000L) return
         lastBoost = now
         fpsPlusBoosted = true
+        logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续3次，执行拉满+boost+清后台")
         // 拉满 CPU/GPU + sched_boost（与能量守恒互不依赖）
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
             "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
