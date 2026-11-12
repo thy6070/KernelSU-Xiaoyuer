@@ -5645,7 +5645,9 @@ private val perfGameScript = listOf(
     "            am kill-all >/dev/null 2>&1",
     "            echo \"\$(date '+%H:%M:%S') 已清后台\" >> \"\$LOG\"",
     "          fi",
-    "          # 绑核已交给 native fpsbind（proc connector 毫秒级）",
+    "          if [ \"\$BIND_ON\" = \"1\" ]; then",
+    "            bind_threads_detail \"\$_fg\"",
+    "          fi",
     "          echo \"\$(date '+%H:%M:%S') [游戏] \$_fg -> 满频+绑核 刷新率=\$HZ_TARGET\" | tee -a \"\$LOG\" ;;",
     "        *)",
     "          if [ \"\$_mode\" != \"power\" ]; then",
@@ -6162,7 +6164,9 @@ class FpsOverlayService : Service() {
     // 启动 native 绑核守护（proc connector，毫秒级）
     private var fpsBindPkg = ""
     private fun ensureFpsBind() {
-        // native 绑核常驻：游戏在前台就保持 fpsbind 运行（毫秒级）
+        // 仅 FPS+ 开启时启用 native 绑核；能量守恒保持原样
+        val plus = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
+        if (!plus) return
         if (!isGamePkg(activePkg)) return
         if (activePkg == fpsBindPkg) return
         try {
