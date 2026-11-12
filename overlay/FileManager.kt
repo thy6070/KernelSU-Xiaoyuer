@@ -5977,7 +5977,7 @@ class FpsOverlayService : Service() {
         // 对齐 Scene 的 1 秒口径：窗口默认 1000ms（60/90/120Hz 都能取满）。
         // 144Hz 下 1 秒 = 144 帧，超过 --latency 的 128 帧缓存，所以按 120 帧封顶（833ms）。
         val refreshNs = lines[0].trim().toLongOrNull()?.takeIf { it in 1_000_000L..50_000_000L } ?: 16_666_667L
-        val winNs = minOf(1_000_000_000L, refreshNs * 120).coerceAtLeast(625_000_000L)
+        val winNs = minOf(600_000_000L, refreshNs * 120).coerceAtLeast(400_000_000L)
         var start = end - winNs
         var n = times.count { it >= start }
         if (n < 4) {
@@ -6071,7 +6071,7 @@ class FpsOverlayService : Service() {
 
     private fun tick() {
         try {
-            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 5000L) {
+            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 2000L) {
                 lastLayerRefresh = System.currentTimeMillis()
                 refreshLayer()
                 val ln = layerName
@@ -6115,7 +6115,7 @@ class FpsOverlayService : Service() {
                 showFps(fpsRaw)
             }
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, 1000L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     private fun showFps(fps: Double) {
