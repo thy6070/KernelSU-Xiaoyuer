@@ -4,6 +4,7 @@
 #include <android/binder_ibinder.h>
 #include <android/binder_parcel.h>
 #include <android/binder_status.h>
+#include <android/binder_process.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: %s <layer>\n", argv[0]);
         return 1;
     }
+    // NDK 客户端标准初始化：启动 binder 线程池
+    ABinderProcess_setThreadPoolMaxThreadCount(1);
+    ABinderProcess_startThreadPool();
+
     AIBinder *sf = AServiceManager_getService("SurfaceFlinger");
     if (!sf) {
         fprintf(stderr, "getService SurfaceFlinger failed\n");
