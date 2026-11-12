@@ -4251,16 +4251,21 @@ private fun AnimatedRow(index: Int, content: @Composable () -> Unit) {
     // 交错渐入：每个文件项依次淡入 + 轻微上滑，index 越大延迟越长
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        if (index > 0) delay(index * 22L)
+        if (index > 0) delay(index * 24L)
         shown = true
     }
     AnimatedVisibility(
         visible = shown,
-        enter = fadeIn(androidx.compose.animation.core.tween(170)) +
-            androidx.compose.animation.slideInVertically(
-                animationSpec = androidx.compose.animation.core.tween(170),
-                initialOffsetY = { it / 4 }
+        enter = fadeIn(
+            androidx.compose.animation.core.tween(
+                220, easing = androidx.compose.animation.core.LinearOutSlowInEasing
             )
+        ) + androidx.compose.animation.slideInVertically(
+            animationSpec = androidx.compose.animation.core.tween(
+                220, easing = androidx.compose.animation.core.LinearOutSlowInEasing
+            ),
+            initialOffsetY = { it / 8 }
+        )
     ) { content() }
 }
 
