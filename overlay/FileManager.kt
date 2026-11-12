@@ -5744,7 +5744,6 @@ class FpsOverlayService : Service() {
     private var lastProbe = 0L
     private var idleCount = 0
     private var lastShown: Int = -1
-    private var lastSource: Int = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -5929,47 +5928,6 @@ class FpsOverlayService : Service() {
         daemonStartedAt = System.currentTimeMillis()
     }
 
-    // 内核数据源（MTK FPSGO）：/sys/kernel/fpsgo/fstb/fpsgo_status
-    // 每行一个渲染层：tid / bufID / name / currentFPS / targetFPS ...
-    // 内核直接给 currentFPS，无需自己按时间戳算；非 MTK 设备返回 null 走 --latency 兜底
-    private fun readFpsgoFps(): Double? {
-        val out = sh("cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null", 2L)
-        if (out.isBlank()) return null
-        var matched = false
-        var matchedFps = 0.0
-        for (line in out.lines()) {
-            if (!line.contains('\t')) continue
-            val m = Regex("^(\\d+)\t(\\S+)\t(\\S+)\t(\\d+)").find(line) ?: continue
-            val name = m.groupValues[3]
-            val cur = m.groupValues[4].toDoubleOrNull() ?: continue
-            // fpsgo 的 name 会被截断（dsharnessmobile.shell → essmobile.shell），用后缀匹配
-            if (activePkg.isNotEmpty() && activePkg.endsWith(name)) {
-                matched = true
-                // 同一应用可能有多个渲染层，取最大的（避开瞬间归 0 的那行）
-                if (cur > matchedFps) matchedFps = cur
-            }
-        }
-        // 只返回当前前台应用自己的值；没匹配到说明它不在 FPSGO 管理里，交给 --latency
-        return if (matched) matchedFps else null
-    }
-
-    // 骁龙/通用内核数据源：DRM measured_fps（显示控制器实测出帧率）
-    // 注意：这是「显示输出帧率」，等同刷新率；画面静止但屏幕 120Hz 时它仍报 120，
-    // 所以它只能当"屏幕实际刷新率"用，不能替代应用渲染帧率
-    private fun readDrmFps(): Double? {
-        for (p in listOf(
-            "/sys/class/drm/sde-crtc-0/measured_fps",
-            "/sys/class/graphics/fb0/measured_fps"
-        )) {
-            val t = sh("cat $p 2>/dev/null", 2L).trim()
-            if (t.isEmpty()) continue
-            val v = t.lines().firstOrNull()?.split(Regex("\\s+"))
-                ?.mapNotNull { it.toDoubleOrNull() }?.firstOrNull()
-            if (v != null && v > 0.0) return v
-        }
-        return null
-    }
-
     // 读 daemon 写下的最新数据并解析（零 su 开销）
     private var lastRawMtime = 0L
     private var lastRawChange = 0L
@@ -5993,7 +5951,10 @@ class FpsOverlayService : Service() {
         }
     }
 
-    // 解析 --latency 文本：800ms 窗口内的实际呈现帧率；画面静止返回 0
+    // 解析 --latency 文本：取最近窗口内的 present 时间戳，帧率 = (n-1)/(末帧-首帧)
+    // 这是无偏算法：n 帧之间有 n-1 个间隔，除的是真实跨度而不是窗口长度。
+    // 窗口默认 800ms（144Hz 下 128 帧缓存的极限），帧数不足 4 时放宽到 1200ms。
+    // 画面静止（最新帧距今 > 1.5s）返回 0。
     private fun parseLatencyText(out: String): Double? {
         if (out.isBlank()) return null
         val lines = out.lines()
@@ -6005,6 +5966,7 @@ class FpsOverlayService : Service() {
             val parts = line.split('\t')
             if (parts.size < 2) continue
             val v = parts[1].trim().toLongOrNull() ?: continue
+            // 过滤空槽位（Long.MAX_VALUE）和未呈现的帧
             if (v <= 0L || v == Long.MAX_VALUE) continue
             times.add(v)
         }
@@ -6012,15 +5974,13 @@ class FpsOverlayService : Service() {
         times.sort()
         val end = times[times.size - 1]
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
-        val start = end - 800_000_000L
-        var n = 0
-        var first = 0L
-        for (k in times.indices) {
-            if (times[k] >= start) {
-                if (n == 0) first = times[k]
-                n++
-            }
+        var start = end - 800_000_000L
+        var n = times.count { it >= start }
+        if (n < 4) {
+            start = end - 1_200_000_000L
+            n = times.count { it >= start }
         }
+        val first = times.firstOrNull { it >= start } ?: return 0.0
         if (n < 2 || end <= first) return 0.0
         return (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
     }
@@ -6099,61 +6059,17 @@ class FpsOverlayService : Service() {
         return System.nanoTime() - maxT
     }
 
-    // 主数据源：SurfaceFlinger present 时间戳
-    private fun readSfFps(): Double? {
-        val name = layerName ?: return null
-        val out = sh("dumpsys SurfaceFlinger --latency '$name' 2>/dev/null", 3L)
-        if (out.isBlank()) return null
-        val lines = out.lines()
-        if (lines.size < 6) return null
-        val times = ArrayList<Long>(lines.size)
-        for (k in 1 until lines.size) {
-            val line = lines[k]
-            if (line.isBlank()) continue
-            val parts = line.split('\t')
-            if (parts.size < 2) continue
-            val v = parts[1].trim().toLongOrNull() ?: continue
-            // 过滤空槽位（Long.MAX_VALUE）和未呈现的帧
-            if (v <= 0L || v == Long.MAX_VALUE) continue
-            times.add(v)
-        }
-        if (times.size < 3) return null
-        times.sort()
-        val end = times[times.size - 1]
-        // 画面静止：最新一帧距今超过 800ms，说明没有新帧，直接归零
-        if (System.nanoTime() - end > 1_500_000_000L) return 0.0
-        // 800ms 窗口：对齐 Scene 的 1s 口径，同时避开 --latency 128 帧缓存上限
-        val start = end - 800_000_000L
-        var n = 0
-        var first = 0L
-        for (k in times.indices) {
-            if (times[k] >= start) {
-                if (n == 0) first = times[k]
-                n++
-            }
-        }
-        if (n < 2 || end <= first) return 0.0
-        return (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
-    }
-
     private fun tick() {
         try {
             if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 5000L) {
                 lastLayerRefresh = System.currentTimeMillis()
                 refreshLayer()
                 val ln = layerName
-                if (ln != null) {
-                    // 强制重启：图层可能因刷新率切换/场景切换被系统重建
-                    daemonLayer = null
-                    startDaemon(ln)
-                }
+                // 只在层名变化时启停 daemon；同名层重建后 --latency 仍按名字查得到
+                if (ln != null && ln != daemonLayer) startDaemon(ln)
             }
-            // 数据源：0=MTK FPSGO(内核逐应用) 1=DRM measured_fps(内核刷新率) 2=--latency(推算)
-            val fpsgo = readFpsgoFps()
-            val drm = if (fpsgo == null) readDrmFps() else null
-            val lat = if (fpsgo == null && drm == null) readDaemonFps() else null
-            val fpsRaw = fpsgo ?: drm ?: lat
-            val src = if (fpsgo != null) 0 else if (drm != null) 1 else 2
+            // 唯一数据源：SurfaceFlinger present 时间戳（帧真正上屏的时刻）
+            val fpsRaw = readDaemonFps()
             if (fpsRaw == null) {
                 // daemon 刚启动的 2 秒内不算失败（文件还没写出来）
                 if (System.currentTimeMillis() - daemonStartedAt < 2000L) {
@@ -6186,29 +6102,18 @@ class FpsOverlayService : Service() {
                 } else {
                     idleCount = 0
                 }
-                showFps(fpsRaw, src)
+                showFps(fpsRaw)
             }
         } catch (t: Throwable) {}
         try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 1000L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
-    private fun showFps(fps: Double, source: Int) {
+    private fun showFps(fps: Double) {
         val v = Math.round(fps).toInt().coerceIn(0, 240)
-        if (v == lastShown && source == lastSource) return
+        if (v == lastShown) return
         lastShown = v
-        lastSource = source
         fpsView?.post {
-            try {
-                // 数据源标识：金色无后缀 = 内核逐应用；金色 r = 内核刷新率；灰色 ~ = 推算
-                fpsView?.text = when (source) {
-                    0 -> v.toString()
-                    1 -> v.toString() + "r"
-                    else -> v.toString() + "~"
-                }
-                fpsView?.setTextColor(
-                    android.graphics.Color.parseColor(if (source == 2) "#9E9E9E" else "#FFC107")
-                )
-            } catch (t: Throwable) {}
+            try { fpsView?.text = v.toString() } catch (t: Throwable) {}
         }
     }
 }
