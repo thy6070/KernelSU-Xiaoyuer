@@ -3359,16 +3359,9 @@ private fun ModeButton(
         if (title == "执行此文件") {
             execPath = withContext(kotlinx.coroutines.Dispatchers.IO) { loadExecPath(slot) }
         }
-        // 进界面检测 FPS+ 是否已开启（标记文件）
+        // 进界面检测 FPS+ 开关
         if (title == "FPS+") {
-            on = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "[ -f /data/adb/fps_plus.on ] && echo 1 || echo 0"))
-                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
-                    o == "1"
-                }.getOrDefault(false)
-            }
+            on = ctxMsg.getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
         }
         // 进界面就检测"放开通行"状态（不用点击）
         if (title == "放开通行") {
@@ -3430,15 +3423,8 @@ private fun ModeButton(
         if (clickTick == 0) return@LaunchedEffect
         if (title == "FPS+") {
             val enabling = on
-            scope2.launch {
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching {
-                        val cmd = if (enabling) "touch /data/adb/fps_plus.on" else "rm -f /data/adb/fps_plus.on"
-                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd)).waitFor()
-                    }
-                }
-                latencyMsg = if (enabling) "已开启（仅游戏内生效）" else "已关闭"
-            }
+            ctx3.getSharedPreferences("settings", 0).edit().putBoolean("fps_plus", enabling).apply()
+            latencyMsg = if (enabling) "已开启（按实时帧率调节）" else "已关闭"
             return@LaunchedEffect
         }
         if (title == "能量守恒") {
@@ -5668,23 +5654,6 @@ private val perfGameScript = listOf(
     "    _v=\$((_v + 1))",
     "    if [ \"\$_mode\" = \"game\" ] && [ -n \"\$_fg\" ]; then",
     "      [ \$((_v % 3)) -eq 0 ] && verify_game",
-    "      # FPS+：仅在游戏模式，帧率连续 3 轮低于目标 95% 时加强调度",
-    "      if [ -f /data/adb/fps_plus.on ]; then",
-    "        _fr=/data/user/0/com.tencent.THY/files/fps_raw",
-    "        if [ -f \"\$_fr\" ]; then",
-    "          _fps=\$(awk 'NR>1 && NF>=2 && \$2+0>0 && \$2+0<9000000000000 { v[++n]=\$2+0 } END { if(n<3){print 0; exit} s=(n>30)?n-29:1; f=v[s]; l=v[n]; c=n-s+1; if(l>f) printf \"%.0f\", (c-1)*1e9/(l-f); else print 0 }' \"\$_fr\" 2>/dev/null)",
-    "          case \"\$_fps\" in ''|*[!0-9]*) _fps=0 ;; esac",
-    "          _thr=\$((HZ_TARGET * 95 / 100))",
-    "          if [ \"\$_fps\" -gt 0 ] && [ \"\$_fps\" -lt \"\$_thr\" ]; then _low=\$((_low + 1)); else _low=0; fi",
-    "          if [ \"\$_low\" -ge 3 ]; then",
-    "            _low=0",
-    "            echo \"\$(date '+%H:%M:%S') [FPS+] 帧率=\${_fps} 目标=\${_thr}，加强调度\" | tee -a \"\$LOG\"",
-    "            if [ \"\$BIND_ON\" = \"1\" ]; then bind_threads_detail \"\$_fg\"; fi",
-    "            [ -f /proc/sys/kernel/sched_boost ] && echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null",
-    "            am kill-all >/dev/null 2>&1",
-    "          fi",
-    "        fi",
-    "      fi",
     "      # 游戏内监控：温度 / CPU 频率 / GPU 频率（每轮）",
     "      _t=\$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)",
     "      case \"\$_t\" in ''|*[!0-9]*) _t=0 ;; esac",
@@ -6133,9 +6102,58 @@ class FpsOverlayService : Service() {
                     idleCount = 0
                 }
                 showFps(fpsRaw)
+                maybeFpsPlusBoost(fpsRaw)
             }
         } catch (t: Throwable) {}
         try { executor?.schedule({ tick() }, 100L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+    }
+
+    // ===== FPS+：独立于能量守恒，按实时帧率调节 =====
+    private var lastBoost = 0L
+    private var fpsPlusLow = 0
+
+    private fun isGamePkg(pkg: String): Boolean {
+        if (pkg.isEmpty()) return false
+        return pkg.startsWith("com.tencent.tmgp.") || pkg.startsWith("com.tencent.ig") ||
+            pkg.startsWith("com.pubg.") || pkg.startsWith("com.miHoYo.") ||
+            pkg.startsWith("com.mihoyo.") || pkg.startsWith("com.netease.") ||
+            pkg.startsWith("com.kurogame.") || pkg.startsWith("com.papegames.") ||
+            pkg.startsWith("com.garena.") || pkg.startsWith("com.supercell.") ||
+            pkg.startsWith("com.riotgames.") || pkg.startsWith("com.activision.") ||
+            pkg.startsWith("com.ea.") || pkg.startsWith("com.gameloft.") ||
+            pkg.startsWith("com.pwrd.") || pkg.startsWith("com.rekoo.") ||
+            pkg.startsWith("com.vng.") || pkg.startsWith("com.levelinfinite.") ||
+            pkg.startsWith("com.mojang.") || pkg.startsWith("com.epicgames.")
+    }
+
+    private fun maybeFpsPlusBoost(fps: Double) {
+        val on = try {
+            getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
+        } catch (t: Throwable) { false }
+        if (!on) { fpsPlusLow = 0; return }
+        // 只在游戏时生效
+        if (!isGamePkg(activePkg)) { fpsPlusLow = 0; return }
+        // 目标帧率 = 面板刷新率（fps_raw 第一行），阈值 95%
+        val refresh = try {
+            val f = File(filesDir, "fps_raw")
+            if (!f.exists()) 0.0 else {
+                val ns = f.readText().lineSequence().firstOrNull()?.trim()?.toLongOrNull() ?: 0L
+                if (ns > 0L) 1_000_000_000.0 / ns else 0.0
+            }
+        } catch (t: Throwable) { 0.0 }
+        if (refresh <= 0.0) return
+        if (fps > 0.0 && fps < refresh * 0.95) fpsPlusLow++ else { fpsPlusLow = 0; return }
+        if (fpsPlusLow < 3) return
+        fpsPlusLow = 0
+        val now = System.currentTimeMillis()
+        if (now - lastBoost < 2000L) return
+        lastBoost = now
+        // 拉满 CPU/GPU + sched_boost（与能量守恒互不依赖）
+        sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
+            "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
+            "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
+            "[ -f /proc/sys/kernel/sched_boost ] && echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
+            "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
     }
 
     private fun showFps(fps: Double) {
