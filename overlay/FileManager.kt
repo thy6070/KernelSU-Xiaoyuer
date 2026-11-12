@@ -4187,9 +4187,7 @@ private fun BrowserPane(
             modifier = modifier
                 .fillMaxSize()
                 .nestedScroll(pullConn)
-                .padding(horizontal = 12.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF17171A)),
+                .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
         item {
@@ -4222,7 +4220,6 @@ private fun BrowserPane(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 54.dp)
                         .height(0.5.dp)
                         .background(Color(0x33FFFFFF))
                 )
@@ -4287,7 +4284,6 @@ private fun FsRow(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 54.dp)
                     .height(0.5.dp)
                     .background(Color(0x33FFFFFF))
             )
