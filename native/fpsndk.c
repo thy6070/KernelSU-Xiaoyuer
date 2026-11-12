@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     // AOSP BpSurfaceComposer::dump:
     //   writeInterfaceToken; writeInt32(1); writeFileDescriptor(fd);
     //   writeInt32(args.size()); for arg: writeString16
-    st = AParcel_writeString(in, "android.gui.ISurfaceComposer", -1);
+    st = AParcel_writeString(in, "android.gui.ISurfaceComposer", (int32_t)strlen("android.gui.ISurfaceComposer"));
     fprintf(stderr, "token write=%d\n", (int)st);
 
     int fds[2];
@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
     st = AParcel_writeParcelFileDescriptor(in, fds[1]);
     fprintf(stderr, "fd write=%d\n", (int)st);
     AParcel_writeInt32(in, 2);
-    AParcel_writeString(in, "--latency", -1);
-    AParcel_writeString(in, argv[1], -1);
+    AParcel_writeString(in, "--latency", (int32_t)strlen("--latency"));
+    AParcel_writeString(in, argv[1], (int32_t)strlen(argv[1]));
 
     AParcel *out = NULL;
     st = AIBinder_transact(sf, 1, &in, &out, 0);
