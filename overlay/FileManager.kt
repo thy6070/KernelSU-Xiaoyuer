@@ -1529,18 +1529,6 @@ private fun ProMaxIsland(
 
         }
     }
-    val bootCtx = androidx.compose.ui.platform.LocalContext.current
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching {
-                val prefs = bootCtx.getSharedPreferences("yx_mode", 0)
-                if (prefs.getBoolean("open", false)) {
-                    Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "sh /data/adb/service.d/xy_open_access.sh >/dev/null 2>&1")).waitFor()
-                }
-            }
-        }
-    }
     var soInput by remember { mutableStateOf("") }
     var soPanel by remember { mutableStateOf(false) }
     // 打开面板时把密钥文件第二行读出来填进输入框（用 su 读，App 无权限）
@@ -3295,7 +3283,6 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                     } catch (t: Throwable) { "未适配此机型" }
                 }
             }
-            ModeButton(Icons.Outlined.DarkMode, "放开通行")
             ModeButton(Icons.Outlined.AcUnit, "能量守恒", subtitle = devLabel)
             ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3", onRun = {
                 onDismiss()
@@ -3358,18 +3345,6 @@ private fun ModeButton(
         // 进界面就读取"执行此文件"的路径（不用点击）
         if (title == "执行此文件") {
             execPath = withContext(kotlinx.coroutines.Dispatchers.IO) { loadExecPath(slot) }
-        }
-        // 进界面就检测"放开通行"状态（不用点击）
-        if (title == "放开通行") {
-            val ex = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "[ -f /data/adb/service.d/xy_open_access.sh ] && echo 1 || echo 0"))
-                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
-                    o == "1"
-                }.getOrDefault(false)
-            }
-            on = ex
         }
     }
     LaunchedEffect(latencyMsg) {
@@ -3559,42 +3534,6 @@ private fun ModeButton(
                 }
             }
         }
-        if (title == "放开通行") {
-            // 标记文件：/data/adb/xy_open_access.on
-            val exists = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                try {
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "[ -f /data/adb/xy_open_access.on ] && echo 1 || echo 0"))
-                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
-                    o == "1"
-                } catch (t: Throwable) { false }
-            }
-            if (on && !exists) {
-                // 开启：执行一次解除隐藏/启用（不循环）
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching {
-                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "pm list packages 2>/dev/null | sed 's/^package://' | while read pk; do pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done; " +
-                            "mkdir -p /data/adb; echo \"$(date)\" > /data/adb/xy_open_access.on; chmod 644 /data/adb/xy_open_access.on; echo done")).waitFor()
-                    }
-                }
-                latencyMsg = "已放开（执行一次）"
-            } else if (on && exists) {
-                latencyMsg = "已放开"
-            } else if (!on && exists) {
-                // 关闭：删标记（已生效的解除不回滚）
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching {
-                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "rm -f /data/adb/xy_open_access.on")).waitFor()
-                    }
-                }
-                latencyMsg = "已关闭"
-            } else {
-                latencyMsg = "已关闭"
-            }
-            refreshLatency()
-        }
     }
 
     Row(
@@ -3667,7 +3606,6 @@ private fun ModeButton(
                 }
                 ctx3.getSharedPreferences("yx_mode", 0).edit().putBoolean(
                     when (title) {
-                        "放开通行" -> "open"
                         "隐藏BL" -> "bl"
                         else -> "none"
                     },
@@ -3804,97 +3742,6 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                             }
                         }
                         latencyMsg = msg
-                    }
-                }
-                if (title == "放开通行") {
-                    val enabling = on
-                    scope2.launch {
-                        withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            try {
-                                fun su(c: String): String {
-                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
-                                    val out = p.inputStream.bufferedReader().readText()
-                                    p.waitFor()
-                                    return out
-                                }
-                                if (enabling) {
-                                    // install a boot script so the state survives reboots
-                                    try {
-                                        val bootDir = "/data/adb/service.d"
-                                        su("mkdir -p $bootDir")
-                                        val boot = "#!/system/bin/sh\n" +
-                                            "chmod 771 /data/adb\n" +
-                                            "chmod 755 /data/adb/modules\n" +
-                                            "chmod 755 /data/adb/ksu\n" +
-                                            "chmod 755 /data/adb/ksud\n" +
-                                            "printf 'allow untrusted_app adb_data_file dir { open read search getattr }\\n' > /data/local/tmp/xy_allow.txt\n" +
-                                            "printf 'allow untrusted_app adb_data_file file { open read getattr }\\n' >> /data/local/tmp/xy_allow.txt\n" +
-                                            "n=0\n" +
-                                            "while [ \"\$n\" -lt 30 ]; do\n" +
-                                            "  done_ok=0\n" +
-                                            "  for c in /data/adb/ksud /data/adb/ksu/bin/ksud; do\n" +
-                                            "    [ -x \"\$c\" ] || continue\n" +
-                                            "    \"\$c\" sepolicy apply /data/local/tmp/xy_allow.txt >/dev/null 2>&1 && done_ok=1\n" +
-                                            "  done\n" +
-                                            "  [ \"\$done_ok\" = \"1\" ] && break\n" +
-                                            "  n=\$((n + 1))\n" +
-                                            "  sleep 2\n" +
-                                            "done\n"
-                                        su("cat > $bootDir/xy_open_access.sh <<'XYBOOT'\n" + boot + "XYBOOT\nchmod 755 $bootDir/xy_open_access.sh")
-                                    } catch (t: Throwable) {
-                                    }
-                                    for ((path, mode) in listOf(
-                                        "/data/adb" to "771",
-                                        "/data/adb/modules" to "755",
-                                        "/data/adb/ksu" to "755",
-                                        "/data/adb/ksud" to "755"
-                                    )) {
-                                        su("chmod $mode '" + path.replace("'", "'\''") + "' 2>/dev/null; true")
-                                    }
-                                    val domains = listOf(
-                                        "untrusted_app", "untrusted_app_25", "untrusted_app_27",
-                                        "untrusted_app_29", "untrusted_app_30", "untrusted_app_32",
-                                        "untrusted_app_34"
-                                    )
-                                    val rules = domains.joinToString("\n") { dm ->
-                                        "allow " + dm + " adb_data_file dir { open read search getattr }\n" +
-                                            "allow " + dm + " adb_data_file file { open read getattr }\n" +
-                                            "allow " + dm + " adb_data_file lnk_file read\n" +
-                                            "allow " + dm + " proc_modules file { open read getattr }"
-                                    } + "\n"
-                                    val rf = "/data/local/tmp/sepolicy_rules.txt"
-                                    su("printf '%s' '" + rules.replace("'", "'\''") + "' > $rf ; chmod 644 $rf ; true")
-                                    val ks = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
-                                    if (java.io.File(ks).exists()) {
-                                        su("'" + ks.replace("'", "'\\''") + "' sepolicy apply $rf 2>&1; true")
-                                    }
-                                } else {
-                                    try {
-                                        su("rm -f /data/adb/service.d/xy_open_access.sh")
-                                    } catch (t: Throwable) {
-                                    }
-                                    for (path in listOf(
-                                        "/data/adb", "/data/adb/modules",
-                                        "/data/adb/ksu", "/data/adb/ksud"
-                                    )) {
-                                        su("chmod 700 '" + path.replace("'", "'\''") + "' 2>/dev/null; true")
-                                    }
-                                    val rules = "deny untrusted_app adb_data_file dir { open read search getattr }\n" +
-                                        "deny untrusted_app adb_data_file file { open read getattr }\n" +
-                                        "deny untrusted_app adb_data_file lnk_file read\n" +
-                                        "deny untrusted_app proc_modules file { open read getattr }\n"
-                                    val rf = "/data/local/tmp/sepolicy_deny.txt"
-                                    su("printf '%s' '" + rules.replace("'", "'\''") + "' > $rf ; chmod 644 $rf ; true")
-                                    val ks = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
-                                    if (java.io.File(ks).exists()) {
-                                        su("'" + ks.replace("'", "'\\''") + "' sepolicy apply $rf 2>&1; true")
-                                    }
-                                }
-                            } catch (t: Throwable) {
-                            }
-                        }
-                        kotlinx.coroutines.delay(600)
-                        refreshLatency()
                     }
                 }
             }
@@ -5750,6 +5597,7 @@ class FpsOverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var fpsView: TextView? = null
+    private var subView: TextView? = null
     private var executor: ScheduledExecutorService? = null
 
     private var activePkg: String = ""
@@ -5812,23 +5660,36 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {}
     }
 
-    // 添加悬浮窗
+    // 添加悬浮窗（FPS 大字 + CPU 频率小字）
     private fun addOverlay() {
         try {
-            val tv = TextView(this)
-            tv.text = "--"
-            // 白底 + 金色字 + 灰色胶囊描边
-            tv.setTextColor(android.graphics.Color.parseColor("#FFC107"))
-            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
-            tv.gravity = Gravity.CENTER
-            val bgDrawable = android.graphics.drawable.GradientDrawable()
-            bgDrawable.setColor(android.graphics.Color.parseColor("#F2FFFFFF"))
-            bgDrawable.cornerRadius = 200f
-            bgDrawable.setStroke(3, android.graphics.Color.parseColor("#FFC107"))
-            tv.background = bgDrawable
-            tv.setPadding(22, 8, 22, 8)
-            tv.minWidth = 150
+            val root = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(22, 6, 22, 6)
+                val bg = android.graphics.drawable.GradientDrawable()
+                bg.setColor(android.graphics.Color.parseColor("#F2FFFFFF"))
+                bg.cornerRadius = 200f
+                bg.setStroke(3, android.graphics.Color.parseColor("#FFC107"))
+                background = bg
+            }
+            val tv = TextView(this).apply {
+                text = "--"
+                setTextColor(android.graphics.Color.parseColor("#FFC107"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                minWidth = 150
+            }
+            val sub = TextView(this).apply {
+                text = "根据帧率来调整频率"
+                setTextColor(android.graphics.Color.parseColor("#99FFC107"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+                gravity = Gravity.CENTER
+                maxLines = 1
+            }
+            root.addView(tv)
+            root.addView(sub)
 
             val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -5851,7 +5712,7 @@ class FpsOverlayService : Service() {
             var downY = 0f
             var startX = 0
             var startY = 0
-            tv.setOnTouchListener { _, ev ->
+            root.setOnTouchListener { _, ev ->
                 when (ev.action) {
                     android.view.MotionEvent.ACTION_DOWN -> {
                         downX = ev.rawX
@@ -5862,18 +5723,19 @@ class FpsOverlayService : Service() {
                     }
                     android.view.MotionEvent.ACTION_MOVE -> {
                         val dm = resources.displayMetrics
-                        val maxX = (dm.widthPixels - tv.width).coerceAtLeast(0)
-                        val maxY = (dm.heightPixels - tv.height).coerceAtLeast(0)
+                        val maxX = (dm.widthPixels - root.width).coerceAtLeast(0)
+                        val maxY = (dm.heightPixels - root.height).coerceAtLeast(0)
                         lp.x = (startX + (ev.rawX - downX).toInt()).coerceIn(0, maxX)
                         lp.y = (startY + (ev.rawY - downY).toInt()).coerceIn(0, maxY)
-                        try { windowManager.updateViewLayout(tv, lp) } catch (t: Throwable) {}
+                        try { windowManager.updateViewLayout(root, lp) } catch (t: Throwable) {}
                         true
                     }
                     else -> true
                 }
             }
-            windowManager.addView(tv, lp)
+            windowManager.addView(root, lp)
             fpsView = tv
+            subView = sub
         } catch (t: Throwable) {
             android.util.Log.e("FPSD", "addOverlay fail: " + t)
             stopSelf()
