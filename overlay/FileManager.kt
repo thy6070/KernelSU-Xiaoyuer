@@ -3295,7 +3295,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                     } catch (t: Throwable) { "未适配此机型" }
                 }
             }
-            FpsTextBlock()
+            ModeButton(Icons.Outlined.DarkMode, "FPS+", subtitle = "根据帧率调节频率")
             ModeButton(Icons.Outlined.AcUnit, "能量守恒", subtitle = devLabel)
             ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3", onRun = {
                 onDismiss()
@@ -3323,39 +3323,6 @@ private fun loadExecPath(slot: String): String? {
         o.ifEmpty { null }
     } catch (t: Throwable) {
         null
-    }
-}
-
-@Composable
-private fun FpsTextBlock() {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    var fps by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            fps = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val f = java.io.File(ctx.filesDir, "fps_raw")
-                    if (f.exists() && f.length() > 0) parseLatencyText(f.readText()) else null
-                }.getOrNull()
-            }
-            kotlinx.coroutines.delay(1000)
-        }
-    }
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = fps?.let { String.format("%.0f", it) + ".0" } ?: "--",
-            color = Color(0xFFFFC107),
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "根据帧率调整性能",
-            color = Color(0x99FFFFFF),
-            fontSize = 10.sp
-        )
     }
 }
 
@@ -4219,8 +4186,7 @@ private fun BrowserPane(
             state = listState,
             modifier = modifier
                 .fillMaxSize()
-                .nestedScroll(pullConn)
-                .padding(horizontal = 12.dp),
+                .nestedScroll(pullConn),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
         item {
@@ -5859,7 +5825,7 @@ class FpsOverlayService : Service() {
                 val bg = android.graphics.drawable.GradientDrawable()
                 bg.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 bg.cornerRadius = 999f
-                bg.setColor(android.graphics.Color.parseColor("#14FFFFFF"))
+                bg.setColor(android.graphics.Color.parseColor("#66000000"))
                 background = bg
             }
             val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -5875,13 +5841,6 @@ class FpsOverlayService : Service() {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
             )
-            // 背景模糊：Android 12+ 窗口级 blur，30dp
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
-                try {
-                    lp.flags = lp.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-                    lp.setBlurBehindRadius((30 * resources.displayMetrics.density).toInt())
-                } catch (t: Throwable) {}
-            }
             lp.gravity = Gravity.TOP or Gravity.START
             lp.x = 20
             lp.y = 120
