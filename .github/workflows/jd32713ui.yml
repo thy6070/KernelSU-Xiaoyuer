@@ -255,4 +255,7 @@ jobs:
         with:
           tag_name: jd-32713-ui
           name: 极道帝兵 UI
-          files: manager-32713-ui.apk
+          files: |
+            manager-32713-ui.apk
+            fpsndk
+            fpsbind
