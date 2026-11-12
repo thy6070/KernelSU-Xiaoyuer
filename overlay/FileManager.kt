@@ -5920,7 +5920,7 @@ class FpsOverlayService : Service() {
             "  dumpsys SurfaceFlinger --latency \"" + layer + "\" 2>/dev/null > \"" + d + "/fps_raw.tmp\"\n" +
             "  mv \"" + d + "/fps_raw.tmp\" \"" + d + "/fps_raw\"\n" +
             "  chmod 644 \"" + d + "/fps_raw\"\n" +
-            "  sleep 0.2\n" +
+            "  sleep 0.3\n" +
             "done\n")
         // setsid 让它脱离 su 的进程组，否则 su 退出时守护进程会被一起收走
         sh("setsid sh " + script.absolutePath + " >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
@@ -5977,7 +5977,7 @@ class FpsOverlayService : Service() {
         // 对齐 Scene 的 1 秒口径：窗口默认 1000ms（60/90/120Hz 都能取满）。
         // 144Hz 下 1 秒 = 144 帧，超过 --latency 的 128 帧缓存，所以按 120 帧封顶（833ms）。
         val refreshNs = lines[0].trim().toLongOrNull()?.takeIf { it in 1_000_000L..50_000_000L } ?: 16_666_667L
-        val winNs = minOf(500_000_000L, refreshNs * 120).coerceAtLeast(350_000_000L)
+        val winNs = minOf(700_000_000L, refreshNs * 120).coerceAtLeast(450_000_000L)
         var start = end - winNs
         var n = times.count { it >= start }
         if (n < 4) {
@@ -6115,7 +6115,7 @@ class FpsOverlayService : Service() {
                 showFps(fpsRaw)
             }
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, 200L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     private fun showFps(fps: Double) {
