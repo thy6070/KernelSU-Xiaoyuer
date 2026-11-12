@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <dlfcn.h>
 
 // NDK 无 binder_manager.h：手动声明
 __attribute__((weak)) AIBinder* AServiceManager_getService(const char* instance);
@@ -17,6 +18,18 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: %s <layer>\n", argv[0]);
         return 1;
     }
+    // 设备库有 ABinderProcess_*（NDK 静态库没有）→ dlopen 动态解析
+    void *bh = dlopen("libbinder_ndk.so", RTLD_NOW | RTLD_GLOBAL);
+    if (bh) {
+        void (*setmax)(uint32_t) = (void (*)(uint32_t))dlsym(bh, "ABinderProcess_setThreadPoolMaxThreadCount");
+        void (*start)(void) = (void (*)(void))dlsym(bh, "ABinderProcess_startThreadPool");
+        fprintf(stderr, "dlsym setmax=%p start=%p\n", (void *)setmax, (void *)start);
+        if (setmax) setmax(1);
+        if (start) start();
+    } else {
+        fprintf(stderr, "dlopen libbinder_ndk failed\n");
+    }
+
     AIBinder *sf = AServiceManager_getService("SurfaceFlinger");
     if (!sf) {
         fprintf(stderr, "getService SurfaceFlinger failed\n");
