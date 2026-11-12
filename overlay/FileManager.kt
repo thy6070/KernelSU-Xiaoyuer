@@ -5944,7 +5944,7 @@ class FpsOverlayService : Service() {
         }
     }
 
-    // 解析 --latency 文本：600ms 窗口内的实际呈现帧率；画面静止返回 0
+    // 解析 --latency 文本：800ms 窗口内的实际呈现帧率；画面静止返回 0
     private fun parseLatencyText(out: String): Double? {
         if (out.isBlank()) return null
         val lines = out.lines()
@@ -5963,7 +5963,7 @@ class FpsOverlayService : Service() {
         times.sort()
         val end = times[times.size - 1]
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
-        val start = end - 500_000_000L
+        val start = end - 800_000_000L
         var n = 0
         var first = 0L
         for (k in times.indices) {
@@ -5994,6 +5994,8 @@ class FpsOverlayService : Service() {
             if (!n.contains("#")) continue
             if (n.contains("ActivityRecord") || n.contains("InputSink") ||
                 n.contains("animation-leash") || n.contains("Surface(name=")) continue
+            // 带前导 layer id 的条目（RequestedLayerState{<hex> <name>}）--latency 读不到数据，
+            // 必须跳过；真正能出帧的层名不带 hex 前缀（实测验证过）
             if (Regex("^[0-9a-fA-F]+ ").containsMatchIn(n)) continue
             var sc = 0
             if (n.contains("SurfaceView")) sc += 100
@@ -6071,8 +6073,8 @@ class FpsOverlayService : Service() {
         val end = times[times.size - 1]
         // 画面静止：最新一帧距今超过 800ms，说明没有新帧，直接归零
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
-        // 600ms 窗口：比 1 秒更跟手，掉帧能更快反映出来
-        val start = end - 500_000_000L
+        // 800ms 窗口：对齐 Scene 的 1s 口径，同时避开 --latency 128 帧缓存上限
+        val start = end - 800_000_000L
         var n = 0
         var first = 0L
         for (k in times.indices) {
@@ -6133,7 +6135,7 @@ class FpsOverlayService : Service() {
                 showFps(fpsRaw)
             }
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 250L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, if (idleCount >= 6) 1500L else 1000L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     private fun showFps(fps: Double) {
