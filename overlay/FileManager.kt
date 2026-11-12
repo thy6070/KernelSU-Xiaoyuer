@@ -5859,8 +5859,7 @@ class FpsOverlayService : Service() {
                 val bg = android.graphics.drawable.GradientDrawable()
                 bg.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 bg.cornerRadius = 999f
-                bg.setColor(android.graphics.Color.parseColor("#33FFFFFF"))
-                bg.setStroke(2, android.graphics.Color.parseColor("#55FFFFFF"))
+                bg.setColor(android.graphics.Color.parseColor("#14FFFFFF"))
                 background = bg
             }
             val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -5873,8 +5872,7 @@ class FpsOverlayService : Service() {
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
             )
             // 背景模糊：Android 12+ 窗口级 blur，30dp
