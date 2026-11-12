@@ -3337,17 +3337,19 @@ private fun ModeButton(
     var on by remember { mutableStateOf(false) }
     var clickTick by remember { mutableStateOf(0) }
     var onInitDone by remember { mutableStateOf(false) }
-    // 每次进入界面：检测守护文件是否存在（存在=开，不存在=关）
+    // 只有“能量守恒”检测 xy_perf_daemon 状态；其他按钮各自检测（FPS+ 读 prefs 等）
     LaunchedEffect(Unit) {
-        val running = withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching {
-                val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                    "if [ -f /data/adb/xy_perf_daemon ] && ps -ef 2>/dev/null | grep -q '[x]y_perf_daemon'; then echo 1; else echo 0; fi"))
-                val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
-                o.trim() == "1"
-            }.getOrDefault(false)
+        if (title == "能量守恒") {
+            val running = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                        "if [ -f /data/adb/xy_perf_daemon ] && ps -ef 2>/dev/null | grep -q '[x]y_perf_daemon'; then echo 1; else echo 0; fi"))
+                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
+                    o.trim() == "1"
+                }.getOrDefault(false)
+            }
+            on = running
         }
-        on = running
         onInitDone = true
     }
     var execPath by remember { mutableStateOf<String?>(null) }
@@ -4230,7 +4232,7 @@ private fun BrowserPane(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 54.dp)
+                        .padding(start = 14.dp)
                         .height(0.5.dp)
                         .background(Color(0x33FFFFFF))
                 )
@@ -4295,7 +4297,7 @@ private fun FsRow(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 54.dp)
+                    .padding(start = 14.dp)
                     .height(0.5.dp)
                     .background(Color(0x33FFFFFF))
             )
