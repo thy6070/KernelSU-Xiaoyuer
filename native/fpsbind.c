@@ -17,6 +17,7 @@
 #include <sched.h>
 #include <dirent.h>
 #include <sys/socket.h>
+#include <linux/types.h>
 #include <linux/netlink.h>
 #include <linux/connector.h>
 #include <linux/cn_proc.h>
@@ -117,15 +118,14 @@ int main(int argc, char **argv) {
     memset(buf, 0, sizeof(buf));
     struct nlmsghdr *nlh = (struct nlmsghdr *)buf;
     struct cn_msg *cn = (struct cn_msg *)NLMSG_DATA(nlh);
-    struct proc_cn_mcast_op *mc = (struct proc_cn_mcast_op *)cn->data;
-    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(*mc));
+    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(__u32));
     nlh->nlmsg_type = NLMSG_DONE;
     nlh->nlmsg_pid = getpid();
     nlh->nlmsg_flags = 0;
     cn->id.idx = CN_IDX_PROC;
     cn->id.val = CN_VAL_PROC;
-    cn->len = sizeof(*mc);
-    mc->op = PROC_CN_MCAST_LISTEN;
+    cn->len = sizeof(__u32);
+    *(__u32 *)cn->data = PROC_CN_MCAST_LISTEN;
     if (send(s, nlh, nlh->nlmsg_len, 0) < 0) {
         fprintf(stderr, "subscribe: %s\n", strerror(errno));
         close(s);
@@ -173,14 +173,13 @@ int main(int argc, char **argv) {
     // 取消订阅
     nlh = (struct nlmsghdr *)buf;
     cn = (struct cn_msg *)NLMSG_DATA(nlh);
-    mc = (struct proc_cn_mcast_op *)cn->data;
-    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(*mc));
+    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(__u32));
     nlh->nlmsg_type = NLMSG_DONE;
     nlh->nlmsg_pid = getpid();
     cn->id.idx = CN_IDX_PROC;
     cn->id.val = CN_VAL_PROC;
-    cn->len = sizeof(*mc);
-    mc->op = PROC_CN_MCAST_IGNORE;
+    cn->len = sizeof(__u32);
+    *(__u32 *)cn->data = PROC_CN_MCAST_IGNORE;
     send(s, nlh, nlh->nlmsg_len, 0);
 
     close(s);
