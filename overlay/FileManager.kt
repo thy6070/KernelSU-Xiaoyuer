@@ -5987,9 +5987,9 @@ class FpsOverlayService : Service() {
         }
         val first = times.firstOrNull { it >= start } ?: return 0.0
         if (n < 2 || end <= first) return 0.0
-        // Scene 口径：窗口内帧数 ÷ 窗口秒数（1 秒内的帧数）
-        val fps = n.toDouble() * 1_000_000_000.0 / winNs.toDouble()
-        // 上限 = 面板刷新率（--latency 第一行），避免边界帧算出超过面板的假值
+        // 无偏公式：n 帧之间有 n-1 个间隔，用真实跨度算，消除窗口边界误差
+        val fps = (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
+        // 上限 = 面板刷新率（--latency 第一行），防止极端情况算出超过面板的假值
         val maxFps = 1_000_000_000.0 / refreshNs.toDouble()
         return if (fps > maxFps) maxFps else fps
     }
