@@ -142,6 +142,9 @@ static int binder_call(const struct parcel *p, size_t code, size_t handle,
             return -1;
         }
         /* 解析读缓冲 */
+        fprintf(stderr, "ioctl ok: write_consumed=%llu read_consumed=%llu first=0x%x\n",
+                (unsigned long long)bwr.write_consumed, (unsigned long long)bwr.read_consumed,
+                bwr.read_consumed >= 4 ? *(uint32_t *)rbuf : 0);
         size_t off = 0;
         while (off < bwr.read_consumed) {
             uint32_t *c = (uint32_t *)(rbuf + off);
@@ -178,6 +181,7 @@ static int get_service(const char *name, uint32_t *out_handle) {
     p_string16(&p, name);
     struct parcel rep;
     if (binder_call(&p, 1, 0, NULL, 0, &rep) < 0) return -1;
+    fprintf(stderr, "get_service reply len=%zu\n", rep.len);
     if (rep.len < 4) return -1;
     /* 回复可能是 flat_binder_object(BINDER_TYPE_HANDLER) 或直接 int32 handle */
     uint32_t type = 0;
@@ -190,6 +194,7 @@ static int get_service(const char *name, uint32_t *out_handle) {
     }
     /* 直接 int32 */
     memcpy(out_handle, rep.buf, 4);
+    fprintf(stderr, "get_service handle(int32)=%u\n", *out_handle);
     return 0;
 }
 
