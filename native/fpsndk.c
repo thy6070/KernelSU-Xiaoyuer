@@ -24,19 +24,24 @@ int main(int argc, char **argv) {
     }
     fprintf(stderr, "binder=%p\n", (void *)sf);
 
-    AParcel *in = AParcel_create();
+    AParcel *in = NULL;
+    binder_status_t st = AIBinder_prepareTransaction(sf, &in);
+    fprintf(stderr, "prepare=%d in=%p\n", (int)st, (void *)in);
+    if (st != STATUS_OK || !in) {
+        in = AParcel_create();
+        fprintf(stderr, "fallback create in=%p\n", (void *)in);
+    }
     if (!in) {
-        fprintf(stderr, "AParcel_create failed\n");
+        fprintf(stderr, "no parcel\n");
         return 1;
     }
-    fprintf(stderr, "parcel ok\n");
-    binder_status_t st;
+    fprintf(stderr, "parcel size before write=%d\n", (int)AParcel_getDataSize(in));
 
     // AOSP BpSurfaceComposer::dump:
     //   writeInterfaceToken; writeInt32(1); writeFileDescriptor(fd);
     //   writeInt32(args.size()); for arg: writeString16
     st = AParcel_writeString(in, "android.gui.ISurfaceComposer", (int32_t)strlen("android.gui.ISurfaceComposer"));
-    fprintf(stderr, "token write=%d\n", (int)st);
+    fprintf(stderr, "token write=%d size=%d\n", (int)st, (int)AParcel_getDataSize(in));
 
     int fds[2];
     if (pipe(fds) < 0) { perror("pipe"); return 1; }
