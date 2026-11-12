@@ -4625,8 +4625,8 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
             propScript.append("REL=\$(getprop ro.build.version.release); ")
             propScript.append("BID=\$(getprop ro.build.id); ")
             propScript.append("INC=\$(getprop ro.build.version.incremental); ")
-            propScript.append("NEWFP='").append(brand.lowercase()).append("/").append(code).append("/").append(code)
-                .append(":'\$REL'/\$BID/\$INC:user/release-keys'; ")
+            propScript.append("NEWFP=\"").append(brand.lowercase()).append("/").append(code).append("/").append(code)
+                .append(":\$REL/\$BID/\$INC:user/release-keys\"; ")
             propScript.append("resetprop ro.build.fingerprint \"\$NEWFP\" 2>/dev/null\n")
             // 持久化脚本
             val persist = "mkdir -p /data/adb/service.d; " +
