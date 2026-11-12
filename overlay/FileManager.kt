@@ -3346,7 +3346,7 @@ private fun FpsTextBlock() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = fps?.let { String.format("%.0f", it) } ?: "--",
+            text = fps?.let { String.format("%.0f", it) + ".0" } ?: "--",
             color = Color(0xFFFFC107),
             fontSize = 30.sp,
             fontWeight = FontWeight.Bold
@@ -5845,29 +5845,29 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {}
     }
 
-    // 添加悬浮窗
+    // 悬浮窗：胶囊 + 背景模糊 30dp + 白色文字
     private fun addOverlay() {
         try {
-            val tv = TextView(this)
-            tv.text = "--"
-            // 白底 + 金色字 + 灰色胶囊描边
-            tv.setTextColor(android.graphics.Color.parseColor("#FFC107"))
-            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
-            tv.gravity = Gravity.CENTER
-            val bgDrawable = android.graphics.drawable.GradientDrawable()
-            bgDrawable.setColor(android.graphics.Color.parseColor("#F2FFFFFF"))
-            bgDrawable.cornerRadius = 200f
-            bgDrawable.setStroke(3, android.graphics.Color.parseColor("#FFC107"))
-            tv.background = bgDrawable
-            tv.setPadding(22, 8, 22, 8)
-            tv.minWidth = 150
-
+            val tv = TextView(this).apply {
+                text = "--"
+                setTextColor(android.graphics.Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setPadding(26, 8, 26, 8)
+                // 胶囊：圆角取大值即为半高
+                val bg = android.graphics.drawable.GradientDrawable()
+                bg.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                bg.cornerRadius = 999f
+                bg.setColor(android.graphics.Color.parseColor("#33FFFFFF"))
+                bg.setStroke(2, android.graphics.Color.parseColor("#55FFFFFF"))
+                background = bg
+            }
             val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
                 @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
+                android.view.WindowManager.LayoutParams.TYPE_PHONE
             }
             val lp = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -5877,6 +5877,13 @@ class FpsOverlayService : Service() {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             )
+            // 背景模糊：Android 12+ 窗口级 blur，30dp
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                try {
+                    lp.flags = lp.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                    lp.setBlurBehindRadius((30 * resources.displayMetrics.density).toInt())
+                } catch (t: Throwable) {}
+            }
             lp.gravity = Gravity.TOP or Gravity.START
             lp.x = 20
             lp.y = 120
@@ -6008,7 +6015,7 @@ class FpsOverlayService : Service() {
     // 画面静止（最新帧距今 > 1.5s）返回 0。
     private fun refreshLayer() {
         val now = System.currentTimeMillis()
-        if (activePkg.isEmpty() || now - lastPkgRefresh > 5000L) {
+        if (activePkg.isEmpty() || now - lastPkgRefresh > 1000L) {
             lastPkgRefresh = now
             val out = sh("dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity", 2L)
             val m = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(out)
@@ -6127,7 +6134,7 @@ class FpsOverlayService : Service() {
                 showFps(fpsRaw)
             }
         } catch (t: Throwable) {}
-        try { executor?.schedule({ tick() }, 300L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, 150L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     private fun showFps(fps: Double) {
@@ -6135,7 +6142,7 @@ class FpsOverlayService : Service() {
         if (v == lastShown) return
         lastShown = v
         fpsView?.post {
-            try { fpsView?.text = v.toString() } catch (t: Throwable) {}
+            try { fpsView?.text = v.toString() + ".0" } catch (t: Throwable) {}
         }
     }
 }
@@ -6162,7 +6169,7 @@ internal fun parseLatencyText(out: String): Double? {
         // 对齐 Scene 的 1 秒口径：窗口默认 1000ms（60/90/120Hz 都能取满）。
         // 144Hz 下 1 秒 = 144 帧，超过 --latency 的 128 帧缓存，所以按 120 帧封顶（833ms）。
         val refreshNs = lines[0].trim().toLongOrNull()?.takeIf { it in 1_000_000L..50_000_000L } ?: 16_666_667L
-        val winNs = minOf(700_000_000L, refreshNs * 120).coerceAtLeast(450_000_000L)
+        val winNs = minOf(500_000_000L, refreshNs * 120).coerceAtLeast(350_000_000L)
         var start = end - winNs
         var n = times.count { it >= start }
         if (n < 4) {
