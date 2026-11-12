@@ -6111,6 +6111,7 @@ class FpsOverlayService : Service() {
     // ===== FPS+：独立于能量守恒，按实时帧率调节 =====
     private var lastBoost = 0L
     private var fpsPlusLow = 0
+    private var fpsPlusBoosted = false
 
     private fun isGamePkg(pkg: String): Boolean {
         if (pkg.isEmpty()) return false
@@ -6145,17 +6146,28 @@ class FpsOverlayService : Service() {
         // 过滤 63 帧以下：60 帧游戏不参与判断
         if (fps <= 63.0) { fpsPlusLow = 0; return }
         // 掉 5 帧触发
-        if (fps < refresh - 5.0) fpsPlusLow++ else { fpsPlusLow = 0; return }
+        if (fps >= refresh - 5.0) {
+            // 恢复：解除 boost
+            fpsPlusLow = 0
+            if (fpsPlusBoosted) {
+                fpsPlusBoosted = false
+                sh("[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null", 2L)
+            }
+            return
+        }
+        fpsPlusLow++
         if (fpsPlusLow < 3) return
         fpsPlusLow = 0
         val now = System.currentTimeMillis()
         if (now - lastBoost < 2000L) return
         lastBoost = now
+        fpsPlusBoosted = true
         // 拉满 CPU/GPU + sched_boost（与能量守恒互不依赖）
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
             "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
             "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
             "[ -f /proc/sys/kernel/sched_boost ] && echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
+            "am kill-all >/dev/null 2>&1; " +
             "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
     }
 
