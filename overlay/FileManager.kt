@@ -5921,6 +5921,26 @@ class FpsOverlayService : Service() {
         daemonStartedAt = System.currentTimeMillis()
     }
 
+    // 内核数据源（MTK FPSGO）：/sys/kernel/fpsgo/fstb/fpsgo_status
+    // 每行一个渲染层：tid / bufID / name / currentFPS / targetFPS ...
+    // 内核直接给 currentFPS，无需自己按时间戳算；非 MTK 设备返回 null 走 --latency 兜底
+    private fun readFpsgoFps(): Double? {
+        val out = sh("cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null", 2L)
+        if (out.isBlank()) return null
+        var best = -1.0
+        for (line in out.lines()) {
+            if (!line.contains('\t')) continue
+            val m = Regex("^(\\d+)\t(\\S+)\t(\\S+)\t(\\d+)").find(line) ?: continue
+            val name = m.groupValues[3]
+            val cur = m.groupValues[4].toDoubleOrNull() ?: continue
+            if (cur <= 0.0) continue
+            // fpsgo 的 name 会被截断（dsharnessmobile.shell → essmobile.shell），用后缀匹配
+            if (activePkg.isNotEmpty() && activePkg.endsWith(name)) return cur
+            if (cur > best) best = cur
+        }
+        return if (best > 0.0) best else null
+    }
+
     // 读 daemon 写下的最新数据并解析（零 su 开销）
     private var lastRawMtime = 0L
     private var lastRawChange = 0L
@@ -6099,7 +6119,8 @@ class FpsOverlayService : Service() {
                     startDaemon(ln)
                 }
             }
-            val fpsRaw = readDaemonFps()
+            // 数据源优先级：内核 FPSGO（MTK，最准最省）→ SurfaceFlinger --latency 兜底
+            val fpsRaw = readFpsgoFps() ?: readDaemonFps()
             if (fpsRaw == null) {
                 // daemon 刚启动的 2 秒内不算失败（文件还没写出来）
                 if (System.currentTimeMillis() - daemonStartedAt < 2000L) {
