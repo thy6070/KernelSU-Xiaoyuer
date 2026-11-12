@@ -179,6 +179,14 @@ jobs:
           mkdir -p src/manager/app/src/main/assets
           cp fpsbinder src/manager/app/src/main/assets/fpsbinder
 
+      - name: Build fpsndk (NDK libbinder_ndk)
+        run: |
+          CC="${{ steps.ndk2.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          "$CC" -O2 native/fpsndk.c -o fpsndk -lbinder_ndk 2>&1 | tail -20
+          ls -lh fpsndk
+          mkdir -p src/manager/app/src/main/assets
+          cp fpsndk src/manager/app/src/main/assets/fpsndk
+
       - name: Build fpsbind (native proc-connector binder)
         run: |
           CC="${{ steps.ndk2.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
@@ -193,6 +201,7 @@ jobs:
           mkdir -p src/manager/app/src/main/assets
           cp -f fpsbinder src/manager/app/src/main/assets/fpsbinder 2>/dev/null || true
           cp -f fpsbind src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
+          cp -f fpsndk src/manager/app/src/main/assets/fpsndk 2>/dev/null || true
           ls -lh src/manager/app/src/main/assets/fpsbinder src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
           cd src/manager
           # 用腾讯镜像下载 Gradle（services.gradle.org 经常超时）
