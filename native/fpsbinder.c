@@ -51,8 +51,8 @@ struct flat_binder_object {
 
 #define BINDER_WRITE_READ _IOWR('b', 1, struct binder_write_read)
 #define BC_TRANSACTION _IOW('c', 0, struct binder_transaction_data)
-#define BR_TRANSACTION 0x40407202
-#define BR_REPLY 0x40407203
+#define BR_TRANSACTION _IOR('r', 2, struct binder_transaction_data)
+#define BR_REPLY _IOR('r', 3, struct binder_transaction_data)
 
 /* 简单 parcel 构造 */
 struct parcel {
@@ -107,13 +107,10 @@ static int binder_call(const struct parcel *p, size_t code, size_t handle,
                        size_t *offsets, size_t nocts, struct parcel *rep) {
     (void)offsets;
     static uint8_t wbuf[8192];
-    struct binder_transaction_data *tr = (struct binder_transaction_data *)(wbuf + 8);
     memset(wbuf, 0, sizeof(wbuf));
     uint32_t cmd = BC_TRANSACTION;
     memcpy(wbuf, &cmd, 4);
-    size_t need = p->len;
-    memcpy(tr->data.buf, &need, 8); /* 先用 8 字节占位，下面覆盖 */
-    /* 事务体 */
+    struct binder_transaction_data *tr = (struct binder_transaction_data *)(wbuf + 4);
     memset(tr, 0, sizeof(*tr));
     tr->target.handle = handle;
     tr->code.code = code;
