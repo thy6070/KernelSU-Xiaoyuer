@@ -5927,18 +5927,39 @@ class FpsOverlayService : Service() {
     private fun readFpsgoFps(): Double? {
         val out = sh("cat /sys/kernel/fpsgo/fstb/fpsgo_status 2>/dev/null", 2L)
         if (out.isBlank()) return null
-        var best = -1.0
+        var matched = false
+        var matchedFps = 0.0
         for (line in out.lines()) {
             if (!line.contains('\t')) continue
             val m = Regex("^(\\d+)\t(\\S+)\t(\\S+)\t(\\d+)").find(line) ?: continue
             val name = m.groupValues[3]
             val cur = m.groupValues[4].toDoubleOrNull() ?: continue
-            if (cur <= 0.0) continue
             // fpsgo 的 name 会被截断（dsharnessmobile.shell → essmobile.shell），用后缀匹配
-            if (activePkg.isNotEmpty() && activePkg.endsWith(name)) return cur
-            if (cur > best) best = cur
+            if (activePkg.isNotEmpty() && activePkg.endsWith(name)) {
+                matched = true
+                // 同一应用可能有多个渲染层，取最大的（避开瞬间归 0 的那行）
+                if (cur > matchedFps) matchedFps = cur
+            }
         }
-        return if (best > 0.0) best else null
+        // 只返回当前前台应用自己的值；没匹配到说明它不在 FPSGO 管理里，交给 --latency
+        return if (matched) matchedFps else null
+    }
+
+    // 骁龙/通用内核数据源：DRM measured_fps（显示控制器实测出帧率）
+    // 注意：这是「显示输出帧率」，等同刷新率；画面静止但屏幕 120Hz 时它仍报 120，
+    // 所以它只能当"屏幕实际刷新率"用，不能替代应用渲染帧率
+    private fun readDrmFps(): Double? {
+        for (p in listOf(
+            "/sys/class/drm/sde-crtc-0/measured_fps",
+            "/sys/class/graphics/fb0/measured_fps"
+        )) {
+            val t = sh("cat $p 2>/dev/null", 2L).trim()
+            if (t.isEmpty()) continue
+            val v = t.lines().firstOrNull()?.split(Regex("\\s+"))
+                ?.mapNotNull { it.toDoubleOrNull() }?.firstOrNull()
+            if (v != null && v > 0.0) return v
+        }
+        return null
     }
 
     // 读 daemon 写下的最新数据并解析（零 su 开销）
@@ -6119,8 +6140,8 @@ class FpsOverlayService : Service() {
                     startDaemon(ln)
                 }
             }
-            // 数据源优先级：内核 FPSGO（MTK，最准最省）→ SurfaceFlinger --latency 兜底
-            val fpsRaw = readFpsgoFps() ?: readDaemonFps()
+            // 数据源优先级：MTK FPSGO（逐应用）→ 高通 DRM measured_fps（刷新率）→ --latency 兜底
+            val fpsRaw = readFpsgoFps() ?: readDrmFps() ?: readDaemonFps()
             if (fpsRaw == null) {
                 // daemon 刚启动的 2 秒内不算失败（文件还没写出来）
                 if (System.currentTimeMillis() - daemonStartedAt < 2000L) {
