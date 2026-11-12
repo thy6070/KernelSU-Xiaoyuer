@@ -13,7 +13,7 @@
 #include <sys/mman.h>
 #include <sys/uio.h>
 
-typedef int32_t binder_size_t;
+typedef uint64_t binder_size_t;
 typedef uintptr_t binder_uintptr_t;
 
 struct binder_write_read {
@@ -26,9 +26,9 @@ struct binder_write_read {
 };
 
 struct binder_transaction_data {
-    union { size_t handle; void *ptr; } target;
-    union { size_t code; unsigned int flags; } code;
-    unsigned int flags;
+    union { uint32_t handle; binder_uintptr_t ptr; } target;
+    uint32_t code;
+    uint32_t flags;
     pid_t sender_pid;
     uid_t sender_euid;
     binder_size_t data_size;
@@ -48,6 +48,7 @@ struct flat_binder_object {
 };
 
 #define BINDER_TYPE_FD 0x73663d42
+#define TF_ACCEPT_FDS 0x1
 
 #define BINDER_WRITE_READ _IOWR('b', 1, struct binder_write_read)
 #define BC_TRANSACTION _IOW('c', 0, struct binder_transaction_data)
@@ -113,7 +114,8 @@ static int binder_call(const struct parcel *p, size_t code, size_t handle,
     struct binder_transaction_data *tr = (struct binder_transaction_data *)(wbuf + 4);
     memset(tr, 0, sizeof(*tr));
     tr->target.handle = handle;
-    tr->code.code = code;
+    tr->code = (uint32_t)code;
+    tr->flags = TF_ACCEPT_FDS;
     tr->data_size = p->len;
     tr->offsets_size = nocts * sizeof(binder_size_t);
     /* 数据缓冲区紧跟在 tr 之后 */
@@ -135,24 +137,30 @@ static int binder_call(const struct parcel *p, size_t code, size_t handle,
 
     /* 循环：先写，读回复 */
     for (int round = 0; round < 8; round++) {
-        if (ioctl(binder_fd, BINDER_WRITE_READ, &bwr) < 0) return -1;
+        if (ioctl(binder_fd, BINDER_WRITE_READ, &bwr) < 0) {
+            fprintf(stderr, "ioctl BINDER_WRITE_READ: %s\n", strerror(errno));
+            return -1;
+        }
         /* 解析读缓冲 */
         size_t off = 0;
         while (off < bwr.read_consumed) {
             uint32_t *c = (uint32_t *)(rbuf + off);
             uint32_t cc = *c;
-            if (cc == BR_REPLY) {
+            if (cc == BR_REPLY || cc == BR_TRANSACTION) {
                 struct binder_transaction_data *r = (struct binder_transaction_data *)(rbuf + off + 4);
-                if (rep) {
+                if (rep && cc == BR_REPLY) {
                     memset(rep, 0, sizeof(*rep));
                     size_t n = r->data_size;
                     if (n > sizeof(rep->buf)) n = sizeof(rep->buf);
                     memcpy(rep->buf, (void *)r->data.ptr.buffer, n);
                     rep->len = n;
                 }
-                return 0;
+                if (cc == BR_REPLY) return 0;
+                off += 4 + sizeof(struct binder_transaction_data);
+            } else {
+                /* 命令类（BR_TRANSACTION_COMPLETE 等）只有 4 字节 */
+                off += 4;
             }
-            off += 4 + sizeof(struct binder_transaction_data);
         }
         /* 没有回复：继续读 */
         bwr.write_size = 0;
@@ -208,6 +216,8 @@ int main(int argc, char **argv) {
 
     struct parcel p;
     p_init(&p);
+    /* AOSP: writeInterfaceToken(ISurfaceComposer) */
+    p_string16(&p, "android.gui.ISurfaceComposer");
     p_i32(&p, 1);            /* num fds */
     /* 写 fd：用 flat_binder_object(BINDER_TYPE_FD) */
     size_t fd_off = p.len;
