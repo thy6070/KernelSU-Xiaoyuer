@@ -6113,6 +6113,7 @@ class FpsOverlayService : Service() {
                     idleCount = 0
                 }
                 showFps(fpsRaw)
+                ensureFpsBind()
                 maybeFpsPlusBoost(fpsRaw)
                 val nowT = System.currentTimeMillis()
                 if (nowT - lastStatLog > 5000L) {
@@ -6158,6 +6159,27 @@ class FpsOverlayService : Service() {
             pkg.startsWith("com.pwrd.") || pkg.startsWith("com.rekoo.") ||
             pkg.startsWith("com.vng.") || pkg.startsWith("com.levelinfinite.") ||
             pkg.startsWith("com.mojang.") || pkg.startsWith("com.epicgames.")
+    }
+
+    // 启动 native 绑核守护（proc connector，毫秒级）
+    private var fpsBindPkg = ""
+    private fun ensureFpsBind() {
+        if (!isGamePkg(activePkg)) return
+        if (activePkg == fpsBindPkg) return
+        try {
+            val bin = File(filesDir, "fpsbind")
+            if (!bin.exists()) {
+                assets.open("fpsbind").use { input -> bin.outputStream().use { input.copyTo(it) } }
+            }
+            bin.setExecutable(true)
+            val m = bigCoreMask()
+            if (m.isEmpty()) return
+            sh("pkill -f fpsbind 2>/dev/null; chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " 0x" + m + " " + activePkg + " >/dev/null 2>&1 &", 3L)
+            fpsBindPkg = activePkg
+            logLine("fpsbind 启动: mask=0x$m pkg=$activePkg")
+        } catch (t: Throwable) {
+            logLine("fpsbind 失败: " + t)
+        }
     }
 
     // 计算大核 mask（最高频两档 policy 的核），用于 FPS+ 绑核
