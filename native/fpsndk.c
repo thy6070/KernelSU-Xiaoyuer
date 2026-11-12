@@ -67,8 +67,8 @@ int main(int argc, char **argv) {
 
     // 发送前把 data position 归零
     AParcel_setDataPosition(in, 0);
-    AParcel *out = NULL;
-    st = AIBinder_transact(sf, 1, &in, &out, 0);
+    AParcel *out = AParcel_create();
+    st = AIBinder_transact(sf, 1, &in, &out, 0x10);  /* TF_ACCEPT_FDS */
     fprintf(stderr, "transact=%d out=%p\n", (int)st, (void *)out);
     if (st != STATUS_OK) {
         return 1;
