@@ -6164,6 +6164,9 @@ class FpsOverlayService : Service() {
     // 启动 native 绑核守护（proc connector，毫秒级）
     private var fpsBindPkg = ""
     private fun ensureFpsBind() {
+        // 仅 FPS+ 开启时启用 native 绑核（先测试，能量守恒保持原样）
+        val plus = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
+        if (!plus) return
         if (!isGamePkg(activePkg)) return
         if (activePkg == fpsBindPkg) return
         try {
@@ -6242,9 +6245,6 @@ class FpsOverlayService : Service() {
             "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
             "[ -f /proc/sys/kernel/sched_boost ] && echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
             "am kill-all >/dev/null 2>&1; " +
-            (bigCoreMask().takeIf { it.isNotEmpty() }?.let { m ->
-                "for pid in \$(pidof " + activePkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -p 0x" + m + " \${t##*/} 2>/dev/null; done; done; "
-            } ?: "") +
             "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
     }
 
