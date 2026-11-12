@@ -24,10 +24,9 @@ int main(int argc, char **argv) {
     }
     fprintf(stderr, "binder=%p\n", (void *)sf);
 
-    AParcel *in = NULL;
-    binder_status_t st = AParcel_create(&in);
-    if (st != STATUS_OK || !in) {
-        fprintf(stderr, "AParcel_create failed: %d\n", (int)st);
+    AParcel *in = AParcel_create();
+    if (!in) {
+        fprintf(stderr, "AParcel_create failed\n");
         return 1;
     }
     fprintf(stderr, "parcel ok\n");
