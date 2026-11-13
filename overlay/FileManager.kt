@@ -6113,7 +6113,6 @@ class FpsOverlayService : Service() {
                     idleCount = 0
                 }
                 showFps(fpsRaw)
-                ensureFpsBind()
                 maybeFpsPlusBoost(fpsRaw)
                 val nowT = System.currentTimeMillis()
                 if (nowT - lastStatLog > 5000L) {
@@ -6162,29 +6161,17 @@ class FpsOverlayService : Service() {
             pkg.startsWith("com.mojang.") || pkg.startsWith("com.epicgames.")
     }
 
-    // 启动 native 绑核守护（proc connector，毫秒级）
+    // native 绑核守护（proc connector，毫秒级），按帧率启停
     private var fpsBindPkg = ""
-    private fun ensureFpsBind() {
-        // 仅 FPS+ 开启时启用 native 绑核；能量守恒保持原样
-        val plus = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
-        if (!plus) return
+    // 线程亲和：绑到系统 top-app cpuset（大核），纯 shell
+    private fun startCpuBind() {
         if (!isGamePkg(activePkg)) return
-        if (activePkg == fpsBindPkg) return
-        try {
-            val bin = File(filesDir, "fpsbind")
-            if (!bin.exists()) {
-                assets.open("fpsbind").use { input -> bin.outputStream().use { input.copyTo(it) } }
-            }
-            bin.setExecutable(true)
-            val m = bigCoreMask()
-            if (m.isEmpty()) return
-            val logF = File(filesDir, "fpsbind.log").absolutePath
-            sh("pkill -f fpsbind 2>/dev/null; chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " 0x" + m + " " + activePkg + " >> " + logF + " 2>&1 &", 3L)
-            fpsBindPkg = activePkg
-            logLine("fpsbind 启动: mask=0x$m pkg=$activePkg")
-        } catch (t: Throwable) {
-            logLine("fpsbind 失败: " + t)
-        }
+        val cpus = try {
+            sh("cat /dev/cpuset/top-app/cpus 2>/dev/null", 1L).trim()
+        } catch (t: Throwable) { "" }
+        if (cpus.isEmpty()) return
+        sh("for pid in \$(pidof " + activePkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -c " + cpus + " -p \${t##*/} 2>/dev/null; done; done", 2L)
+        logLine("线程亲和：绑 top-app cpus=" + cpus)
     }
 
     // 计算大核 mask（最高频两档 policy 的核），用于 FPS+ 绑核
@@ -6229,7 +6216,10 @@ class FpsOverlayService : Service() {
             if (fpsPlusBoosted && fpsPlusHigh >= 25) {
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
-                logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 持续正常2秒，频率还原")
+                logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 持续正常2秒，频率还原+线程放开")
+                // 停止 native 绑核，线程亲和恢复全核
+                sh("pkill -f fpsbind 2>/dev/null; for pid in \$(pidof " + activePkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -p 0xFF \${t##*/} 2>/dev/null; done; done", 2L)
+                // 恢复后不再记录
                 // 还原原频率（避免一直满频发烫）
                 sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig 2>/dev/null; " +
                    "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null", 2L)
@@ -6244,7 +6234,8 @@ class FpsOverlayService : Service() {
         if (now - lastBoost < 2000L) return
         lastBoost = now
         fpsPlusBoosted = true
-        logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续2次，执行拉满+boost+清后台")
+        startCpuBind()
+        logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续2次，拉满+boost+绑大核+清后台")
         // 首次触发保存原始频率（恢复时用）
         sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null", 2L)
         // 拉满 CPU/GPU + sched_boost（与能量守恒互不依赖）
