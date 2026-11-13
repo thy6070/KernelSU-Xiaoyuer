@@ -6131,6 +6131,15 @@ class FpsOverlayService : Service() {
                 } else {
                     idleCount = 0
                 }
+                // 换游戏/切应用：重置 FPS+ 状态（避免旧游戏的绑核/频率残留）
+                if (activePkg != lastPkg) {
+                    lastPkg = activePkg
+                    fpsPlusBoosted = false
+                    fpsPlusLow = 0
+                    fpsPlusHigh = 0
+                    refreshPkg = ""
+                    sh("pkill -f fps_bind.sh 2>/dev/null", 1L)
+                }
                 // 进入游戏：把屏幕刷新率拉到设备最高
                 if (isGamePkg(activePkg) && refreshPkg != activePkg) {
                     refreshPkg = activePkg
@@ -6282,6 +6291,7 @@ class FpsOverlayService : Service() {
     private var emaFps = 0.0
     private var lastColor = 0
     private var refreshPkg = ""
+    private var lastPkg = ""
 
     private fun showFps(fps: Double, reading: Boolean = false) {
         if (!reading && fps <= 0.0) {
