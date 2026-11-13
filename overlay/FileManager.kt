@@ -6362,7 +6362,8 @@ internal fun parseLatencyText(out: String): Double? {
             if (v <= 0L || v == Long.MAX_VALUE) continue
             times.add(v)
         }
-        if (times.size < 3) return null
+        if (times.isEmpty()) return null   // 真无数据（数据源失效）
+        if (times.size < 3) return 0.0     // 静态/低帧：有帧但少 → 0.0（不显示 --）
         times.sort()
         val end = times[times.size - 1]
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
