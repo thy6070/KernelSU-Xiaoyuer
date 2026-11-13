@@ -178,8 +178,10 @@ jobs:
 
       - name: Build fpsbinder2 (AOSP libbinder C++ client, 仅编译不集成)
         run: |
-          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/aosp-mirror/platform_frameworks_native aosp 2>&1 | tail -3
-          cd aosp && git sparse-checkout set libs/binder/include libs/utils/include include && cd ..
+          # clone 大仓库会失败，改用 tarball（只解压不 clone）
+          curl -sL --max-time 180 -o aosp.tar.gz https://codeload.github.com/aosp-mirror/platform_frameworks_native/tar.gz/refs/heads/master
+          mkdir -p aosp && tar xzf aosp.tar.gz -C aosp --strip-components=1 2>/dev/null
+          ls aosp/libs/binder/include/binder/ProcessState.h 2>/dev/null || echo "aosp headers missing"
           NDK="${{ steps.ndk2.outputs.ndk-path }}"
           CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
           "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -30
