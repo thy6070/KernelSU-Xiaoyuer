@@ -5985,19 +5985,10 @@ class FpsOverlayService : Service() {
             logLine("native fpsbinder2 启动: " + layer)
             return
         }
-        // 兜底：shell dumpsys
-        val script = File(filesDir, "fps_daemon.sh")
-        script.writeText("#!/system/bin/sh\n" +
-            "while true; do\n" +
-            "  dumpsys SurfaceFlinger --latency \"" + layer + "\" 2>/dev/null > \"" + d + "/fps_raw.tmp\"\n" +
-            "  mv \"" + d + "/fps_raw.tmp\" \"" + d + "/fps_raw\"\n" +
-            "  chmod 644 \"" + d + "/fps_raw\"\n" +
-            "  sleep 0.05\n" +
-            "done\n")
-        sh("setsid sh " + script.absolutePath + " >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
+        // 无兜底：fpsbinder2 不可用就不采集（显示 --）
+        logLine("fpsbinder2 不可用，无帧率数据")
         daemonLayer = layer
         daemonStartedAt = System.currentTimeMillis()
-        logLine("shell fps_daemon 启动（fpsbinder2 不可用）")
     }
 
     // 读 daemon 写下的最新数据并解析（零 su 开销）
