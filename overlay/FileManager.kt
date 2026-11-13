@@ -6393,11 +6393,8 @@ class FpsOverlayService : Service() {
         // 首次触发保存原始频率 + GPU 原值（恢复时用）
         sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null; " +
            "[ -f /data/local/tmp/fps_plus_gpu ] || echo \"\$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null) \$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" > /data/local/tmp/fps_plus_gpu 2>/dev/null", 2L)
-        // 拉满 CPU/GPU + sched_boost（与能量守恒互不依赖）
-        sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
-            "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
-            "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
-            "" +
+        // 温和拉频：只把大核 scaling_max 拉到 hw 最大（min 不动），GPU 不动（避免过热卡0）
+        sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && echo \$hw > \$p/scaling_max_freq 2>/dev/null; done; " +
             "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
     }
 
