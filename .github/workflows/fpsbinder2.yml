@@ -22,6 +22,11 @@ jobs:
           for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder Status Debug Common unique_fd ParcelableHolder IMemory IMemoryHeap; do curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h"; done
           for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd; do curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$B/libs/utils/include/utils/$f.h"; done
           for f in unique_fd logging macros stringprintf strings errors mapped_file scope_guard parseln file_map thread_annotations result.h; do curl -sL --max-time 20 -o "aosp/libs/base/include/android-base/$f.h" "$SB/$f.h"; done
+          echo "=== system_core 结构 ==="
+          curl -s "https://api.github.com/repos/LineageOS/android_system_core/contents?ref=lineage-22.0" | jq -r '.[].name' 2>/dev/null | head -12
+          echo "=== libbase 尝试 ==="
+          curl -s -o /dev/null -w "libbase: %{http_code}\n" "https://api.github.com/repos/LineageOS/android_system_core/contents/libbase?ref=lineage-22.0"
+          curl -s -o /dev/null -w "libbase/main: %{http_code}\n" "https://api.github.com/repos/LineageOS/android_system_core/contents/libbase?ref=main"
           echo "=== base 文件大小 ==="
           ls -la aosp/libs/base/include/android-base/ | head -15
           echo "=== unique_fd 内容 ==="
