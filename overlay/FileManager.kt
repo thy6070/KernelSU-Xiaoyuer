@@ -6229,8 +6229,10 @@ class FpsOverlayService : Service() {
             if (fpsPlusBoosted && fpsPlusHigh >= 25) {
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
-                logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 持续正常2秒，解除 boost")
-                sh("[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null", 2L)
+                logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 持续正常2秒，频率还原")
+                // 还原原频率（避免一直满频发烫）
+                sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig 2>/dev/null; " +
+                   "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null", 2L)
             }
             return
         }
@@ -6243,6 +6245,8 @@ class FpsOverlayService : Service() {
         lastBoost = now
         fpsPlusBoosted = true
         logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续2次，执行拉满+boost+清后台")
+        // 首次触发保存原始频率（恢复时用）
+        sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null", 2L)
         // 拉满 CPU/GPU + sched_boost（与能量守恒互不依赖）
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
             "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
