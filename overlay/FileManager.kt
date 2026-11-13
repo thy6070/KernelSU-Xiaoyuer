@@ -6370,8 +6370,6 @@ class FpsOverlayService : Service() {
             "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
             "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
             "[ -f /proc/sys/kernel/sched_boost ] && echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
-            # 不再 am kill-all（会误杀游戏后台服务导致卡0）
-            "" +
             "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
     }
 
