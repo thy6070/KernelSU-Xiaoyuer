@@ -231,11 +231,20 @@ jobs:
           mkdir -p src/manager/app/src/main/assets
           cp fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 2>/dev/null || true
 
+      - name: Build fpsbind (proc connector)
+        run: |
+          NDK="${{ steps.ndk2.outputs.ndk-path }}"
+          CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang"
+          "$CC" -O2 -static native/fpsbind.c -o fpsbind 2>&1 | tail -10
+          ls -lh fpsbind 2>/dev/null || echo "fpsbind build failed"
+          cp fpsbind src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
+
       - name: Build APK
         run: |
           # 确保 native 二进制在 assets 里（在 gradle 打包前）
           mkdir -p src/manager/app/src/main/assets
           if [ -f fpsbinder2 ]; then cp -f fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 && echo "fpsbinder2 copied"; else echo "fpsbinder2 missing in workspace"; fi
+          if [ -f fpsbind ]; then cp -f fpsbind src/manager/app/src/main/assets/fpsbind && echo "fpsbind copied"; else echo "fpsbind missing"; fi
           ls src/manager/app/src/main/assets/ 2>/dev/null | head -3
           cd src/manager
           # 用腾讯镜像下载 Gradle（services.gradle.org 经常超时）
