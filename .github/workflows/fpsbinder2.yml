@@ -14,18 +14,17 @@ jobs:
         with:
           ndk-version: r29
 
-      - name: fetch AOSP headers (googlesource)
+      - name: fetch AOSP headers (LineageOS mirror)
         run: |
-          B="https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main"
+          B="https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-22.0"
           mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils
           for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder BinderProxy Status Debug IPermissionController; do
-            curl -sL --max-time 30 "$B/libs/binder/include/binder/$f.h?format=TEXT" | base64 -d > aosp/libs/binder/include/binder/$f.h 2>/dev/null
+            curl -sL --max-time 30 -o aosp/libs/binder/include/binder/$f.h "$B/libs/binder/include/binder/$f.h"
           done
           for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition; do
-            curl -sL --max-time 30 "$B/libs/utils/include/utils/$f.h?format=TEXT" | base64 -d > aosp/libs/utils/include/utils/$f.h 2>/dev/null
+            curl -sL --max-time 30 -o aosp/libs/utils/include/utils/$f.h "$B/libs/utils/include/utils/$f.h"
           done
           wc -l aosp/libs/binder/include/binder/IBinder.h aosp/libs/utils/include/utils/String16.h 2>/dev/null
-          head -3 aosp/libs/binder/include/binder/IBinder.h 2>/dev/null
 
       - name: build fpsbinder2
         run: |
