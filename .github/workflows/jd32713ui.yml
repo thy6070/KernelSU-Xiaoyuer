@@ -176,17 +176,59 @@ jobs:
 
 
 
-      - name: Build fpsbinder2 (AOSP libbinder C++ client, 仅编译不集成)
+      - name: fetch headers
         run: |
-          # 用 --depth 1 --single-branch clone（tarball 下载失败）
-          set +e
-          git clone --depth 1 --single-branch https://github.com/aosp-mirror/platform_frameworks_native aosp 2>&1 | tail -5
-          set -e
-          ls aosp/libs/binder/include/binder/ProcessState.h 2>/dev/null || echo "aosp headers missing"
-          NDK="${{ steps.ndk2.outputs.ndk-path }}"
+          B="https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-22.0"
+          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils aosp/libs/base/include
+          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder Status Debug Common unique_fd ParcelableHolder IMemory IMemoryHeap; do
+            curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h" || true
+          done
+          U="https://raw.githubusercontent.com/LineageOS/android_system_core/lineage-22.0/libutils/include/utils"
+          # system_core libutils 全部头（API 列）
+          curl -s "https://api.github.com/repos/LineageOS/android_system_core/contents/libutils/include/utils?ref=lineage-22.0" > /tmp/ul.json
+          for n in $(jq -r '.[].name' /tmp/ul.json 2>/dev/null); do
+            curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$n" "$U/$n" || true
+          done
+          # 真实 utils 头（覆盖 system_core 的转发头）
+          cp native/headers/real-utils/*.h aosp/libs/utils/include/utils/
+          # binder 完整头（仓库）
+          cp -r native/headers/binder/* aosp/libs/binder/include/binder/
+          # cutils 头
+          mkdir -p aosp/libs/cutils/include/cutils
+          cp -r native/headers/cutils/* aosp/libs/cutils/include/cutils/
+          # log/log.h（NDK 的 liblog 头）
+          mkdir -p aosp/libs/utils/include/log
+          printf '#pragma once\n#include <android/log.h>\n' > aosp/libs/utils/include/log/log.h
+          echo "system_core utils: $(ls aosp/libs/utils/include/utils | wc -l)"
+          # 转发头（Errors/Log/LightRefBase 等）的实际内容：chnromium googlesource 的 frameworks/native libs/binder/include/utils
+          CG="https://chromium.googlesource.com/aosp/platform/frameworks/native/+/refs/heads/main/libs/binder/include/utils"
+          for f in Errors Log LightRefBase RefBase StrongPointer String16 String8 Vector Unicode TextOutput Flattenable; do
+            curl -sL --max-time 20 "$CG/$f.h?format=TEXT" 2>/dev/null | base64 -d > "aosp/libs/binder/include/utils/$f.h" 2>/dev/null || true
+          done
+          mkdir -p aosp/libs/binder/include/utils
+          echo "binder utils: $(ls aosp/libs/binder/include/utils 2>/dev/null | wc -l)"
+          echo "utils: $(ls aosp/libs/utils/include/utils | wc -l) files"
+          echo "StrongPointer:"; head -2 aosp/libs/utils/include/utils/StrongPointer.h 2>/dev/null
+          echo "Errors:"; head -2 aosp/libs/utils/include/utils/Errors.h 2>/dev/null
+          echo "utils 完整列表:"; ls aosp/libs/utils/include/utils/ | tr '\n' ' '; echo
+          echo "utils 文件:"
+          ls aosp/libs/utils/include/utils/ 2>/dev/null | head -10
+          echo "utils 数量: $(ls aosp/libs/utils/include/utils/ 2>/dev/null | wc -l)"
+          cp -r native/headers/android-base aosp/libs/base/include/
+          echo "base: $(ls aosp/libs/base/include/android-base | wc -l)"
+          ls aosp/libs/base/include/android-base | head -5
+
+      - name: build fpsbinder2
+        run: |
+          NDK="${{ steps.ndk.outputs.ndk-path }}"
           CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
-          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -30
-          ls -lh fpsbinder2 2>/dev/null || echo "fpsbinder2 build failed"
+          "$CXX" -O2 -std=c++17 -fno-rtti -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/libs/base/include -I aosp/libs/cutils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -L native/libs -Wl,--allow-shlib-undefined -lbinder -lutils -lcutils -lbase -lc++_shared -ldl 2>&1 | tail -25
+          ls -lh fpsbinder2 2>/dev/null || echo "build failed"
+          mkdir -p src/manager/app/src/main/assets
+          cp fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 2>/dev/null || true
+
+          mkdir -p src/manager/app/src/main/assets
+          cp fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 2>/dev/null || true
 
       - name: Build APK
         run: |
