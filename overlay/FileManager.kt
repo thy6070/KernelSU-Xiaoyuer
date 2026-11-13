@@ -6142,7 +6142,7 @@ class FpsOverlayService : Service() {
                 }
                 }
                 // 读不到：保持上次值（防闪烁），持续 3 秒（约 10 次）无数据才显示 --
-                if (failCount < 10) {
+                if (failCount < 8) {
                     // 保持上次显示
                 } else {
                     showFps(0.0, reading = false)
@@ -6187,7 +6187,7 @@ class FpsOverlayService : Service() {
                 // 持续 0（层重建/切帧率后旧层失效）→ 强制重扫层自愈
                 if (fpsRaw <= 0.5) {
                     zeroCount++
-                    if (zeroCount >= 50) {   // 约 2 秒
+                    if (zeroCount >= 25) {   // 约 1 秒
                         zeroCount = 0
                         layerName = null
                         lastLayerRefresh = 0L
