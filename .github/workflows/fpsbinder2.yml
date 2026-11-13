@@ -22,9 +22,19 @@ jobs:
             curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h" || true
           done
           U="https://raw.githubusercontent.com/LineageOS/android_system_core/lineage-22.0/libutils/include/utils"
-          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd SharedBuffer ByteOrder TypeHelpers Assert CallStack Looper; do
-            curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$U/$f.h" || true
+          # system_core libutils 全部头（API 列）
+          curl -s "https://api.github.com/repos/LineageOS/android_system_core/contents/libutils/include/utils?ref=lineage-22.0" > /tmp/ul.json
+          for n in $(jq -r '.[].name' /tmp/ul.json 2>/dev/null); do
+            curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$n" "$U/$n" || true
           done
+          echo "system_core utils: $(ls aosp/libs/utils/include/utils | wc -l)"
+          # 转发头（Errors/Log/LightRefBase 等）的实际内容：chnromium googlesource 的 frameworks/native libs/binder/include/utils
+          CG="https://chromium.googlesource.com/aosp/platform/frameworks/native/+/refs/heads/main/libs/binder/include/utils"
+          for f in Errors Log LightRefBase RefBase StrongPointer String16 String8 Vector Unicode TextOutput Flattenable; do
+            curl -sL --max-time 20 "$CG/$f.h?format=TEXT" 2>/dev/null | base64 -d > "aosp/libs/binder/include/utils/$f.h" 2>/dev/null || true
+          done
+          mkdir -p aosp/libs/binder/include/utils
+          echo "binder utils: $(ls aosp/libs/binder/include/utils 2>/dev/null | wc -l)"
           echo "utils: $(ls aosp/libs/utils/include/utils | wc -l) files"
           echo "StrongPointer:"; head -2 aosp/libs/utils/include/utils/StrongPointer.h 2>/dev/null
           echo "Errors:"; head -2 aosp/libs/utils/include/utils/Errors.h 2>/dev/null
@@ -40,7 +50,7 @@ jobs:
         run: |
           NDK="${{ steps.ndk.outputs.ndk-path }}"
           CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
-          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/libs/base/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -25
+          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/libs/base/include -I aosp/libs/binder/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -25
           ls -lh fpsbinder2 2>/dev/null || echo "build failed"
 
       - uses: actions/upload-artifact@v4
