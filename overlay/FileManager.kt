@@ -6024,6 +6024,25 @@ class FpsOverlayService : Service() {
             scored.add(n to sc)
         }
         if (scored.isEmpty()) {
+            // 兜底：严格规则没匹配到（Android 16/17 层名可能变化）→ 宽松匹配含包名的层
+            val loose = ArrayList<String>()
+            for (l in out.lines()) {
+                val i = l.indexOf('{')
+                val j = l.indexOf(" parentId=")
+                if (i < 0 || j <= i) continue
+                val n = l.substring(i + 1, j).trim()
+                if (activePkg.isNotEmpty() && n.contains(activePkg) && n.contains("#") &&
+                    !n.contains("ActivityRecord") && !n.contains("InputSink")) {
+                    loose.add(n)
+                }
+            }
+            if (loose.isNotEmpty()) {
+                candidates = loose
+                candIdx = 0
+                failCount = 0
+                layerName = loose.first()
+                return
+            }
             candidates = emptyList()
             layerName = null
             return
@@ -6112,7 +6131,7 @@ class FpsOverlayService : Service() {
                 } else {
                     idleCount = 0
                 }
-                showFps(fpsRaw)
+                showFps(fpsRaw, reading = true)
                 maybeFpsPlusBoost(fpsRaw)
                 val nowT = System.currentTimeMillis()
                 if (nowT - lastStatLog > 5000L) {
@@ -6250,9 +6269,16 @@ class FpsOverlayService : Service() {
     private var emaFps = 0.0
     private var lastColor = 0
 
-    private fun showFps(fps: Double) {
-        // EMA 平滑：显示稳，不跟着单帧抖动
-        emaFps = if (emaFps <= 0.0) fps else emaFps * 0.3 + fps * 0.7
+    private fun showFps(fps: Double, reading: Boolean = false) {
+        if (!reading && fps <= 0.0) {
+            // 读不到：显示 "--"（不卡在旧值）
+            fpsView?.post { try { fpsView?.text = "--" } catch (t: Throwable) {} }
+            return
+        }
+        // 自适应 EMA：突变快跟（低延迟），平稳慢平滑（稳）
+        val delta = if (emaFps <= 0.0) 1.0 else Math.abs(fps - emaFps) / Math.max(emaFps, 1.0)
+        val alpha = if (delta > 0.04) 0.85 else 0.45
+        emaFps = if (emaFps <= 0.0) fps else emaFps * (1 - alpha) + fps * alpha
         val v = Math.round(emaFps).toInt().coerceIn(0, 240)
         val color = if (fpsPlusBoosted) 0xFFFF4444.toInt() else 0xFFFFFFFF.toInt()
         if (v == lastShown && color == lastColor) return
