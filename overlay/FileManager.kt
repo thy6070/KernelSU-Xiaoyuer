@@ -5802,6 +5802,7 @@ class FpsOverlayService : Service() {
     private var candIdx = 0
     private var failCount = 0
     private var zeroCount = 0
+    private var fpsBindStarted = false
     private var lastProbe = 0L
     private var idleCount = 0
     private var lastShown: Int = -1
@@ -6183,6 +6184,7 @@ class FpsOverlayService : Service() {
                     fpsPlusLow = 0
                     fpsPlusHigh = 0
                     fpsHist.clear()
+                    fpsBindStarted = false
                     refreshPkg = ""
                     sh("pkill -f fps_bind.sh 2>/dev/null; pkill -f fpsbind 2>/dev/null", 1L)
                 }
@@ -6224,6 +6226,15 @@ class FpsOverlayService : Service() {
                     zeroCount = 0
                 }
                 showFps(fpsRaw, reading = true)
+                // FPS+ 开启 + 游戏 → 常驻 fpsbind（掉帧重绑）
+                if (!fpsBindStarted && isGamePkg(activePkg)) {
+                    val fpOn = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
+                    if (fpOn) {
+                        fpsBindStarted = true
+                        startCpuBind()
+                        logLine("FPS+ 开启，fpsbind 常驻监听")
+                    }
+                }
                 maybeFpsPlusBoost(fpsRaw)
                 val nowT = System.currentTimeMillis()
                 if (nowT - lastStatLog > 5000L) {
@@ -6276,38 +6287,33 @@ class FpsOverlayService : Service() {
     private var fpsBindPkg = ""
     // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
-        // 先不绑核（用户要求：FPS+ 只拉频，先修帧率显示）
-        return
         if (!isGamePkg(activePkg)) return
-        // 大核 = cpufreq 里 max_freq 最大的 cluster（MTK 天玑 / 高通 通用，比 cpuset 更准）
-        // 大核 = 非最小 cluster（天玑/高通通用）：policy0 是最小 cluster，其余是性能核+超大核
-        var cpus = try {
-            sh("minf=\$(cat /sys/devices/system/cpu/cpufreq/policy0/cpuinfo_max_freq 2>/dev/null); for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$m\" ] && [ -n \"\$minf\" ] && [ \"\$m\" -gt \"\$minf\" ] && cat \$p/affected_cpus 2>/dev/null; done | tr ' ' ',' | sed 's/,$//;s/,,*/,/g'", 2L).trim()
-        } catch (t: Throwable) { "" }
-        // 兜底：affected_cpus 读取失败时用 top-app 里排掉 cpu0
-        if (cpus.isEmpty()) {
-            cpus = try { sh("cat /dev/cpuset/top-app/cpus 2>/dev/null | sed 's/^0-1,//;s/^0,//'", 1L).trim() } catch (t: Throwable) { "" }
+        // 从 cpufreq 按 max_freq 分三级（小/中/大核，AppOpt 同款）
+        val policies = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); c=\$(cat \$p/affected_cpus 2>/dev/null); [ -n \"\$m\" ] && echo \"\$m \$c\"; done | sort -n", 2L)
+        val groups = ArrayList<Pair<Long, String>>()
+        for (line in policies.lines()) {
+            val parts = line.trim().split(" ", limit = 2)
+            if (parts.size < 2) continue
+            val m = parts[0].toLongOrNull() ?: continue
+            groups.add(m to parts[1].replace(" ", ","))
         }
-        if (cpus.isEmpty()) return
-        val mask = cpusToMask(cpus)
-        // 优先 fpsbind（proc connector 毫秒级）
+        if (groups.size < 2) return
+        val small = cpusToMask(groups[0].second)
+        val mid = if (groups.size >= 3) cpusToMask(groups[1].second) else cpusToMask(groups[0].second)
+        val big = cpusToMask(groups.last().second)
+        // fpsbind（proc connector，常驻监听）
         val bin = File(filesDir, "fpsbind")
         if (!bin.exists()) {
             try { assets.open("fpsbind").use { input -> bin.outputStream().use { input.copyTo(it) } } } catch (t: Throwable) {}
         }
-        if (bin.exists() && bin.length() > 10000 && mask.isNotEmpty()) {
+        if (bin.exists() && bin.length() > 10000) {
             bin.setExecutable(true)
-            sh("pkill -f fpsbind 2>/dev/null; chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " " + mask + " " + activePkg + " >> " + filesDir + "/fpsbind.log 2>&1 &", 2L)
-            logLine("fpsbind 启动(proc connector): mask=" + mask + " pkg=" + activePkg)
-            return
+            sh("pkill -f fpsbind 2>/dev/null; chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " " + big + " " + small + " " + mid + " " + activePkg + " >> " + filesDir + "/fpsbind.log 2>&1 &", 2L)
+            logLine("fpsbind 启动: big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
         }
-        // 兜底：shell 循环
-        val pkg = activePkg
-        val script = "while true; do for pid in \$(pidof " + pkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -c " + cpus + " -p \${t##*/} 2>/dev/null; done; done; sleep 0.5; done"
-        sh("pkill -f fps_bind.sh 2>/dev/null; echo '" + script + "' > /data/local/tmp/fps_bind.sh; chmod 755 /data/local/tmp/fps_bind.sh; setsid sh /data/local/tmp/fps_bind.sh >/dev/null 2>&1 &", 2L)
-        logLine("shell 绑核循环启动: cpus=" + cpus)
     }
 
+    // "4-7" → "f0"
     // "4-7" → "f0"
     private fun cpusToMask(cpus: String): String {
         var mask = 0L
