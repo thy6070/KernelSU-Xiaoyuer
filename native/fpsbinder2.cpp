@@ -6,6 +6,7 @@
 #include <binder/IServiceManager.h>
 #include <binder/Parcel.h>
 #include <utils/String16.h>
+#include <utils/Vector.h>
 #include <utils/String8.h>
 
 #include <cstdio>
@@ -39,17 +40,11 @@ int main(int argc, char **argv) {
     int fds[2];
     if (pipe(fds) < 0) { perror("pipe"); return 1; }
 
-    Parcel data;
-    data.writeInterfaceToken(String16("android.gui.ISurfaceComposer"));
-    data.writeInt32(1);
-    data.writeFileDescriptor(fds[1]);
-    data.writeInt32(2);
-    data.writeString16(String16("--latency"));
-    data.writeString16(String16(argv[1]));
-
-    Parcel reply;
-    status_t st = sf->transact(1, data, &reply, 0x10); /* TF_ACCEPT_FDS */
-    fprintf(stderr, "transact=%d\n", (int)st);
+    Vector<String16> args;
+    args.add(String16("--latency"));
+    args.add(String16(argv[1]));
+    status_t st = sf->dump(fds[1], args);
+    fprintf(stderr, "dump=%d\n", (int)st);
     if (st != 0) return 1;
     close(fds[1]);
 
