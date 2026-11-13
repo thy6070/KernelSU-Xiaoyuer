@@ -6128,6 +6128,16 @@ class FpsOverlayService : Service() {
                 if (ln != null && ln != daemonLayer) startDaemon(ln)
             }
             // 唯一数据源：SurfaceFlinger present 时间戳（帧真正上屏的时刻）
+            // fps_raw 文件长时间不更新（>2.5 秒）→ 层失效，强制重扫
+            try {
+                val fRaw = File(filesDir, "fps_raw")
+                if (fRaw.exists() && System.currentTimeMillis() - fRaw.lastModified() > 2500L) {
+                    layerName = null
+                    lastLayerRefresh = 0L
+                    fRaw.delete()
+                    logLine("fps_raw 超时未更新，强制重扫层")
+                }
+            } catch (t: Throwable) {}
             val fpsRaw = readDaemonFps()
             if (fpsRaw == null) {
                 // daemon 刚启动的 2 秒内不算失败（文件还没写出来）
@@ -6251,16 +6261,15 @@ class FpsOverlayService : Service() {
     private var fpsBindPkg = ""
     // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
-        // 临时禁用绑核（排查 FPS+ 触发后卡0 是否由 fpsbind 引起）
-        if (true) { logLine("fpsbind 已临时禁用（排查卡0）"); return }
         if (!isGamePkg(activePkg)) return
         // 大核 = cpufreq 里 max_freq 最大的 cluster（MTK 天玑 / 高通 通用，比 cpuset 更准）
+        // 大核 = 非最小 cluster（天玑/高通通用）：policy0 是最小 cluster，其余是性能核+超大核
         var cpus = try {
-            sh("big=\$(for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$m\" ] && echo \"\$m \$p\"; done | sort -rn | head -1 | awk '{print \$2}'); cat \${big}cpus 2>/dev/null", 2L).trim()
+            sh("minf=\$(cat /sys/devices/system/cpu/cpufreq/policy0/cpuinfo_max_freq 2>/dev/null); for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$m\" ] && [ -n \"\$minf\" ] && [ \"\$m\" -gt \"\$minf\" ] && cat \$p/affected_cpus 2>/dev/null; done | tr ' ' ',' | sed 's/,$//;s/,,*/,/g'", 2L).trim()
         } catch (t: Throwable) { "" }
-        // 兜底：top-app cpuset
+        // 兜底：affected_cpus 读取失败时用 top-app 里排掉 cpu0
         if (cpus.isEmpty()) {
-            cpus = try { sh("cat /dev/cpuset/top-app/cpus 2>/dev/null", 1L).trim() } catch (t: Throwable) { "" }
+            cpus = try { sh("cat /dev/cpuset/top-app/cpus 2>/dev/null | sed 's/^0-1,//;s/^0,//'", 1L).trim() } catch (t: Throwable) { "" }
         }
         if (cpus.isEmpty()) return
         val mask = cpusToMask(cpus)
