@@ -14,17 +14,18 @@ jobs:
         with:
           ndk-version: r29
 
-      - name: fetch AOSP headers (raw)
+      - name: fetch AOSP headers (googlesource)
         run: |
-          B=https://raw.githubusercontent.com/aosp-mirror/platform_frameworks_native/master
-          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils aosp/libs/binder/ndk/include_cpp
-          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder BinderProxy Status Debug IPermissionController IShellCallback; do
-            curl -sL --max-time 30 -o aosp/libs/binder/include/binder/$f.h $B/libs/binder/include/binder/$f.h
+          B="https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main"
+          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils
+          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder BinderProxy Status Debug IPermissionController; do
+            curl -sL --max-time 30 "$B/libs/binder/include/binder/$f.h?format=TEXT" | base64 -d > aosp/libs/binder/include/binder/$f.h 2>/dev/null
           done
-          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition ByteOrder SharedBuffer; do
-            curl -sL --max-time 30 -o aosp/libs/utils/include/utils/$f.h $B/libs/utils/include/utils/$f.h
+          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition; do
+            curl -sL --max-time 30 "$B/libs/utils/include/utils/$f.h?format=TEXT" | base64 -d > aosp/libs/utils/include/utils/$f.h 2>/dev/null
           done
-          ls aosp/libs/binder/include/binder/ProcessState.h aosp/libs/utils/include/utils/String16.h 2>/dev/null && echo "headers ok"
+          wc -l aosp/libs/binder/include/binder/IBinder.h aosp/libs/utils/include/utils/String16.h 2>/dev/null
+          head -3 aosp/libs/binder/include/binder/IBinder.h 2>/dev/null
 
       - name: build fpsbinder2
         run: |
