@@ -6143,6 +6143,7 @@ class FpsOverlayService : Service() {
     // ===== FPS+：独立于能量守恒，按实时帧率调节 =====
     private var lastBoost = 0L
     private var fpsPlusLow = 0
+    private var fpsPlusHigh = 0
     private var fpsPlusBoosted = false
     @Volatile private var panelHz = 0.0
     private val fpsHist = ArrayDeque<Double>()
@@ -6220,17 +6221,20 @@ class FpsOverlayService : Service() {
         if (fpsHist.size > 50) fpsHist.removeFirst()
         val peak = fpsHist.maxOrNull() ?: fps
         val target = minOf(panelHz, peak)
-        // 掉 5 帧触发
+        // 快升慢降：掉帧 → 立即拉高；恢复 → 持续正常 2 秒才解除
         if (fps >= target - 5.0) {
-            // 恢复：解除 boost
             fpsPlusLow = 0
-            if (fpsPlusBoosted) {
+            fpsPlusHigh++
+            // 慢降：连续 25 次（约 2 秒）正常才解除 boost
+            if (fpsPlusBoosted && fpsPlusHigh >= 25) {
                 fpsPlusBoosted = false
-                logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)}，解除 boost")
+                fpsPlusHigh = 0
+                logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 持续正常2秒，解除 boost")
                 sh("[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null", 2L)
             }
             return
         }
+        fpsPlusHigh = 0
         fpsPlusLow++
         if (fpsPlusLow < 2) return
         fpsPlusLow = 0
