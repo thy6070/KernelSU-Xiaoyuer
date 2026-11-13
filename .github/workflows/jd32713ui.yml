@@ -191,6 +191,26 @@ jobs:
           mkdir -p src/manager/app/src/main/assets
           cp fpsndk src/manager/app/src/main/assets/fpsndk
 
+      - name: Build fpsdumpsys (Scene binder lib dlopen)
+        run: |
+          NDK="${{ steps.ndk2.outputs.ndk-path }}"
+          CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
+          "$CXX" -O2 -std=c++17 native/fpsdumpsys.cpp -o fpsdumpsys -lc++_shared -ldl 2>&1 | tail -20
+          ls -lh fpsdumpsys
+          mkdir -p src/manager/app/src/main/assets
+          cp fpsdumpsys src/manager/app/src/main/assets/fpsdumpsys
+
+      - name: Build fpsbinder2 (AOSP libbinder C++ client)
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/aosp-mirror/platform_frameworks_native aosp 2>&1 | tail -3
+          cd aosp && git sparse-checkout set libs/binder/include libs/utils/include include && cd ..
+          NDK="${{ steps.ndk2.outputs.ndk-path }}"
+          CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
+          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -30
+          ls -lh fpsbinder2
+          mkdir -p src/manager/app/src/main/assets
+          cp fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 2>/dev/null || true
+
       - name: Build fpsbind (native proc-connector binder)
         run: |
           CC="${{ steps.ndk2.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
@@ -259,3 +279,5 @@ jobs:
             manager-32713-ui.apk
             fpsndk
             fpsbind
+            fpsdumpsys
+            fpsbinder2
