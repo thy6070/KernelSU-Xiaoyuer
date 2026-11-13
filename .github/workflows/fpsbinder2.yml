@@ -1,0 +1,32 @@
+name: fpsbinder2
+on: workflow_dispatch
+
+jobs:
+  build2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r29
+
+      - name: clone AOSP headers
+        run: |
+          set +e
+          git clone --depth 1 --single-branch https://github.com/aosp-mirror/platform_frameworks_native aosp 2>&1 | tail -5
+          set -e
+          ls aosp/libs/binder/include/binder/ProcessState.h 2>/dev/null || echo "aosp headers missing"
+
+      - name: build fpsbinder2
+        run: |
+          NDK="${{ steps.ndk.outputs.ndk-path }}"
+          CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
+          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -30
+          ls -lh fpsbinder2 2>/dev/null || echo "build failed"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fpsbinder2
+          path: fpsbinder2
+          if-no-files-found: warn
