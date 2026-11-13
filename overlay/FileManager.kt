@@ -4609,9 +4609,10 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                 propScript.append("resetprop ro.product.").append(baseKeys[i]).append(" '").append(baseVals[i]).append("' 2>/dev/null\n")
             }
             propScript.append("resetprop ro.build.product '").append(code).append("' 2>/dev/null\n")
-            // 前缀扩展 5×4
-            for (pre in listOf("ro.product.", "ro.product.system.", "ro.product.vendor.", "ro.product.odm.", "ro.product.product.")) {
-                for (k in listOf("brand", "manufacturer", "model", "device")) {
+            // 前缀扩展：全分区（含 dlkm，游戏/校验会读 vendor/odm 分区）
+            for (pre in listOf("ro.product.", "ro.product.system.", "ro.product.vendor.", "ro.product.odm.", "ro.product.product.",
+                               "ro.product.odm_dlkm.", "ro.product.vendor_dlkm.", "ro.product.system_dlkm.", "ro.product.system_ext.")) {
+                for (k in listOf("brand", "manufacturer", "model", "device", "name")) {
                     val v = when (k) {
                         "brand" -> brand
                         "manufacturer" -> mfr
@@ -4627,7 +4628,12 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
             propScript.append("INC=\$(getprop ro.build.version.incremental); ")
             propScript.append("NEWFP=\"").append(brand.lowercase()).append("/").append(code).append("/").append(code)
                 .append(":\$REL/\$BID/\$INC:user/release-keys\"; ")
-            propScript.append("resetprop ro.build.fingerprint \"\$NEWFP\" 2>/dev/null\n")
+            // 全部分区指纹都要一致（否则游戏校验伪装失败）
+            for (fp in listOf("ro.build.fingerprint", "ro.system.build.fingerprint", "ro.vendor.build.fingerprint",
+                              "ro.odm.build.fingerprint", "ro.product.build.fingerprint", "ro.bootimage.build.fingerprint",
+                              "ro.odm_dlkm.build.fingerprint", "ro.vendor_dlkm.build.fingerprint", "ro.system_ext.build.fingerprint")) {
+                propScript.append("resetprop ").append(fp).append(" \"\$NEWFP\" 2>/dev/null\n")
+            }
             // 持久化脚本
             val persist = "mkdir -p /data/adb/service.d; " +
                     "cat > /data/adb/service.d/xy_spoof.sh <<'XYEOF'\n#!/system/bin/sh\n" +
