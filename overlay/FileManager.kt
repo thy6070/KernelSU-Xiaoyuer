@@ -5972,6 +5972,20 @@ class FpsOverlayService : Service() {
         if (layer == daemonLayer) return
         stopDaemon()
         val d = filesDir.absolutePath
+        // 优先 native fpsbinder2（libbinder 直连，零 fork）
+        val bin = File(filesDir, "fpsbinder2")
+        if (!bin.exists()) {
+            try { assets.open("fpsbinder2").use { input -> bin.outputStream().use { input.copyTo(it) } } } catch (t: Throwable) {}
+        }
+        if (bin.exists() && bin.length() > 10000) {
+            bin.setExecutable(true)
+            sh("chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " \"" + layer + "\" 80 \"" + d + "/fps_raw\" </dev/null >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
+            daemonLayer = layer
+            daemonStartedAt = System.currentTimeMillis()
+            logLine("native fpsbinder2 启动: " + layer)
+            return
+        }
+        // 兜底：shell dumpsys
         val script = File(filesDir, "fps_daemon.sh")
         script.writeText("#!/system/bin/sh\n" +
             "while true; do\n" +
@@ -5980,10 +5994,10 @@ class FpsOverlayService : Service() {
             "  chmod 644 \"" + d + "/fps_raw\"\n" +
             "  sleep 0.05\n" +
             "done\n")
-        // setsid 让它脱离 su 的进程组，否则 su 退出时守护进程会被一起收走
         sh("setsid sh " + script.absolutePath + " >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
         daemonLayer = layer
         daemonStartedAt = System.currentTimeMillis()
+        logLine("shell fps_daemon 启动（fpsbinder2 不可用）")
     }
 
     // 读 daemon 写下的最新数据并解析（零 su 开销）
