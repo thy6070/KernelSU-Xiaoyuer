@@ -6355,40 +6355,28 @@ class FpsOverlayService : Service() {
         if (panelHz <= 0.0) return
         // 过滤 63 帧以下：60 帧游戏不参与判断
         if (fps < 64.0) { fpsPlusLow = 0; return }  // 64 以下不触发
-        // 主流刷新率档位：目标取最近档，每档掉 5 帧触发
-        fpsHist.addLast(fps)
-        if (fpsHist.size > 12) fpsHist.removeFirst()
-        // 稳定识别：最近 5 秒（50 次）波动 <3 帧 → 认为是游戏锁帧，peak 用当前值（不触发）
-        val histMax = fpsHist.maxOrNull() ?: fps
-        val histMin = fpsHist.minOrNull() ?: fps
-        val peak = if (fpsHist.size >= 12 && (histMax - histMin) < 4.0) fps else histMax
+        // 固定档位：90/120/144/165。在档位（±3）不触发；掉到档位外立即触发
         val tiers = listOf(90.0, 120.0, 144.0, 165.0)
-        val target = tiers.minByOrNull { kotlin.math.abs(it - peak) } ?: 120.0
-        // 快升慢降：掉帧 → 立即拉高；恢复 → 持续正常 2 秒才解除
-        if (fps > target - 5.0) {
+        val onTier = tiers.any { kotlin.math.abs(it - fps) <= 3.0 }
+        if (onTier) {
             fpsPlusLow = 0
             fpsPlusHigh++
-            // 慢降：连续 25 次（约 2 秒）正常才解除 boost
-            if (fpsPlusBoosted && fpsPlusHigh >= 25) {
+            if (fpsPlusBoosted && fpsPlusHigh >= 15) {   // 稳定 0.6 秒 → 恢复
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
-                logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 持续正常2秒，频率还原+线程放开")
-                // 停止 native 绑核，线程亲和恢复全核
-                sh("pkill -f fps_bind.sh 2>/dev/null; for pid in \$(pidof " + activePkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -p 0xFF \${t##*/} 2>/dev/null; done; done", 2L)
-                // 恢复后不再记录
-                // 还原原频率（避免一直满频发烫）
-                sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig 2>/dev/null; " +
-                   "if [ -f /data/local/tmp/fps_plus_gpu ]; then read go gk < /data/local/tmp/fps_plus_gpu; [ -n \"\$go\" ] && [ -f /proc/gpufreqv2/fix_target_opp_index ] && echo \$go > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; [ -n \"\$gk\" ] && [ -f /sys/class/kgsl/kgsl-3d0/devfreq/min_freq ] && echo \$gk > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; fi; " +
-                   "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
+                logLine("FPS+ 恢复：fps=" + String.format("%.1f", fps) + " 在档位")
+                sh("[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
+                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
             }
             return
         }
+        // 不在档位：掉帧，立即触发（连续 3 次 = 120ms 确认，过滤单帧抖动）
         fpsPlusHigh = 0
         fpsPlusLow++
-        if (fpsPlusLow < 10) return  // 连续10次（约400ms）才触发，过滤瞬间切换/背包
+        if (fpsPlusLow < 3) return
         fpsPlusLow = 0
         val now = System.currentTimeMillis()
-        if (now - lastBoost < 2000L) return
+        if (now - lastBoost < 1500L) return
         lastBoost = now
         fpsPlusBoosted = true
         startCpuBind()
