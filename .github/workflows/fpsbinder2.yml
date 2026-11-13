@@ -29,6 +29,9 @@ jobs:
           done
           # 真实 utils 头（覆盖 system_core 的转发头）
           cp native/headers/real-utils/*.h aosp/libs/utils/include/utils/
+          # cutils 头
+          mkdir -p aosp/libs/cutils/include
+          cp -r native/headers/cutils/* aosp/libs/cutils/include/
           # log/log.h（NDK 的 liblog 头）
           mkdir -p aosp/libs/utils/include/log
           printf '#pragma once\n#include <android/log.h>\n' > aosp/libs/utils/include/log/log.h
@@ -55,7 +58,7 @@ jobs:
         run: |
           NDK="${{ steps.ndk.outputs.ndk-path }}"
           CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
-          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/libs/base/include -I aosp/libs/binder/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -25
+          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/libs/base/include -I aosp/libs/binder/include -I aosp/libs/cutils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -25
           ls -lh fpsbinder2 2>/dev/null || echo "build failed"
 
       - uses: actions/upload-artifact@v4
