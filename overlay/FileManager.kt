@@ -4589,8 +4589,16 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
             val brand = m.substringBefore(" ")
             // 显示名 -> 真实型号（游戏按 ro.product.model 识别）
             val realModel = when (m) {
+                // 已验证的真实型号
                 "Redmi K Pad" -> "25079RPDCC"
                 "Xiaomi Pad 8 Pro" -> "25091RP04C"
+                "Xiaomi 15 Ultra" -> "25010PN30C"
+                "Xiaomi 15 Pro" -> "25010PN30G"
+                "Xiaomi 15" -> "25010PN30G"
+                "Redmi K80 Pro" -> "24117RK2CC"
+                "Redmi K80" -> "24122RK2CC"
+                "Redmi K70 Pro" -> "23117RK66C"
+                "Xiaomi 14 Ultra" -> "24030PN60C"
                 else -> m
             }
             val origFp = sp.getString("orig_fingerprint", "") ?: ""
@@ -4632,10 +4640,10 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
             propScript.append("resetprop ro.product.model_for_attestation '").append(realModel).append("' 2>/dev/null\n")
             propScript.append("resetprop ro.product.brand_for_attestation '").append(brand).append("' 2>/dev/null\n")
             propScript.append("resetprop ro.product.name_for_attestation '").append(code).append("' 2>/dev/null\n")
-            // SoC 展示属性（K Pad 是骁龙；不动 ro.hardware，那是驱动依赖）
-            propScript.append("resetprop ro.soc.manufacturer 'Qualcomm' 2>/dev/null\n")
-            propScript.append("resetprop ro.soc.model 'SM8750' 2>/dev/null\n")
-            propScript.append("resetprop ro.board.platform 'kalama' 2>/dev/null\n")
+            // SoC 展示属性（K Pad = 天玑 9400+ MT6991，联发科；不动 ro.hardware，驱动依赖）
+            propScript.append("resetprop ro.soc.manufacturer 'Mediatek' 2>/dev/null\n")
+            propScript.append("resetprop ro.soc.model 'MT6991' 2>/dev/null\n")
+            propScript.append("resetprop ro.board.platform 'mt6991' 2>/dev/null\n")
             // 全部分区指纹都要一致（否则游戏校验伪装失败）
             for (fp in listOf("ro.build.fingerprint", "ro.system.build.fingerprint", "ro.vendor.build.fingerprint",
                               "ro.odm.build.fingerprint", "ro.product.build.fingerprint", "ro.bootimage.build.fingerprint",
