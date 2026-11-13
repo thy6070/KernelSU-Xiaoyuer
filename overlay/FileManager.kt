@@ -4628,6 +4628,14 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
             propScript.append("INC=\$(getprop ro.build.version.incremental); ")
             propScript.append("NEWFP=\"").append(brand.lowercase()).append("/").append(code).append("/").append(code)
                 .append(":\$REL/\$BID/\$INC:user/release-keys\"; ")
+            // attestation 属性（游戏/系统校验用）
+            propScript.append("resetprop ro.product.model_for_attestation '").append(realModel).append("' 2>/dev/null\n")
+            propScript.append("resetprop ro.product.brand_for_attestation '").append(brand).append("' 2>/dev/null\n")
+            propScript.append("resetprop ro.product.name_for_attestation '").append(code).append("' 2>/dev/null\n")
+            // SoC 展示属性（K Pad 是骁龙；不动 ro.hardware，那是驱动依赖）
+            propScript.append("resetprop ro.soc.manufacturer 'Qualcomm' 2>/dev/null\n")
+            propScript.append("resetprop ro.soc.model 'SM8750' 2>/dev/null\n")
+            propScript.append("resetprop ro.board.platform 'kalama' 2>/dev/null\n")
             // 全部分区指纹都要一致（否则游戏校验伪装失败）
             for (fp in listOf("ro.build.fingerprint", "ro.system.build.fingerprint", "ro.vendor.build.fingerprint",
                               "ro.odm.build.fingerprint", "ro.product.build.fingerprint", "ro.bootimage.build.fingerprint",
