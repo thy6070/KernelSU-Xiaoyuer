@@ -5801,6 +5801,7 @@ class FpsOverlayService : Service() {
     private var candidates: List<String> = emptyList()
     private var candIdx = 0
     private var failCount = 0
+    private var zeroCount = 0
     private var lastProbe = 0L
     private var idleCount = 0
     private var lastShown: Int = -1
@@ -6182,6 +6183,18 @@ class FpsOverlayService : Service() {
                         sh("settings put system peak_refresh_rate " + maxR + "; settings put system min_refresh_rate " + maxR, 1L)
                         logLine("刷新率拉到最高: " + maxR + "Hz")
                     }
+                }
+                // 持续 0（层重建/切帧率后旧层失效）→ 强制重扫层自愈
+                if (fpsRaw <= 0.5) {
+                    zeroCount++
+                    if (zeroCount >= 50) {   // 约 2 秒
+                        zeroCount = 0
+                        layerName = null
+                        lastLayerRefresh = 0L
+                        logLine("持续0，强制重扫层")
+                    }
+                } else {
+                    zeroCount = 0
                 }
                 showFps(fpsRaw, reading = true)
                 maybeFpsPlusBoost(fpsRaw)
