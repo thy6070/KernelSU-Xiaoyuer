@@ -21,9 +21,12 @@ jobs:
           for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder Status Debug Common unique_fd ParcelableHolder IMemory IMemoryHeap; do
             curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h" || true
           done
-          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd; do
-            curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$B/libs/utils/include/utils/$f.h" || true
+          U="https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-22.0"
+          curl -s "https://api.github.com/repos/LineageOS/android_frameworks_native/contents/libs/utils/include/utils?ref=lineage-22.0" > /tmp/ul.json
+          for n in $(jq -r '.[].name' /tmp/ul.json 2>/dev/null); do
+            curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$n" "$U/libs/utils/include/utils/$n" || true
           done
+          echo "utils 完整列表:"; ls aosp/libs/utils/include/utils/ | tr '\n' ' '; echo
           echo "utils 文件:"
           ls aosp/libs/utils/include/utils/ 2>/dev/null | head -10
           echo "utils 数量: $(ls aosp/libs/utils/include/utils/ 2>/dev/null | wc -l)"
