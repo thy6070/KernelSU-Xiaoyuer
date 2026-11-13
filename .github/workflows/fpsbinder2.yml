@@ -15,6 +15,7 @@ jobs:
 
       - name: clone AOSP headers
         run: |
+          git config --global --unset http.https://github.com/.extraheader 2>/dev/null || true
           set +e
           git clone --depth 1 --single-branch https://github.com/aosp-mirror/platform_frameworks_native aosp 2>&1 | tail -5
           set -e
