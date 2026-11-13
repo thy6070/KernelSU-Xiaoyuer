@@ -6261,6 +6261,8 @@ class FpsOverlayService : Service() {
     private var fpsBindPkg = ""
     // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
+        // 先不绑核（用户要求：FPS+ 只拉频，先修帧率显示）
+        return
         if (!isGamePkg(activePkg)) return
         // 大核 = cpufreq 里 max_freq 最大的 cluster（MTK 天玑 / 高通 通用，比 cpuset 更准）
         // 大核 = 非最小 cluster（天玑/高通通用）：policy0 是最小 cluster，其余是性能核+超大核
@@ -6397,7 +6399,7 @@ class FpsOverlayService : Service() {
         }
         // 自适应 EMA：突变快跟（低延迟），平稳慢平滑（稳）
         val delta = if (emaFps <= 0.0) 1.0 else Math.abs(fps - emaFps) / Math.max(emaFps, 1.0)
-        val alpha = if (delta > 0.03) 0.88 else 0.5
+        val alpha = if (delta > 0.03) 0.95 else 0.65
         emaFps = if (emaFps <= 0.0) fps else emaFps * (1 - alpha) + fps * alpha
         val v = Math.round(emaFps).toInt().coerceIn(0, 240)
         val color = if (fpsPlusBoosted) 0xFFFF4444.toInt() else 0xFFFFFFFF.toInt()
