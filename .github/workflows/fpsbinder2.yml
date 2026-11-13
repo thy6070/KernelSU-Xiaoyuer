@@ -24,6 +24,9 @@ jobs:
           for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd; do
             curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$B/libs/utils/include/utils/$f.h" || true
           done
+          echo "utils 文件:"
+          ls aosp/libs/utils/include/utils/ 2>/dev/null | head -10
+          echo "utils 数量: $(ls aosp/libs/utils/include/utils/ 2>/dev/null | wc -l)"
           cp -r native/headers/android-base aosp/libs/base/include/
           echo "base: $(ls aosp/libs/base/include/android-base | wc -l)"
           ls aosp/libs/base/include/android-base | head -5
