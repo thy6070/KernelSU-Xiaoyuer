@@ -171,62 +171,15 @@ jobs:
         with:
           ndk-version: r29
 
-      - name: Build fpsbinder (direct binder SurfaceFlinger)
-        run: |
-          CC="${{ steps.ndk2.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
-          "$CC" -O2 -w native/fpsbinder.c -o fpsbinder 2>&1 | tail -20
-          ls -lh fpsbinder
-          mkdir -p src/manager/app/src/main/assets
-          cp fpsbinder src/manager/app/src/main/assets/fpsbinder
 
-      - name: Build fpsndk (NDK libbinder_ndk)
-        run: |
-          NDK="${{ steps.ndk2.outputs.ndk-path }}"
-          echo "NDK=$NDK"
-          find "$NDK" -name "binder_ndk.h" 2>/dev/null | head -5
-          ls "$NDK/sysroot/usr/include/android/" 2>/dev/null | head -20
-          CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang"
-          "$CC" -O2 -I"$NDK/sysroot/usr/include" native/fpsndk.c -o fpsndk -lbinder_ndk 2>&1 | tail -20
-          ls -lh fpsndk
-          mkdir -p src/manager/app/src/main/assets
-          cp fpsndk src/manager/app/src/main/assets/fpsndk
 
-      - name: Build fpsdumpsys (Scene binder lib dlopen)
-        run: |
-          NDK="${{ steps.ndk2.outputs.ndk-path }}"
-          CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
-          "$CXX" -O2 -std=c++17 native/fpsdumpsys.cpp -o fpsdumpsys -lc++_shared -ldl 2>&1 | tail -20
-          ls -lh fpsdumpsys
-          mkdir -p src/manager/app/src/main/assets
-          cp fpsdumpsys src/manager/app/src/main/assets/fpsdumpsys
 
-      - name: Build fpsbinder2 (AOSP libbinder C++ client)
-        run: |
-          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/aosp-mirror/platform_frameworks_native aosp 2>&1 | tail -3
-          cd aosp && git sparse-checkout set libs/binder/include libs/utils/include include && cd ..
-          NDK="${{ steps.ndk2.outputs.ndk-path }}"
-          CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
-          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -30
-          ls -lh fpsbinder2
-          mkdir -p src/manager/app/src/main/assets
-          cp fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 2>/dev/null || true
 
-      - name: Build fpsbind (native proc-connector binder)
-        run: |
-          CC="${{ steps.ndk2.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
-          "$CC" -O2 -static native/fpsbind.c -o fpsbind || "$CC" -O2 native/fpsbind.c -o fpsbind
-          ls -lh fpsbind
-          mkdir -p src/manager/app/src/main/assets
-          cp fpsbind src/manager/app/src/main/assets/fpsbind
 
       - name: Build APK
         run: |
           # 确保 native 二进制在 assets 里（在 gradle 打包前）
           mkdir -p src/manager/app/src/main/assets
-          cp -f fpsbinder src/manager/app/src/main/assets/fpsbinder 2>/dev/null || true
-          cp -f fpsbind src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
-          cp -f fpsndk src/manager/app/src/main/assets/fpsndk 2>/dev/null || true
-          ls -lh src/manager/app/src/main/assets/fpsbinder src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
           cd src/manager
           # 用腾讯镜像下载 Gradle（services.gradle.org 经常超时）
           sed -i 's|services.gradle.org/distributions|mirrors.cloud.tencent.com/gradle|' gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true
@@ -277,7 +230,3 @@ jobs:
           name: 极道帝兵 UI
           files: |
             manager-32713-ui.apk
-            fpsndk
-            fpsbind
-            fpsdumpsys
-            fpsbinder2
