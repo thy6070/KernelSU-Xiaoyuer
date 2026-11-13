@@ -37,7 +37,10 @@ int main(int argc, char **argv) {
     }
     std::string out;
     char *args[] = {(char *)"dumpsys", (char *)"SurfaceFlinger", (char *)"--latency", argv[1]};
+    fprintf(stderr, "fn=%p before=%zu\n", (void *)fn, out.size());
     fn(4, args, out);
+    fprintf(stderr, "after=%zu\n", out.size());
     fputs(out.c_str(), stdout);
+    fflush(stdout);
     return 0;
 }
