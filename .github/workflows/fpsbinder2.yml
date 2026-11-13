@@ -1,8 +1,8 @@
-name: fpsdumpsys
+name: fpsbinder2
 on: workflow_dispatch
 
 jobs:
-  build:
+  build2:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,33 +14,25 @@ jobs:
         with:
           ndk-version: r29
 
-      - name: build fpsbinder2 (AOSP headers)
+      - name: fetch headers
         run: |
           B="https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-22.0"
-          SB="https://raw.githubusercontent.com/LineageOS/android_system_libbase/lineage-22.0/include/android-base"
-          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils aosp/libs/base/include/android-base
-          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder Status Debug Common unique_fd ParcelableHolder IMemory IMemoryHeap; do curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h"; done
-          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd; do curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$B/libs/utils/include/utils/$f.h"; done
-          for f in unique_fd logging macros stringprintf strings errors mapped_file scope_guard parseln file_map thread_annotations result.h; do
-            curl -sL --max-time 15 -o "aosp/libs/base/include/android-base/$f.h" "$SB/$f.h" 2>/dev/null || true
-            sz=$(stat -c%s "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || echo 0)
-            if [ "$sz" -lt 100 ]; then
-              curl -sL --max-time 15 "https://chromium.googlesource.com/aosp/platform/system/libbase/+/refs/heads/main/include/android-base/$f.h?format=TEXT" 2>/dev/null | base64 -d > "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || true
-              sz=$(stat -c%s "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || echo 0)
-            fi
+          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils aosp/libs/base/include
+          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder Status Debug Common unique_fd ParcelableHolder IMemory IMemoryHeap; do
+            curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h" || true
           done
-          echo "=== system_core 结构 ==="
-          curl -s "https://api.github.com/repos/LineageOS/android_system_core/contents?ref=lineage-22.0" | jq -r '.[].name' 2>/dev/null | head -12
-          echo "=== libbase 尝试 ==="
-          curl -s -o /dev/null -w "libbase: %{http_code}\n" "https://api.github.com/repos/LineageOS/android_system_core/contents/libbase?ref=lineage-22.0"
-          curl -s -o /dev/null -w "libbase/main: %{http_code}\n" "https://api.github.com/repos/LineageOS/android_system_core/contents/libbase?ref=main"
-          echo "=== base 文件大小 ==="
-          ls -la aosp/libs/base/include/android-base/ | head -15
-          echo "=== unique_fd 内容 ==="
-          head -3 aosp/libs/base/include/android-base/unique_fd.h 2>/dev/null || echo missing
+          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd; do
+            curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$B/libs/utils/include/utils/$f.h" || true
+          done
+          cp -r native/headers/android-base aosp/libs/base/include/
+          echo "base: $(ls aosp/libs/base/include/android-base | wc -l)"
+          ls aosp/libs/base/include/android-base | head -5
+
+      - name: build fpsbinder2
+        run: |
           NDK="${{ steps.ndk.outputs.ndk-path }}"
           CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
-          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/libs/base/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -20
+          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/libs/base/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -25
           ls -lh fpsbinder2 2>/dev/null || echo "build failed"
 
       - uses: actions/upload-artifact@v4
