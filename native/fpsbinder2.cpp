@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     data.writeString16(String16(argv[1]));
 
     Parcel reply;
-    status_t st = sf->transact(1, data, &reply);
+    status_t st = sf->transact(1, data, &reply, 0x10); /* TF_ACCEPT_FDS */
     fprintf(stderr, "transact=%d\n", (int)st);
     if (st != 0) return 1;
     close(fds[1]);
