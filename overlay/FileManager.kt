@@ -6251,6 +6251,8 @@ class FpsOverlayService : Service() {
     private var fpsBindPkg = ""
     // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
+        // 临时禁用绑核（排查 FPS+ 触发后卡0 是否由 fpsbind 引起）
+        if (true) { logLine("fpsbind 已临时禁用（排查卡0）"); return }
         if (!isGamePkg(activePkg)) return
         // 大核 = cpufreq 里 max_freq 最大的 cluster（MTK 天玑 / 高通 通用，比 cpuset 更准）
         var cpus = try {
