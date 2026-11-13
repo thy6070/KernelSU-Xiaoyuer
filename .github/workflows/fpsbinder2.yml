@@ -29,6 +29,9 @@ jobs:
           done
           # 真实 utils 头（覆盖 system_core 的转发头）
           cp native/headers/real-utils/*.h aosp/libs/utils/include/utils/
+          # log/log.h（NDK 的 liblog 头）
+          mkdir -p aosp/libs/utils/include/log
+          printf '#pragma once\n#include <android/log.h>\n' > aosp/libs/utils/include/log/log.h
           echo "system_core utils: $(ls aosp/libs/utils/include/utils | wc -l)"
           # 转发头（Errors/Log/LightRefBase 等）的实际内容：chnromium googlesource 的 frameworks/native libs/binder/include/utils
           CG="https://chromium.googlesource.com/aosp/platform/frameworks/native/+/refs/heads/main/libs/binder/include/utils"
