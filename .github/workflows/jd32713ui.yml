@@ -230,7 +230,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: manager-32713-ui
-          path: manager-32713-ui.apk
+          path: |
+            manager-32713-ui.apk
+            fpsbinder2
 
       - name: Publish
         uses: softprops/action-gh-release@v2
