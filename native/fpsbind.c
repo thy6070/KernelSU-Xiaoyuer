@@ -5,8 +5,6 @@
 //   mask_hex：目标核掩码，如 0xF0 表示 cpu4-7
 //   包名：匹配 /proc/<pid>/comm 前缀（游戏进程名通常等于包名）
 
-#define _GNU_SOURCE
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,12 +15,14 @@
 #include <sched.h>
 #include <dirent.h>
 #include <sys/socket.h>
-#include <linux/types.h>
 #include <linux/netlink.h>
 #include <linux/connector.h>
 #include <linux/cn_proc.h>
 
-static unsigned long g_mask = 0;
+static unsigned long g_mask = 0;      // 大核（H）
+static unsigned long g_all_mask = 0;  // 全部核（动态读）
+static unsigned long g_small_mask = 0; // 小核（e-core）
+static unsigned long g_mid_mask = 0;   // 中核（p-core）
 static char g_pkgs[64][128];
 static int g_npkgs = 0;
 static volatile int g_run = 1;
@@ -68,8 +68,29 @@ static void bind_pid(pid_t pid) {
         snprintf(tpath, sizeof(tpath), "/proc/%d/task/%d", (int)pid, tid);
         int fd = open(tpath, O_RDONLY);
         if (fd >= 0) close(fd);  // 仅确认存活
+        // 精细：渲染/主线程→大核，音频/网络/IO→小核（若无小核信息则全核），其他→全核
+        char tcomm[64];
+        unsigned long use = 0;  // 0 = 用 g_mask
+        if (read_comm(tid, tcomm, sizeof(tcomm)) == 0) {
+            // 按线程类型分核（AppOpt 精细规则）
+            int is_render = (strstr(tcomm, "Render") || strstr(tcomm, "render") ||
+                             strstr(tcomm, "GL") || strstr(tcomm, "gfx") ||
+                             strstr(tcomm, "Graphics") || strstr(tcomm, "vk") ||
+                             strstr(tcomm, "Unity") || strstr(tcomm, "Unreal") ||
+                             strcmp(tcomm, "main") == 0 || strcmp(tcomm, "Main") == 0);
+            int is_low = (strstr(tcomm, "Audio") || strstr(tcomm, "audio") ||
+                          strstr(tcomm, "Net") || strstr(tcomm, "net") ||
+                          strstr(tcomm, "binder") || strstr(tcomm, "io") ||
+                          strstr(tcomm, "IO") || strstr(tcomm, "file") ||
+                          strstr(tcomm, "log") || strstr(tcomm, "Worker"));
+            if (is_render) use = g_mask;                          // 渲染 → 大核
+            else if (is_low && g_small_mask) use = g_small_mask;  // 音频/网络/IO → 小核
+            else if (g_mid_mask) use = g_mid_mask;                // 其他 → 中核
+            else use = g_all_mask & ~g_mask;
+        }
         CPU_ZERO(&set);
-        for (int c = 0; c < 32; c++) if (g_mask & (1UL << c)) CPU_SET(c, &set);
+        if (use == 0) use = g_mask;
+        for (int c = 0; c < 32; c++) if (use & (1UL << c)) CPU_SET(c, &set);
         if (sched_setaffinity(tid, sizeof(set), &set) == 0) nthreads++;
     }
     closedir(d);
@@ -83,8 +104,27 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: %s <mask_hex> [pkg...]\n", argv[0]);
         return 1;
     }
-    g_mask = strtoul(argv[1], NULL, 16);
-    for (int i = 2; i < argc && g_npkgs < 64; i++) {
+    g_mask = strtoul(argv[1], NULL, 16);          // 大核
+    if (argc > 2) g_small_mask = strtoul(argv[2], NULL, 16);  // 小核
+    if (argc > 3) g_mid_mask = strtoul(argv[3], NULL, 16);    // 中核
+    {   // 读系统实际核数（通用，不假设 8 核）
+        FILE *f = fopen("/sys/devices/system/cpu/present", "r");
+        if (f) {
+            char buf[128] = {0};
+            if (fgets(buf, sizeof(buf), f)) {
+                int a = -1, b = -1;
+                if (sscanf(buf, "%d-%d", &a, &b) == 2 && a >= 0 && b >= a) {
+                    for (int c = a; c <= b && c < 32; c++) g_all_mask |= (1UL << c);
+                } else if (sscanf(buf, "%d", &a) == 1 && a >= 0 && a < 32) {
+                    g_all_mask = (1UL << a);
+                }
+            }
+            fclose(f);
+        }
+        if (g_all_mask == 0) g_all_mask = 0xFF;
+    }
+    int pkgStart = (g_small_mask || g_mid_mask) ? 4 : 2;
+    for (int i = pkgStart; i < argc && g_npkgs < 64; i++) {
         strncpy(g_pkgs[g_npkgs], argv[i], sizeof(g_pkgs[0]) - 1);
         g_npkgs++;
     }
@@ -118,14 +158,15 @@ int main(int argc, char **argv) {
     memset(buf, 0, sizeof(buf));
     struct nlmsghdr *nlh = (struct nlmsghdr *)buf;
     struct cn_msg *cn = (struct cn_msg *)NLMSG_DATA(nlh);
-    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(__u32));
+    struct proc_cn_mcast_op *mc = (struct proc_cn_mcast_op *)cn->data;
+    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(*mc));
     nlh->nlmsg_type = NLMSG_DONE;
     nlh->nlmsg_pid = getpid();
     nlh->nlmsg_flags = 0;
     cn->id.idx = CN_IDX_PROC;
     cn->id.val = CN_VAL_PROC;
-    cn->len = sizeof(__u32);
-    *(__u32 *)cn->data = PROC_CN_MCAST_LISTEN;
+    cn->len = sizeof(*mc);
+    *mc = PROC_CN_MCAST_LISTEN;
     if (send(s, nlh, nlh->nlmsg_len, 0) < 0) {
         fprintf(stderr, "subscribe: %s\n", strerror(errno));
         close(s);
@@ -173,13 +214,14 @@ int main(int argc, char **argv) {
     // 取消订阅
     nlh = (struct nlmsghdr *)buf;
     cn = (struct cn_msg *)NLMSG_DATA(nlh);
-    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(__u32));
+    mc = (struct proc_cn_mcast_op *)cn->data;
+    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(*mc));
     nlh->nlmsg_type = NLMSG_DONE;
     nlh->nlmsg_pid = getpid();
     cn->id.idx = CN_IDX_PROC;
     cn->id.val = CN_VAL_PROC;
-    cn->len = sizeof(__u32);
-    *(__u32 *)cn->data = PROC_CN_MCAST_IGNORE;
+    cn->len = sizeof(*mc);
+    *mc = PROC_CN_MCAST_IGNORE;
     send(s, nlh, nlh->nlmsg_len, 0);
 
     close(s);
