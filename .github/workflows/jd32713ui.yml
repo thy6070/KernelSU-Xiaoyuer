@@ -226,6 +226,7 @@ jobs:
           ls -lh fpsbinder2 2>/dev/null || echo "build failed"
           mkdir -p src/manager/app/src/main/assets
           cp fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 2>/dev/null || true
+          ls -la src/manager/app/src/main/assets/ | grep -E "fps|total" || echo "assets ls failed"
 
           mkdir -p src/manager/app/src/main/assets
           cp fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 2>/dev/null || true
