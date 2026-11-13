@@ -30,7 +30,9 @@ jobs:
               curl -sL --max-time 20 "$CG/$f.h?format=TEXT" 2>/dev/null | base64 -d > "aosp/libs/utils/include/utils/$f.h" 2>/dev/null || true
             fi
           done
-          echo "utils: $(ls aosp/libs/utils/include/utils | wc -l) files"; ls aosp/libs/utils/include/utils | head -8
+          echo "utils: $(ls aosp/libs/utils/include/utils | wc -l) files"
+          echo "StrongPointer:"; head -2 aosp/libs/utils/include/utils/StrongPointer.h 2>/dev/null
+          echo "Errors:"; head -2 aosp/libs/utils/include/utils/Errors.h 2>/dev/null
           echo "utils 完整列表:"; ls aosp/libs/utils/include/utils/ | tr '\n' ' '; echo
           echo "utils 文件:"
           ls aosp/libs/utils/include/utils/ 2>/dev/null | head -10
