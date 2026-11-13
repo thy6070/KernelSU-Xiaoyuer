@@ -18,7 +18,7 @@ jobs:
         run: |
           B="https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-22.0"
           mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils
-          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder BinderProxy Status Debug IPermissionController; do
+          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder BinderProxy Status Debug IPermissionController Common ProcessState; do
             curl -sL --max-time 30 -o aosp/libs/binder/include/binder/$f.h "$B/libs/binder/include/binder/$f.h"
           done
           for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition; do
