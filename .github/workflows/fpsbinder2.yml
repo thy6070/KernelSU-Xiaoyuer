@@ -14,21 +14,25 @@ jobs:
         with:
           ndk-version: r29
 
-      - name: fetch ALL AOSP headers
+      - name: fetch headers (raw lists)
         run: |
           B="https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-22.0"
-          A="https://api.github.com/repos/LineageOS/android_frameworks_native/contents"
-          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils aosp/libs/base/include/android-base
-          # binder (list dir)
-          curl -s "$A/libs/binder/include/binder?ref=lineage-22.0" > /tmp/l1.json
-          for n in $(jq -r '.[].name' /tmp/l1.json 2>/dev/null); do curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$n" "$B/libs/binder/include/binder/$n"; done
-          # utils (list dir)
-          curl -s "$A/libs/utils/include/utils?ref=lineage-22.0" > /tmp/l2.json
-          for n in $(jq -r '.[].name' /tmp/l2.json 2>/dev/null); do curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$n" "$B/libs/utils/include/utils/$n"; done
-          # android-base (libbase from system_core)
           SB="https://raw.githubusercontent.com/LineageOS/android_system_core/lineage-22.0/libbase/include/android-base"
-          for f in unique_fd logging macros stringprintf strings errors mapped_file scope_guard parseln file_map thread_annotations result.h; do curl -sL --max-time 20 -o "aosp/libs/base/include/android-base/$f" "$SB/$f"; done
+          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils aosp/libs/base/include/android-base
+          # binder 全列表
+          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder BinderProxy Status Debug IPermissionController Common unique_fd ParcelableHolder IMemory IMemoryHeap IShellCallback IResultReceiver; do
+            curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h"
+          done
+          # utils 全列表
+          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd SharedBuffer ByteOrder; do
+            curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$B/libs/utils/include/utils/$f.h"
+          done
+          # android-base
+          for f in unique_fd logging macros stringprintf strings errors mapped_file scope_guard parseln file_map thread_annotations result.h; do
+            curl -sL --max-time 20 -o "aosp/libs/base/include/android-base/$f" "$SB/$f"
+          done
           echo "binder: $(ls aosp/libs/binder/include/binder | wc -l) utils: $(ls aosp/libs/utils/include/utils | wc -l) base: $(ls aosp/libs/base/include/android-base | wc -l)"
+          wc -l aosp/libs/utils/include/utils/String16.h aosp/libs/base/include/android-base/unique_fd.h 2>/dev/null
 
       - name: build fpsbinder2
         run: |
