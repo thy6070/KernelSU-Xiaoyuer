@@ -6233,9 +6233,14 @@ class FpsOverlayService : Service() {
     // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
         if (!isGamePkg(activePkg)) return
-        val cpus = try {
-            sh("cat /dev/cpuset/top-app/cpus 2>/dev/null", 1L).trim()
+        // 大核 = cpufreq 里 max_freq 最大的 cluster（MTK 天玑 / 高通 通用，比 cpuset 更准）
+        var cpus = try {
+            sh("big=\$(for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$m\" ] && echo \"\$m \$p\"; done | sort -rn | head -1 | awk '{print \$2}'); cat \${big}cpus 2>/dev/null", 2L).trim()
         } catch (t: Throwable) { "" }
+        // 兜底：top-app cpuset
+        if (cpus.isEmpty()) {
+            cpus = try { sh("cat /dev/cpuset/top-app/cpus 2>/dev/null", 1L).trim() } catch (t: Throwable) { "" }
+        }
         if (cpus.isEmpty()) return
         val mask = cpusToMask(cpus)
         // 优先 fpsbind（proc connector 毫秒级）
