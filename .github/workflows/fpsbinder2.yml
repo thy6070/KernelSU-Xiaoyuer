@@ -14,19 +14,23 @@ jobs:
         with:
           ndk-version: r29
 
-      - name: clone AOSP headers
+      - name: fetch AOSP headers (raw)
         run: |
-          git config --global --unset http.https://github.com/.extraheader 2>/dev/null || true
-          set +e
-          git clone --depth 1 --single-branch https://github.com/aosp-mirror/platform_frameworks_native aosp 2>&1 | tail -5
-          set -e
-          ls aosp/libs/binder/include/binder/ProcessState.h 2>/dev/null || echo "aosp headers missing"
+          B=https://raw.githubusercontent.com/aosp-mirror/platform_frameworks_native/master
+          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils aosp/libs/binder/ndk/include_cpp
+          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder BinderProxy Status Debug IPermissionController IShellCallback; do
+            curl -sL --max-time 30 -o aosp/libs/binder/include/binder/$f.h $B/libs/binder/include/binder/$f.h
+          done
+          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition ByteOrder SharedBuffer; do
+            curl -sL --max-time 30 -o aosp/libs/utils/include/utils/$f.h $B/libs/utils/include/utils/$f.h
+          done
+          ls aosp/libs/binder/include/binder/ProcessState.h aosp/libs/utils/include/utils/String16.h 2>/dev/null && echo "headers ok"
 
       - name: build fpsbinder2
         run: |
           NDK="${{ steps.ndk.outputs.ndk-path }}"
           CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
-          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -30
+          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -25
           ls -lh fpsbinder2 2>/dev/null || echo "build failed"
 
       - uses: actions/upload-artifact@v4
