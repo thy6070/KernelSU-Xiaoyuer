@@ -6248,15 +6248,21 @@ class FpsOverlayService : Service() {
     }
 
     private var emaFps = 0.0
+    private var lastColor = 0
 
     private fun showFps(fps: Double) {
         // EMA 平滑：显示稳，不跟着单帧抖动
         emaFps = if (emaFps <= 0.0) fps else emaFps * 0.3 + fps * 0.7
         val v = Math.round(emaFps).toInt().coerceIn(0, 240)
-        if (v == lastShown) return
+        val color = if (fpsPlusBoosted) 0xFFFF4444.toInt() else 0xFFFFFFFF.toInt()
+        if (v == lastShown && color == lastColor) return
         lastShown = v
+        lastColor = color
         fpsView?.post {
-            try { fpsView?.text = v.toString() + ".0" } catch (t: Throwable) {}
+            try {
+                fpsView?.text = v.toString() + ".0"
+                fpsView?.setTextColor(color)
+            } catch (t: Throwable) {}
         }
     }
 }
