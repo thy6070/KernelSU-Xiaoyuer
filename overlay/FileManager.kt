@@ -5979,7 +5979,7 @@ class FpsOverlayService : Service() {
         }
         if (bin.exists() && bin.length() > 10000) {
             bin.setExecutable(true)
-            sh("chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " \"" + layer + "\" 80 \"" + d + "/fps_raw\" </dev/null >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
+            sh("chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " \"" + layer + "\" 33 \"" + d + "/fps_raw\" </dev/null >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
             daemonLayer = layer
             daemonStartedAt = System.currentTimeMillis()
             logLine("native fpsbinder2 启动: " + layer)
