@@ -14,17 +14,20 @@ jobs:
         with:
           ndk-version: r29
 
-      - name: fetch AOSP headers (LineageOS mirror)
+      - name: fetch ALL AOSP headers (LineageOS mirror)
         run: |
           B="https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-22.0"
-          mkdir -p aosp/libs/binder/include/binder aosp/libs/utils/include/utils
-          for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder BinderProxy Status Debug IPermissionController Common ProcessState; do
-            curl -sL --max-time 30 -o aosp/libs/binder/include/binder/$f.h "$B/libs/binder/include/binder/$f.h"
+          A="https://api.github.com/repos/LineageOS/android_frameworks_native/contents"
+          for dir in "libs/binder/include/binder" "libs/utils/include/utils"; do
+            mkdir -p "aosp/$dir"
+            curl -s "$A/$dir?ref=lineage-22.0" > /tmp/list.json
+            for n in $(jq -r '.[].name' /tmp/list.json 2>/dev/null); do
+              curl -sL --max-time 20 -o "aosp/$dir/$n" "$B/$dir/$n"
+            done
           done
-          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition; do
-            curl -sL --max-time 30 -o aosp/libs/utils/include/utils/$f.h "$B/libs/utils/include/utils/$f.h"
-          done
-          wc -l aosp/libs/binder/include/binder/IBinder.h aosp/libs/utils/include/utils/String16.h 2>/dev/null
+          echo "binder: $(ls aosp/libs/binder/include/binder | wc -l) files"
+          echo "utils: $(ls aosp/libs/utils/include/utils | wc -l) files"
+          ls aosp/libs/binder/include/binder | head -5
 
       - name: build fpsbinder2
         run: |
