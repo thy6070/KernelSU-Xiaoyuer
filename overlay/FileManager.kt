@@ -6041,9 +6041,8 @@ class FpsOverlayService : Service() {
             if (n.contains("ActivityRecord") || n.contains("InputSink") ||
                 n.contains("animation-leash") || n.contains("Surface(name=") ||
                 n.contains("Background for ") || n.contains("BackgroundFor")) continue
-            // 带前导 layer id 的条目（RequestedLayerState{<hex> <name>}）--latency 读不到数据，
-            // 必须跳过；真正能出帧的层名不带 hex 前缀（实测验证过）
-            if (Regex("^[0-9a-fA-F]+ ").containsMatchIn(n)) continue
+            // 注意：BLAST 层带 hex 前缀（如 af8c923 SurfaceView[...](BLAST)）但可读，
+            // 不能按 hex 排除（之前错误排除导致选 VRI 层读不到数据）
             // 强约束：只认前台应用自己的层，避免选中壁纸/系统动画层算出假帧率
             if (activePkg.isNotEmpty() && !n.contains(activePkg)) continue
             var sc = 0
