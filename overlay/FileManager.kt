@@ -6303,11 +6303,12 @@ class FpsOverlayService : Service() {
         if (panelHz <= 0.0) return
         // 过滤 63 帧以下：60 帧游戏不参与判断
         if (fps <= 63.0) { fpsPlusLow = 0; return }
-        // 自适应目标：最近 5 秒（50 次）内的帧率峰值，避免 90 帧游戏被 120 面板误判
+        // 主流刷新率档位：目标取最近档，每档掉 5 帧触发
         fpsHist.addLast(fps)
         if (fpsHist.size > 50) fpsHist.removeFirst()
         val peak = fpsHist.maxOrNull() ?: fps
-        val target = minOf(panelHz, peak)
+        val tiers = listOf(90.0, 120.0, 144.0, 165.0, 185.0, 240.0)
+        val target = tiers.minByOrNull { kotlin.math.abs(it - peak) } ?: 120.0
         // 快升慢降：掉帧 → 立即拉高；恢复 → 持续正常 2 秒才解除
         if (fps >= target - 5.0) {
             fpsPlusLow = 0
