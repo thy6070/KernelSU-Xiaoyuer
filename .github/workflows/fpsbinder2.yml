@@ -25,11 +25,8 @@ jobs:
             curl -sL --max-time 15 -o "aosp/libs/base/include/android-base/$f.h" "$SB/$f.h" 2>/dev/null
             sz=$(stat -c%s "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || echo 0)
             if [ "$sz" -lt 100 ]; then
-              for alt in "https://raw.githubusercontent.com/aosp-mirror/platform_system_libbase/master/include/android-base" "https://raw.githubusercontent.com/GrapheneOS/platform_system_libbase/15/include/android-base"; do
-                curl -sL --max-time 15 -o "aosp/libs/base/include/android-base/$f.h" "$alt/$f.h" 2>/dev/null
-                sz=$(stat -c%s "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || echo 0)
-                [ "$sz" -gt 100 ] && break
-              done
+              curl -sL --max-time 15 "https://android.googlesource.com/platform/system/libbase/+/refs/heads/main/include/android-base/$f.h?format=TEXT" | base64 -d > "aosp/libs/base/include/android-base/$f.h" 2>/dev/null
+              sz=$(stat -c%s "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || echo 0)
             fi
           done
           echo "=== system_core 结构 ==="
