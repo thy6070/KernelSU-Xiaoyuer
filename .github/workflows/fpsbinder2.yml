@@ -22,9 +22,15 @@ jobs:
             curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h" || true
           done
           U="https://raw.githubusercontent.com/LineageOS/android_frameworks_native/lineage-22.0/libs/utils/include/utils"
-          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd SharedBuffer ByteOrder TypeHelpers Assert CallStack Looper ProcessState; do
+          CG="https://chromium.googlesource.com/aosp/platform/frameworks/native/+/refs/heads/main/libs/utils/include/utils"
+          for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd SharedBuffer ByteOrder TypeHelpers Assert CallStack Looper; do
             curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$U/$f.h" || true
+            sz=$(stat -c%s "aosp/libs/utils/include/utils/$f.h" 2>/dev/null || echo 0)
+            if [ "$sz" -lt 100 ]; then
+              curl -sL --max-time 20 "$CG/$f.h?format=TEXT" 2>/dev/null | base64 -d > "aosp/libs/utils/include/utils/$f.h" 2>/dev/null || true
+            fi
           done
+          echo "utils: $(ls aosp/libs/utils/include/utils | wc -l) files"; ls aosp/libs/utils/include/utils | head -8
           echo "utils 完整列表:"; ls aosp/libs/utils/include/utils/ | tr '\n' ' '; echo
           echo "utils 文件:"
           ls aosp/libs/utils/include/utils/ 2>/dev/null | head -10
