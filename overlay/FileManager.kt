@@ -6362,7 +6362,8 @@ internal fun parseLatencyText(out: String): Double? {
         // 对齐 Scene 的 1 秒口径：窗口默认 1000ms（60/90/120Hz 都能取满）。
         // 144Hz 下 1 秒 = 144 帧，超过 --latency 的 128 帧缓存，所以按 120 帧封顶（833ms）。
         val refreshNs = lines[0].trim().toLongOrNull()?.takeIf { it in 1_000_000L..50_000_000L } ?: 16_666_667L
-        val winNs = minOf(400_000_000L, refreshNs * 120).coerceAtLeast(300_000_000L)
+        // 窗口 300ms：延迟更低，样本仍够（120Hz≈36帧）
+        val winNs = minOf(300_000_000L, refreshNs * 120).coerceAtLeast(200_000_000L)
         var start = end - winNs
         var n = times.count { it >= start }
         if (n < 4) {
