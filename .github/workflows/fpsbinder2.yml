@@ -30,8 +30,8 @@ jobs:
           # 真实 utils 头（覆盖 system_core 的转发头）
           cp native/headers/real-utils/*.h aosp/libs/utils/include/utils/
           # cutils 头
-          mkdir -p aosp/libs/cutils/include
-          cp -r native/headers/cutils/* aosp/libs/cutils/include/
+          mkdir -p aosp/libs/cutils/include/cutils
+          cp -r native/headers/cutils/* aosp/libs/cutils/include/cutils/
           # log/log.h（NDK 的 liblog 头）
           mkdir -p aosp/libs/utils/include/log
           printf '#pragma once\n#include <android/log.h>\n' > aosp/libs/utils/include/log/log.h
