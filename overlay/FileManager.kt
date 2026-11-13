@@ -6385,14 +6385,14 @@ class FpsOverlayService : Service() {
         }
         fpsPlusHigh = 0
         fpsPlusLow++
-        if (fpsPlusLow < 2) return
+        if (fpsPlusLow < 5) return   // 连续5次（约200ms）才触发，过滤菜单过渡瞬间
         fpsPlusLow = 0
         val now = System.currentTimeMillis()
         if (now - lastBoost < 2000L) return
         lastBoost = now
         fpsPlusBoosted = true
         startCpuBind()
-        logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续2次，拉满+boost+绑大核+清后台")
+        logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续5次，拉满+boost")
         // 首次触发保存原始频率 + GPU 原值（恢复时用）
         sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null; " +
            "[ -f /data/local/tmp/fps_plus_gpu ] || echo \"\$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null) \$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" > /data/local/tmp/fps_plus_gpu 2>/dev/null", 2L)
