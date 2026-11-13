@@ -87,6 +87,8 @@ static void bind_pid(pid_t pid) {
             else if (is_low && g_small_mask) use = g_small_mask;  // 音频/网络/IO → 小核
             else if (g_mid_mask) use = g_mid_mask;                // 其他 → 中核
             else use = g_all_mask & ~g_mask;
+            fprintf(stderr, "  tid=%d comm=%s type=%s use=0x%lx\n",
+                    tid, tcomm, is_render ? "BIG" : (is_low ? "SMALL" : "MID"), use);
         }
         CPU_ZERO(&set);
         if (use == 0) use = g_mask;
@@ -94,7 +96,7 @@ static void bind_pid(pid_t pid) {
         if (sched_setaffinity(tid, sizeof(set), &set) == 0) nthreads++;
     }
     closedir(d);
-    fprintf(stderr, "bind pid=%d comm=%s threads=%d mask=0x%lx\n", (int)pid, comm, nthreads, g_mask);
+    fprintf(stderr, "bind pid=%d comm=%s threads=%d big=0x%lx mid=0x%lx small=0x%lx\n", (int)pid, comm, nthreads, g_mask, g_mid_mask, g_small_mask);
     fflush(stderr);
     (void)tidstr;
 }
