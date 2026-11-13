@@ -176,6 +176,15 @@ jobs:
 
 
 
+      - name: Build fpsbinder2 (AOSP libbinder C++ client, 仅编译不集成)
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/aosp-mirror/platform_frameworks_native aosp 2>&1 | tail -3
+          cd aosp && git sparse-checkout set libs/binder/include libs/utils/include include && cd ..
+          NDK="${{ steps.ndk2.outputs.ndk-path }}"
+          CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++"
+          "$CXX" -O2 -std=c++17 -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -Wl,--unresolved-symbols=ignore-all -ldl 2>&1 | tail -30
+          ls -lh fpsbinder2 2>/dev/null || echo "fpsbinder2 build failed"
+
       - name: Build APK
         run: |
           # 确保 native 二进制在 assets 里（在 gradle 打包前）
