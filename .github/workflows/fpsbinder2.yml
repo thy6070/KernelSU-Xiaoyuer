@@ -27,6 +27,8 @@ jobs:
           for n in $(jq -r '.[].name' /tmp/ul.json 2>/dev/null); do
             curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$n" "$U/$n" || true
           done
+          # 真实 utils 头（覆盖 system_core 的转发头）
+          cp native/headers/real-utils/*.h aosp/libs/utils/include/utils/
           echo "system_core utils: $(ls aosp/libs/utils/include/utils | wc -l)"
           # 转发头（Errors/Log/LightRefBase 等）的实际内容：chnromium googlesource 的 frameworks/native libs/binder/include/utils
           CG="https://chromium.googlesource.com/aosp/platform/frameworks/native/+/refs/heads/main/libs/binder/include/utils"
