@@ -6039,7 +6039,8 @@ class FpsOverlayService : Service() {
             val n = l.substring(i + 1, j).trim()
             if (!n.contains("#")) continue
             if (n.contains("ActivityRecord") || n.contains("InputSink") ||
-                n.contains("animation-leash") || n.contains("Surface(name=")) continue
+                n.contains("animation-leash") || n.contains("Surface(name=") ||
+                n.contains("Background for ") || n.contains("BackgroundFor")) continue
             // 带前导 layer id 的条目（RequestedLayerState{<hex> <name>}）--latency 读不到数据，
             // 必须跳过；真正能出帧的层名不带 hex 前缀（实测验证过）
             if (Regex("^[0-9a-fA-F]+ ").containsMatchIn(n)) continue
@@ -6060,7 +6061,8 @@ class FpsOverlayService : Service() {
                 if (i < 0 || j <= i) continue
                 val n = l.substring(i + 1, j).trim()
                 if (activePkg.isNotEmpty() && n.contains(activePkg) && n.contains("#") &&
-                    !n.contains("ActivityRecord") && !n.contains("InputSink")) {
+                    !n.contains("ActivityRecord") && !n.contains("InputSink") &&
+                    !n.contains("Background for ") && !n.contains("BackgroundFor")) {
                     loose.add(n)
                 }
             }
