@@ -6137,6 +6137,7 @@ class FpsOverlayService : Service() {
                     fpsPlusBoosted = false
                     fpsPlusLow = 0
                     fpsPlusHigh = 0
+                    fpsHist.clear()
                     refreshPkg = ""
                     sh("pkill -f fps_bind.sh 2>/dev/null", 1L)
                 }
@@ -6262,7 +6263,7 @@ class FpsOverlayService : Service() {
                 // 还原原频率（避免一直满频发烫）
                 sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig 2>/dev/null; " +
                    "if [ -f /data/local/tmp/fps_plus_gpu ]; then read go gk < /data/local/tmp/fps_plus_gpu; [ -n \"\$go\" ] && [ -f /proc/gpufreqv2/fix_target_opp_index ] && echo \$go > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; [ -n \"\$gk\" ] && [ -f /sys/class/kgsl/kgsl-3d0/devfreq/min_freq ] && echo \$gk > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; fi; " +
-                   "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null", 2L)
+                   "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
             }
             return
         }
