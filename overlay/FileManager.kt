@@ -6172,7 +6172,7 @@ class FpsOverlayService : Service() {
                     fpsPlusHigh = 0
                     fpsHist.clear()
                     refreshPkg = ""
-                    sh("pkill -f fps_bind.sh 2>/dev/null", 1L)
+                    sh("pkill -f fps_bind.sh 2>/dev/null; pkill -f fpsbind 2>/dev/null", 1L)
                 }
                 // 进入游戏：把屏幕刷新率拉到设备最高
                 if (isGamePkg(activePkg) && refreshPkg != activePkg) {
