@@ -6182,15 +6182,17 @@ class FpsOverlayService : Service() {
 
     // native 绑核守护（proc connector，毫秒级），按帧率启停
     private var fpsBindPkg = ""
-    // 线程亲和：绑到系统 top-app cpuset（大核），纯 shell
+    // 线程亲和：后台循环每 0.5 秒重绑 top-app cpuset（新线程也能跟上）
     private fun startCpuBind() {
         if (!isGamePkg(activePkg)) return
         val cpus = try {
             sh("cat /dev/cpuset/top-app/cpus 2>/dev/null", 1L).trim()
         } catch (t: Throwable) { "" }
         if (cpus.isEmpty()) return
-        sh("for pid in \$(pidof " + activePkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -c " + cpus + " -p \${t##*/} 2>/dev/null; done; done", 2L)
-        logLine("线程亲和：绑 top-app cpus=" + cpus)
+        val pkg = activePkg
+        val script = "while true; do for pid in \$(pidof " + pkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -c " + cpus + " -p \${t##*/} 2>/dev/null; done; done; sleep 0.5; done"
+        sh("pkill -f fps_bind.sh 2>/dev/null; echo '" + script + "' > /data/local/tmp/fps_bind.sh; chmod 755 /data/local/tmp/fps_bind.sh; setsid sh /data/local/tmp/fps_bind.sh >/dev/null 2>&1 &", 2L)
+        logLine("线程亲和循环启动：cpus=" + cpus + " pkg=" + pkg)
     }
 
     // 计算大核 mask（最高频两档 policy 的核），用于 FPS+ 绑核
@@ -6237,7 +6239,7 @@ class FpsOverlayService : Service() {
                 fpsPlusHigh = 0
                 logLine("FPS+ 恢复：fps=${String.format("%.1f", fps)} 持续正常2秒，频率还原+线程放开")
                 // 停止 native 绑核，线程亲和恢复全核
-                sh("pkill -f fpsbind 2>/dev/null; for pid in \$(pidof " + activePkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -p 0xFF \${t##*/} 2>/dev/null; done; done", 2L)
+                sh("pkill -f fps_bind.sh 2>/dev/null; for pid in \$(pidof " + activePkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -p 0xFF \${t##*/} 2>/dev/null; done; done", 2L)
                 // 恢复后不再记录
                 // 还原原频率（避免一直满频发烫）
                 sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig 2>/dev/null; " +
