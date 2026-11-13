@@ -29,6 +29,8 @@ jobs:
           done
           # 真实 utils 头（覆盖 system_core 的转发头）
           cp native/headers/real-utils/*.h aosp/libs/utils/include/utils/
+          # binder 完整头（仓库）
+          cp -r native/headers/binder/* aosp/libs/binder/include/binder/
           # cutils 头
           mkdir -p aosp/libs/cutils/include/cutils
           cp -r native/headers/cutils/* aosp/libs/cutils/include/cutils/
