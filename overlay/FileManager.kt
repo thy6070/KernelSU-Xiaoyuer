@@ -6140,8 +6140,12 @@ class FpsOverlayService : Service() {
                     lastLayerRefresh = 0L
                 }
                 }
-                // 读不到：显示 "--"（避免卡在旧值，这是"卡死"的根因）
-                showFps(0.0, reading = false)
+                // 读不到：保持上次值（防闪烁），持续 3 秒（约 10 次）无数据才显示 --
+                if (failCount < 10) {
+                    // 保持上次显示
+                } else {
+                    showFps(0.0, reading = false)
+                }
             } else {
                 failCount = 0
                 if (fpsRaw < 0.5) {
