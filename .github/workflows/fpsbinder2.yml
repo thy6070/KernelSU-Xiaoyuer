@@ -22,10 +22,10 @@ jobs:
           for f in IBinder Parcel ProcessState IPCThreadState IServiceManager IInterface BpBinder Binder Status Debug Common unique_fd ParcelableHolder IMemory IMemoryHeap; do curl -sL --max-time 20 -o "aosp/libs/binder/include/binder/$f.h" "$B/libs/binder/include/binder/$f.h"; done
           for f in String16 String8 StrongPointer RefBase Vector Errors TextOutput Log Unicode SingleLinkedList Timers threads Mutex Condition Fd; do curl -sL --max-time 20 -o "aosp/libs/utils/include/utils/$f.h" "$B/libs/utils/include/utils/$f.h"; done
           for f in unique_fd logging macros stringprintf strings errors mapped_file scope_guard parseln file_map thread_annotations result.h; do
-            curl -sL --max-time 15 -o "aosp/libs/base/include/android-base/$f.h" "$SB/$f.h" 2>/dev/null
+            curl -sL --max-time 15 -o "aosp/libs/base/include/android-base/$f.h" "$SB/$f.h" 2>/dev/null || true
             sz=$(stat -c%s "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || echo 0)
             if [ "$sz" -lt 100 ]; then
-              curl -sL --max-time 15 "https://chromium.googlesource.com/aosp/platform/system/libbase/+/refs/heads/main/include/android-base/$f.h?format=TEXT" | base64 -d > "aosp/libs/base/include/android-base/$f.h" 2>/dev/null
+              curl -sL --max-time 15 "https://chromium.googlesource.com/aosp/platform/system/libbase/+/refs/heads/main/include/android-base/$f.h?format=TEXT" 2>/dev/null | base64 -d > "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || true
               sz=$(stat -c%s "aosp/libs/base/include/android-base/$f.h" 2>/dev/null || echo 0)
             fi
           done
