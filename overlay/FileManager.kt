@@ -6230,17 +6230,48 @@ class FpsOverlayService : Service() {
 
     // native 绑核守护（proc connector，毫秒级），按帧率启停
     private var fpsBindPkg = ""
-    // 线程亲和：后台循环每 0.5 秒重绑 top-app cpuset（新线程也能跟上）
+    // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
         if (!isGamePkg(activePkg)) return
         val cpus = try {
             sh("cat /dev/cpuset/top-app/cpus 2>/dev/null", 1L).trim()
         } catch (t: Throwable) { "" }
         if (cpus.isEmpty()) return
+        val mask = cpusToMask(cpus)
+        // 优先 fpsbind（proc connector 毫秒级）
+        val bin = File(filesDir, "fpsbind")
+        if (!bin.exists()) {
+            try { assets.open("fpsbind").use { input -> bin.outputStream().use { input.copyTo(it) } } } catch (t: Throwable) {}
+        }
+        if (bin.exists() && bin.length() > 10000 && mask.isNotEmpty()) {
+            bin.setExecutable(true)
+            sh("pkill -f fpsbind 2>/dev/null; chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " " + mask + " " + activePkg + " >> " + filesDir + "/fpsbind.log 2>&1 &", 2L)
+            logLine("fpsbind 启动(proc connector): mask=" + mask + " pkg=" + activePkg)
+            return
+        }
+        // 兜底：shell 循环
         val pkg = activePkg
         val script = "while true; do for pid in \$(pidof " + pkg + " 2>/dev/null); do for t in /proc/\$pid/task/*; do taskset -c " + cpus + " -p \${t##*/} 2>/dev/null; done; done; sleep 0.5; done"
         sh("pkill -f fps_bind.sh 2>/dev/null; echo '" + script + "' > /data/local/tmp/fps_bind.sh; chmod 755 /data/local/tmp/fps_bind.sh; setsid sh /data/local/tmp/fps_bind.sh >/dev/null 2>&1 &", 2L)
-        logLine("线程亲和循环启动：cpus=" + cpus + " pkg=" + pkg)
+        logLine("shell 绑核循环启动: cpus=" + cpus)
+    }
+
+    // "4-7" → "f0"
+    private fun cpusToMask(cpus: String): String {
+        var mask = 0L
+        for (part in cpus.split(",")) {
+            val p = part.trim()
+            if (p.contains("-")) {
+                val ab = p.split("-")
+                val a = ab.getOrNull(0)?.trim()?.toIntOrNull() ?: -1
+                val b = ab.getOrNull(1)?.trim()?.toIntOrNull() ?: -1
+                if (a >= 0 && b >= a) for (c in a..b) mask = mask or (1L shl c)
+            } else {
+                val c = p.toIntOrNull() ?: continue
+                mask = mask or (1L shl c)
+            }
+        }
+        return java.lang.Long.toHexString(mask)
     }
 
     // 计算大核 mask（最高频两档 policy 的核），用于 FPS+ 绑核
@@ -6362,8 +6393,7 @@ internal fun parseLatencyText(out: String): Double? {
             if (v <= 0L || v == Long.MAX_VALUE) continue
             times.add(v)
         }
-        if (times.isEmpty()) return null   // 真无数据（数据源失效）
-        if (times.size < 3) return 0.0     // 静态/低帧：有帧但少 → 0.0（不显示 --）
+        if (times.size < 3) return null
         times.sort()
         val end = times[times.size - 1]
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
