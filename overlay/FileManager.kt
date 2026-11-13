@@ -6243,6 +6243,7 @@ class FpsOverlayService : Service() {
                 // 恢复后不再记录
                 // 还原原频率（避免一直满频发烫）
                 sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig 2>/dev/null; " +
+                   "if [ -f /data/local/tmp/fps_plus_gpu ]; then read go gk < /data/local/tmp/fps_plus_gpu; [ -n \"\$go\" ] && [ -f /proc/gpufreqv2/fix_target_opp_index ] && echo \$go > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; [ -n \"\$gk\" ] && [ -f /sys/class/kgsl/kgsl-3d0/devfreq/min_freq ] && echo \$gk > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; fi; " +
                    "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null", 2L)
             }
             return
@@ -6257,8 +6258,9 @@ class FpsOverlayService : Service() {
         fpsPlusBoosted = true
         startCpuBind()
         logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续2次，拉满+boost+绑大核+清后台")
-        // 首次触发保存原始频率（恢复时用）
-        sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null", 2L)
+        // 首次触发保存原始频率 + GPU 原值（恢复时用）
+        sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null; " +
+           "[ -f /data/local/tmp/fps_plus_gpu ] || echo \"\$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null) \$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" > /data/local/tmp/fps_plus_gpu 2>/dev/null", 2L)
         // 拉满 CPU/GPU + sched_boost（与能量守恒互不依赖）
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
             "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
