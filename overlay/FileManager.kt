@@ -6358,7 +6358,10 @@ class FpsOverlayService : Service() {
         // 主流刷新率档位：目标取最近档，每档掉 5 帧触发
         fpsHist.addLast(fps)
         if (fpsHist.size > 50) fpsHist.removeFirst()
-        val peak = fpsHist.maxOrNull() ?: fps
+        // 稳定识别：最近 5 秒（50 次）波动 <3 帧 → 认为是游戏锁帧，peak 用当前值（不触发）
+        val histMax = fpsHist.maxOrNull() ?: fps
+        val histMin = fpsHist.minOrNull() ?: fps
+        val peak = if (fpsHist.size >= 50 && (histMax - histMin) < 3.0) fps else histMax
         val tiers = listOf(90.0, 120.0, 144.0, 165.0)
         val target = tiers.minByOrNull { kotlin.math.abs(it - peak) } ?: 120.0
         // 快升慢降：掉帧 → 立即拉高；恢复 → 持续正常 2 秒才解除
