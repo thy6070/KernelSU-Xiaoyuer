@@ -6131,6 +6131,15 @@ class FpsOverlayService : Service() {
                 } else {
                     idleCount = 0
                 }
+                // 进入游戏：把屏幕刷新率拉到设备最高
+                if (isGamePkg(activePkg) && !maxRefreshDone) {
+                    maxRefreshDone = true
+                    val maxR = sh("dumpsys display 2>/dev/null | grep -oE 'fps=[0-9.]+' | sort -t= -k2 -n | tail -1 | cut -d= -f2", 1L).trim()
+                    if (maxR.isNotEmpty()) {
+                        sh("settings put system peak_refresh_rate " + maxR + "; settings put system min_refresh_rate " + maxR, 1L)
+                        logLine("刷新率拉到最高: " + maxR + "Hz")
+                    }
+                }
                 showFps(fpsRaw, reading = true)
                 maybeFpsPlusBoost(fpsRaw)
                 val nowT = System.currentTimeMillis()
@@ -6272,6 +6281,7 @@ class FpsOverlayService : Service() {
 
     private var emaFps = 0.0
     private var lastColor = 0
+    private var maxRefreshDone = false
 
     private fun showFps(fps: Double, reading: Boolean = false) {
         if (!reading && fps <= 0.0) {
