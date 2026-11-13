@@ -5956,7 +5956,7 @@ class FpsOverlayService : Service() {
             "  dumpsys SurfaceFlinger --latency \"" + layer + "\" 2>/dev/null > \"" + d + "/fps_raw.tmp\"\n" +
             "  mv \"" + d + "/fps_raw.tmp\" \"" + d + "/fps_raw\"\n" +
             "  chmod 644 \"" + d + "/fps_raw\"\n" +
-            "  sleep 0.2\n" +
+            "  sleep 0.15\n" +
             "done\n")
         // setsid 让它脱离 su 的进程组，否则 su 退出时守护进程会被一起收走
         sh("setsid sh " + script.absolutePath + " >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
@@ -6124,7 +6124,7 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {
             logLine("tick 异常: " + t)
         }
-        try { executor?.schedule({ tick() }, 100L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, 80L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     // ===== 日志：帧率 + FPS+ 全链路 =====
@@ -6232,13 +6232,13 @@ class FpsOverlayService : Service() {
             return
         }
         fpsPlusLow++
-        if (fpsPlusLow < 3) return
+        if (fpsPlusLow < 2) return
         fpsPlusLow = 0
         val now = System.currentTimeMillis()
         if (now - lastBoost < 2000L) return
         lastBoost = now
         fpsPlusBoosted = true
-        logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续3次，执行拉满+boost+清后台")
+        logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 目标=${String.format("%.1f", target)} 连续2次，执行拉满+boost+清后台")
         // 拉满 CPU/GPU + sched_boost（与能量守恒互不依赖）
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
             "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
@@ -6248,8 +6248,12 @@ class FpsOverlayService : Service() {
             "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
     }
 
+    private var emaFps = 0.0
+
     private fun showFps(fps: Double) {
-        val v = Math.round(fps).toInt().coerceIn(0, 240)
+        // EMA 平滑：显示稳，不跟着单帧抖动
+        emaFps = if (emaFps <= 0.0) fps else emaFps * 0.3 + fps * 0.7
+        val v = Math.round(emaFps).toInt().coerceIn(0, 240)
         if (v == lastShown) return
         lastShown = v
         fpsView?.post {
