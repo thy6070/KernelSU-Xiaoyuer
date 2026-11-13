@@ -6189,11 +6189,27 @@ class FpsOverlayService : Service() {
                 // 进入游戏：把屏幕刷新率拉到设备最高
                 if (isGamePkg(activePkg) && refreshPkg != activePkg) {
                     refreshPkg = activePkg
-                    val maxR = sh("dumpsys display 2>/dev/null | grep -oE 'fps=[0-9.]+' | sort -t= -k2 -n | tail -1 | cut -d= -f2", 1L).trim()
-                    if (maxR.isNotEmpty()) {
-                        sh("settings put system peak_refresh_rate " + maxR + "; settings put system min_refresh_rate " + maxR, 1L)
-                        logLine("刷新率拉到最高: " + maxR + "Hz")
+                    // 解析 DisplayModeRecord 找最高 fps 的 sfModeId（小鱼儿同款）
+                    val modes = sh("dumpsys display 2>/dev/null | grep DisplayModeRecord", 2L)
+                    var bestSf = ""
+                    var bestHz = 0
+                    for (line in modes.lines()) {
+                        val f = Regex("fps=([0-9.]+)").find(line)?.groupValues?.get(1) ?: continue
+                        val sf = Regex("sfModeId=([0-9]+)").find(line)?.groupValues?.get(1) ?: ""
+                        val fi = f.split(".")[0].toIntOrNull() ?: continue
+                        if (fi > bestHz) { bestHz = fi; bestSf = sf }
                     }
+                    if (bestSf.isNotEmpty()) {
+                        // 关键：直接调 SurfaceFlinger 切模式（settings 不够）
+                        sh("service call SurfaceFlinger 1035 i32 " + bestSf + " >/dev/null 2>&1", 1L)
+                    }
+                    if (bestHz > 0) {
+                        sh("settings put system peak_refresh_rate " + bestHz + ".0; " +
+                           "settings put system min_refresh_rate " + bestHz + ".0; " +
+                           "settings put system user_refresh_rate " + bestHz + "; " +
+                           "settings put secure miui_refresh_rate " + bestHz, 1L)
+                    }
+                    logLine("刷新率切换到 " + bestHz + "Hz（sfModeId=" + bestSf + "）")
                 }
                 // 持续 0（层重建/切帧率后旧层失效）→ 强制重扫层自愈
                 if (fpsRaw <= 0.5) {
@@ -6338,15 +6354,15 @@ class FpsOverlayService : Service() {
         if (!isGamePkg(activePkg)) { fpsPlusLow = 0; return }
         if (panelHz <= 0.0) return
         // 过滤 63 帧以下：60 帧游戏不参与判断
-        if (fps <= 63.0) { fpsPlusLow = 0; return }
+        if (fps < 64.0) { fpsPlusLow = 0; return }  // 64 以下不触发
         // 主流刷新率档位：目标取最近档，每档掉 5 帧触发
         fpsHist.addLast(fps)
         if (fpsHist.size > 50) fpsHist.removeFirst()
         val peak = fpsHist.maxOrNull() ?: fps
-        val tiers = listOf(90.0, 120.0, 144.0, 165.0, 185.0, 240.0)
+        val tiers = listOf(90.0, 120.0, 144.0, 165.0)
         val target = tiers.minByOrNull { kotlin.math.abs(it - peak) } ?: 120.0
         // 快升慢降：掉帧 → 立即拉高；恢复 → 持续正常 2 秒才解除
-        if (fps >= target - 5.0) {
+        if (fps > target - 5.0) {
             fpsPlusLow = 0
             fpsPlusHigh++
             // 慢降：连续 25 次（约 2 秒）正常才解除 boost
