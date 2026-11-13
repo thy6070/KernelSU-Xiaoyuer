@@ -235,6 +235,8 @@ jobs:
         run: |
           # 确保 native 二进制在 assets 里（在 gradle 打包前）
           mkdir -p src/manager/app/src/main/assets
+          if [ -f fpsbinder2 ]; then cp -f fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 && echo "fpsbinder2 copied"; else echo "fpsbinder2 missing in workspace"; fi
+          ls src/manager/app/src/main/assets/ 2>/dev/null | head -3
           cd src/manager
           # 用腾讯镜像下载 Gradle（services.gradle.org 经常超时）
           sed -i 's|services.gradle.org/distributions|mirrors.cloud.tencent.com/gradle|' gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true
