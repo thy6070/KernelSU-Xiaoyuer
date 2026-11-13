@@ -5978,7 +5978,7 @@ class FpsOverlayService : Service() {
             "  dumpsys SurfaceFlinger --latency \"" + layer + "\" 2>/dev/null > \"" + d + "/fps_raw.tmp\"\n" +
             "  mv \"" + d + "/fps_raw.tmp\" \"" + d + "/fps_raw\"\n" +
             "  chmod 644 \"" + d + "/fps_raw\"\n" +
-            "  sleep 0.06\n" +
+            "  sleep 0.05\n" +
             "done\n")
         // setsid 让它脱离 su 的进程组，否则 su 退出时守护进程会被一起收走
         sh("setsid sh " + script.absolutePath + " >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
@@ -6183,7 +6183,7 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {
             logLine("tick 异常: " + t)
         }
-        try { executor?.schedule({ tick() }, 50L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, 40L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
     }
 
     // ===== 日志：帧率 + FPS+ 全链路 =====
@@ -6324,7 +6324,7 @@ class FpsOverlayService : Service() {
         }
         // 自适应 EMA：突变快跟（低延迟），平稳慢平滑（稳）
         val delta = if (emaFps <= 0.0) 1.0 else Math.abs(fps - emaFps) / Math.max(emaFps, 1.0)
-        val alpha = if (delta > 0.04) 0.85 else 0.45
+        val alpha = if (delta > 0.03) 0.88 else 0.5
         emaFps = if (emaFps <= 0.0) fps else emaFps * (1 - alpha) + fps * alpha
         val v = Math.round(emaFps).toInt().coerceIn(0, 240)
         val color = if (fpsPlusBoosted) 0xFFFF4444.toInt() else 0xFFFFFFFF.toInt()
@@ -6362,8 +6362,8 @@ internal fun parseLatencyText(out: String): Double? {
         // 对齐 Scene 的 1 秒口径：窗口默认 1000ms（60/90/120Hz 都能取满）。
         // 144Hz 下 1 秒 = 144 帧，超过 --latency 的 128 帧缓存，所以按 120 帧封顶（833ms）。
         val refreshNs = lines[0].trim().toLongOrNull()?.takeIf { it in 1_000_000L..50_000_000L } ?: 16_666_667L
-        // 窗口 300ms：延迟更低，样本仍够（120Hz≈36帧）
-        val winNs = minOf(300_000_000L, refreshNs * 120).coerceAtLeast(200_000_000L)
+        // 窗口 250ms：延迟压到极限，120Hz≈30帧仍够
+        val winNs = minOf(250_000_000L, refreshNs * 120).coerceAtLeast(180_000_000L)
         var start = end - winNs
         var n = times.count { it >= start }
         if (n < 4) {
