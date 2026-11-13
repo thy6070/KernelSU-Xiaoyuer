@@ -6293,7 +6293,8 @@ internal fun parseLatencyText(out: String): Double? {
         // 无偏公式：n 帧之间有 n-1 个间隔，用真实跨度算，消除窗口边界误差
         val fps = (n - 1).toDouble() * 1_000_000_000.0 / (end - first).toDouble()
         // 上限 = 面板刷新率（--latency 第一行），防止极端情况算出超过面板的假值
-        val maxFps = 1_000_000_000.0 / refreshNs.toDouble()
+        // 上限固定 240：高刷屏（144/165）不得被面板刷新率误压到 120
+        val maxFps = 240.0
         return if (fps > maxFps) maxFps else fps
     }
 
