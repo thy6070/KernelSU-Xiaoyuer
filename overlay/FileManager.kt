@@ -4825,22 +4825,37 @@ internal fun gameCleanCache(ctx: android.content.Context) {
     Thread {
     try {
         val pm = ctx.packageManager
-        val apps = pm.getInstalledApplications(0)
-            .filter {
-                // 排除系统应用 + overlay + 无代码资源包
-                val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
-                !isSystem && hasCode &&
-                it.packageName != "android" &&
-                !it.packageName.startsWith("com.android.systemui") &&
-                !it.packageName.contains(".overlay.")
+        // 用超级用户列表（KSU 授权列表，和提取功能一致）
+        val suList = try {
+            val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+            val res = repo.getAppList()
+            res.getOrNull()?.first ?: emptyList()
+        } catch (t: Throwable) { emptyList() }
+        val apps: List<SuApp> = if (suList.isNotEmpty()) {
+            suList.filter { ai ->
+                // 过滤系统应用（只留用户应用）
+                val aiInfo = ai.packageInfo.applicationInfo
+                val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                !isSystem && ai.packageName != "android"
             }
-            .sortedBy { it.loadLabel(pm).toString() }
+                .sortedBy { it.label }
+                .map { SuApp(it.packageName, it.label, -1, it.allowSu, null) }
+        } else {
+            // 兜底：全部非系统应用
+            pm.getInstalledApplications(0)
+                .filter {
+                    val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                    val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
+                    !isSystem && hasCode && it.packageName != "android"
+                }
+                .sortedBy { it.loadLabel(pm).toString() }
+                .map { SuApp(it.packageName, it.loadLabel(pm).toString(), it.uid, false, null) }
+        }
         uiPickerTitle = "选择要重置的应用"
-        uiPicker = apps.map { it.loadLabel(pm).toString() }
+        uiPicker = apps.map { it.label }
         uiPickerIcons = apps.map { app ->
             try {
-                val d = app.loadIcon(pm)
+                val d = pm.getApplicationIcon(app.pkg)
                 val bmp = android.graphics.Bitmap.createBitmap(
                     d.intrinsicWidth.coerceAtLeast(48),
                     d.intrinsicHeight.coerceAtLeast(48),
@@ -4855,7 +4870,7 @@ internal fun gameCleanCache(ctx: android.content.Context) {
         uiPickerAction = { label ->
             try {
                 // 按名字找回包名
-                val pkg = apps.firstOrNull { it.loadLabel(pm).toString() == label }?.packageName ?: label
+                val pkg = apps.firstOrNull { it.label == label }?.pkg ?: label
                 // 随机标识（安卓ID / 主机名 / 序列号）
                 val rnd = java.util.Random()
                 fun hex(n: Int): String {
