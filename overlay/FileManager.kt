@@ -6033,6 +6033,12 @@ class FpsOverlayService : Service() {
     // 这是无偏算法：n 帧之间有 n-1 个间隔，除的是真实跨度而不是窗口长度。
     // 窗口默认 800ms（144Hz 下 128 帧缓存的极限），帧数不足 4 时放宽到 1200ms。
     // 画面静止（最新帧距今 > 1.5s）返回 0。
+    // 前台应用（su dumpsys window）
+    private fun currentForegroundPkg(): String {
+        val wout = sh("dumpsys window displays 2>/dev/null | grep -m1 mCurrentFocus", 2L)
+        return Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(wout)?.groupValues?.get(1) ?: ""
+    }
+
     private fun refreshLayer() {
         val now = System.currentTimeMillis()
         // 合并成一次 sh（一个 su 进程，减少开锁开销）
