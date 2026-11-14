@@ -20,11 +20,10 @@
 #include <linux/connector.h>
 #include <linux/cn_proc.h>
 
-static unsigned long g_mask = 0;      // 大核（H）
-static unsigned long g_all_mask = 0;  // 全部核（动态读）
-static unsigned long g_small_mask = 0; // 小核（e-core）
-static unsigned long g_mid_mask = 0;   // 中核（p-core）
-static unsigned char g_bound[65536];   // tid 已绑标记（只绑一次，避免反复迁移卡顿）
+static unsigned long g_mask = 0;      // 大核
+static unsigned long g_small_mask = 0; // 小核
+static unsigned long g_mid_mask = 0;   // 中核
+static unsigned char g_bound[65536];   // 只绑一次
 static char g_pkgs[64][128];
 static int g_npkgs = 0;
 static volatile int g_run = 1;
@@ -67,34 +66,26 @@ static void bind_pid(pid_t pid) {
         if (de->d_name[0] == '.') continue;
         int tid = atoi(de->d_name);
         if (tid <= 0 || tid >= 65536) continue;
-        if (g_bound[tid]) continue;   // 只绑一次（避免每 100ms 反复迁移线程导致卡顿）
+        if (g_bound[tid]) continue;
         snprintf(tpath, sizeof(tpath), "/proc/%d/task/%d", (int)pid, tid);
         int fd = open(tpath, O_RDONLY);
-        if (fd >= 0) close(fd);  // 仅确认存活
-        // 精细：渲染/主线程→大核，音频/网络/IO→小核（若无小核信息则全核），其他→全核
-        char tcomm[64];
-        unsigned long use = 0;  // 0 = 用 g_mask
+        if (fd >= 0) close(fd);
+        char tcomm[64] = {0};
+        unsigned long use = g_mask;
         if (read_comm(tid, tcomm, sizeof(tcomm)) == 0) {
-            // 按线程类型分核（AppOpt 精细规则）
             int is_render = (strstr(tcomm, "Render") || strstr(tcomm, "render") ||
                              strstr(tcomm, "GL") || strstr(tcomm, "gfx") ||
-                             strstr(tcomm, "Graphics") || strstr(tcomm, "vk") ||
-                             strstr(tcomm, "Unity") || strstr(tcomm, "Unreal") ||
-                             strcmp(tcomm, "main") == 0 || strcmp(tcomm, "Main") == 0);
+                             strstr(tcomm, "Unity") || strstr(tcomm, "main"));
             int is_low = (strstr(tcomm, "Audio") || strstr(tcomm, "audio") ||
                           strstr(tcomm, "Net") || strstr(tcomm, "net") ||
-                          strstr(tcomm, "binder") || strstr(tcomm, "io") ||
-                          strstr(tcomm, "IO") || strstr(tcomm, "file") ||
-                          strstr(tcomm, "log") || strstr(tcomm, "Worker"));
-            if (is_render) use = g_mask | g_mid_mask;              // 渲染 → 大核+中核（多核，避免单核卡）
-            else if (is_low && g_small_mask) use = g_small_mask;  // 音频/网络/IO → 小核
-            else if (g_mid_mask) use = g_mid_mask;                // 其他 → 中核
-            else use = g_all_mask & ~g_mask;
-            fprintf(stderr, "  tid=%d comm=%s type=%s use=0x%lx\n",
-                    tid, tcomm, is_render ? "BIG" : (is_low ? "SMALL" : "MID"), use);
+                          strstr(tcomm, "binder") || strstr(tcomm, "io"));
+            if (is_render) use = g_mask | g_mid_mask;
+            else if (is_low && g_small_mask) use = g_small_mask;
+            else if (g_mid_mask) use = g_mid_mask;
+            fprintf(stderr, "  tid=%d comm=%s type=%s use=0x%lx\n", tid, tcomm,
+                    is_render ? "BIG" : (is_low ? "SMALL" : "MID"), use);
         }
         CPU_ZERO(&set);
-        if (use == 0) use = g_mask;
         for (int c = 0; c < 32; c++) if (use & (1UL << c)) CPU_SET(c, &set);
         if (sched_setaffinity(tid, sizeof(set), &set) == 0) { nthreads++; g_bound[tid] = 1; }
     }
@@ -104,31 +95,9 @@ static void bind_pid(pid_t pid) {
     (void)tidstr;
 }
 
-// 从 /proc 找包名进程（poll 轮询版用）
-static pid_t find_pid(const char *pkg) {
-    DIR *d = opendir("/proc");
-    if (!d) return -1;
-    struct dirent *de;
-    pid_t found = -1;
-    size_t plen = strlen(pkg);
-    while ((de = readdir(d))) {
-        if (de->d_name[0] < '0' || de->d_name[0] > '9') continue;
-        char path[256];
-        snprintf(path, sizeof(path), "/proc/%s/cmdline", de->d_name);
-        FILE *f = fopen(path, "r");
-        if (!f) continue;
-        char buf[256] = {0};
-        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
-        fclose(f);
-        if (n > plen && strncmp(buf, pkg, plen) == 0) { found = (pid_t)atoi(de->d_name); break; }
-    }
-    closedir(d);
-    return found;
-}
-
 int main(int argc, char **argv) {
     if (argc < 5) {
-        fprintf(stderr, "usage: %s <big_mask> <small_mask> <mid_mask> <pkg...>\n", argv[0]);
+        fprintf(stderr, "usage: %s <big> <small> <mid> <pkg...>\n", argv[0]);
         return 1;
     }
     g_mask = strtoul(argv[1], NULL, 16);
@@ -138,31 +107,102 @@ int main(int argc, char **argv) {
         strncpy(g_pkgs[g_npkgs], argv[i], sizeof(g_pkgs[0]) - 1);
         g_npkgs++;
     }
-    if (g_npkgs == 0) { fprintf(stderr, "no pkg\n"); return 1; }
-    // 读核数
-    FILE *f = fopen("/sys/devices/system/cpu/present", "r");
-    if (f) {
-        char buf[64] = {0};
-        if (fgets(buf, sizeof(buf), f)) {
-            int a = -1, b = -1;
-            if (sscanf(buf, "%d-%d", &a, &b) == 2 && a >= 0 && b >= a) {
-                for (int c = a; c <= b && c < 32; c++) g_all_mask |= (1UL << c);
-            }
-        }
-        fclose(f);
+    if (g_npkgs == 0) {
+        fprintf(stderr, "no pkg given\n");
+        return 1;
     }
-    if (g_all_mask == 0) g_all_mask = 0xFF;
+
     signal(SIGTERM, on_sig);
     signal(SIGINT, on_sig);
-    fprintf(stderr, "fpsbind poll start big=0x%lx mid=0x%lx small=0x%lx all=0x%lx\n", g_mask, g_mid_mask, g_small_mask, g_all_mask);
-    // 轮询：每 100ms 遍历目标进程线程绑核
-    while (g_run) {
-        for (int i = 0; i < g_npkgs; i++) {
-            pid_t pid = find_pid(g_pkgs[i]);
-            if (pid > 0) bind_pid(pid);
-        }
-        usleep(100000);
+
+    int s = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_CONNECTOR);
+    if (s < 0) {
+        fprintf(stderr, "netlink socket: %s\n", strerror(errno));
+        return 1;
     }
-    fprintf(stderr, "fpsbind exit\n");
+
+    struct sockaddr_nl sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.nl_family = AF_NETLINK;
+    sa.nl_groups = CN_IDX_PROC;
+    sa.nl_pid = getpid();
+    if (bind(s, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        fprintf(stderr, "bind: %s\n", strerror(errno));
+        close(s);
+        return 1;
+    }
+
+    // 订阅进程事件
+    char buf[4096];
+    memset(buf, 0, sizeof(buf));
+    struct nlmsghdr *nlh = (struct nlmsghdr *)buf;
+    struct cn_msg *cn = (struct cn_msg *)NLMSG_DATA(nlh);
+    struct proc_cn_mcast_op *mc = (struct proc_cn_mcast_op *)cn->data;
+    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(*mc));
+    nlh->nlmsg_type = NLMSG_DONE;
+    nlh->nlmsg_pid = getpid();
+    nlh->nlmsg_flags = 0;
+    cn->id.idx = CN_IDX_PROC;
+    cn->id.val = CN_VAL_PROC;
+    cn->len = sizeof(*mc);
+    *mc = PROC_CN_MCAST_LISTEN;
+    if (send(s, nlh, nlh->nlmsg_len, 0) < 0) {
+        fprintf(stderr, "subscribe: %s\n", strerror(errno));
+        close(s);
+        return 1;
+    }
+
+    fprintf(stderr, "fpsbind: mask=0x%lx pkgs=%d\n", g_mask, g_npkgs);
+
+    // 先对已存在的目标进程绑一次
+    DIR *pd = opendir("/proc");
+    if (pd) {
+        struct dirent *de;
+        char comm[128];
+        while ((de = readdir(pd))) {
+            int pid = atoi(de->d_name);
+            if (pid <= 0) continue;
+            if (read_comm(pid, comm, sizeof(comm)) == 0 && pkg_match(comm)) bind_pid(pid);
+        }
+        closedir(pd);
+    }
+
+    while (g_run) {
+        ssize_t n = recv(s, buf, sizeof(buf), 0);
+        if (n <= 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        for (nlh = (struct nlmsghdr *)buf; NLMSG_OK(nlh, (unsigned)n); nlh = NLMSG_NEXT(nlh, n)) {
+            if (nlh->nlmsg_type == NLMSG_NOOP) continue;
+            cn = (struct cn_msg *)NLMSG_DATA(nlh);
+            if (cn->id.idx != CN_IDX_PROC || cn->id.val != CN_VAL_PROC) continue;
+            struct proc_event *ev = (struct proc_event *)cn->data;
+            if (ev->what == PROC_EVENT_EXEC || ev->what == PROC_EVENT_FORK) {
+                pid_t pid = ev->what == PROC_EVENT_EXEC
+                            ? ev->event_data.exec.process_pid
+                            : ev->event_data.fork.child_pid;
+                char comm[128];
+                if (read_comm(pid, comm, sizeof(comm)) == 0 && pkg_match(comm)) {
+                    bind_pid(pid);
+                }
+            }
+        }
+    }
+
+    // 取消订阅
+    nlh = (struct nlmsghdr *)buf;
+    cn = (struct cn_msg *)NLMSG_DATA(nlh);
+    mc = (struct proc_cn_mcast_op *)cn->data;
+    nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(*mc));
+    nlh->nlmsg_type = NLMSG_DONE;
+    nlh->nlmsg_pid = getpid();
+    cn->id.idx = CN_IDX_PROC;
+    cn->id.val = CN_VAL_PROC;
+    cn->len = sizeof(*mc);
+    *mc = PROC_CN_MCAST_IGNORE;
+    send(s, nlh, nlh->nlmsg_len, 0);
+
+    close(s);
     return 0;
 }
