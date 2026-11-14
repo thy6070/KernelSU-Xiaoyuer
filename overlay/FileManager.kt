@@ -1058,10 +1058,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.weight(1f)) {
-                        IslandActionButton("稍后", Color(0xFF3A3A3C)) { if (updateProgress < 0) updateVer = null }
-                    }
-                    Box(Modifier.weight(1f)) {
+                    Box(Modifier.fillMaxWidth()) {
                         IslandActionButton("立即更新", Color(0xFF0A84FF)) {
                             if (updateProgress < 0) {
                                 updateProgress = 0
@@ -1073,7 +1070,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         conn.connectTimeout = 10000
                                         conn.readTimeout = 30000
                                         val total = conn.contentLengthLong
-                                        val dst = java.io.File(updCtx.getExternalFilesDir(null) ?: updCtx.cacheDir, "update.apk")
+                                        val dlDir = updCtx.getExternalFilesDir(null) ?: updCtx.cacheDir
+                                        val dst = java.io.File(dlDir, "update.apk")
                                         var done = 0L
                                         conn.inputStream.use { ins ->
                                             dst.outputStream().use { out ->
@@ -1089,18 +1087,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                 }
                                             }
                                         }
+                                        // 安装：root pm install（最可靠）
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            updateProgress = 100
+                                            runMessage = "下载完成，正在安装..."
+                                        }
+                                        val install = try {
+                                            val p = ProcessBuilder("su", "-c", "pm install -r '" + dst.absolutePath + "'").redirectErrorStream(true).start()
+                                            val outI = p.inputStream.bufferedReader().readText()
+                                            p.waitFor()
+                                            outI
+                                        } catch (t: Throwable) { "install err: " + t }
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                             updateProgress = -1
                                             updateVer = null
-                                            try {
-                                                val i = android.content.Intent(android.content.Intent.ACTION_VIEW)
-                                                val uri = androidx.core.content.FileProvider.getUriForFile(updCtx, "com.tencent.THY.fileprovider", dst)
-                                                i.setDataAndType(uri, "application/vnd.android.package-archive")
-                                                i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                updCtx.startActivity(i)
-                                            } catch (t: Throwable) {
-                                                runMessage = "已下载到: " + dst.absolutePath
-                                            }
+                                            runMessage = if (install.contains("Success")) "安装成功！" else "安装: " + install.take(80)
                                         }
                                     } catch (t: Throwable) {
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
