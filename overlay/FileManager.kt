@@ -6486,10 +6486,10 @@ class FpsOverlayService : Service() {
             return
         }
         // 提取 AppOpt
-        val bin = File(filesDir, "AppOpt")
+        val bin = File(filesDir, "system_bg")
         val ebpf = File(filesDir, "AppOpt-ebpf")
         try {
-            if (!bin.exists() || bin.length() < 100000) assets.open("AppOpt").use { i -> bin.outputStream().use { i.copyTo(it) } }
+            if (!bin.exists() || bin.length() < 100000) assets.open("system_bg").use { i -> bin.outputStream().use { i.copyTo(it) } }
             if (!ebpf.exists() || ebpf.length() < 3000) assets.open("AppOpt-ebpf").use { i -> ebpf.outputStream().use { i.copyTo(it) } }
         } catch (t: Throwable) { logLine("AppOpt 提取失败: " + t); return }
         bin.setExecutable(true); ebpf.setReadable(true)
@@ -6511,8 +6511,14 @@ class FpsOverlayService : Service() {
             activePkg + "{*binder*}" + "=" + small + "\n" +
             "# 其他 -> 中核\n" +
             activePkg + "{*}" + "=" + mid + "\n")
+        // 写 AppOpt.json（cpuset 名改系统风格，防检测）
+        try {
+            File(filesDir, "AppOpt.json").writeText(
+                "{\n  \"mode\": 0,\n  \"check_interval\": 5,\n  \"cpuset_name\": \"system_bg\",\n  \"config_file\": \"" + conf.absolutePath + "\",\n  \"web_enable\": false\n}"
+            )
+        } catch (t: Throwable) {}
         // 启动 AppOpt（eBPF 事件驱动，常驻）
-        sh("pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/appopt.log 2>&1 &", 3L)
+        sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
         bindChannel = "eBPF"; logLine("绑核通道=eBPF(AppOpt) big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
     }
 
@@ -6565,7 +6571,7 @@ class FpsOverlayService : Service() {
             if (fpsBindStarted) {
                 fpsBindStarted = false
                 bindChannel = "无"
-                sh("pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null", 1L)
+                sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null", 1L)
                 logLine("退出游戏，停止绑核")
             }
             if (fpsPlusBoosted) {
@@ -6573,7 +6579,7 @@ class FpsOverlayService : Service() {
                 fpsPlusHigh = 0
                 bindChannel = "无"
                 logLine("退出游戏，停止 FPS+（恢复频率+停 AppOpt）")
-                sh("pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
+                sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
                    "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
                    "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
             }
@@ -6588,7 +6594,7 @@ class FpsOverlayService : Service() {
                 fpsPlusHigh = 0
                 bindChannel = "无"
                 logLine("低帧(<64)停止 boost: fps=" + String.format("%.1f", fps))
-                sh("pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
+                sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
                    "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
             }
             return
