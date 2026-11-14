@@ -103,6 +103,28 @@ static void bind_pid(pid_t pid) {
     (void)tidstr;
 }
 
+// 从 /proc 找包名进程（poll 轮询版用）
+static pid_t find_pid(const char *pkg) {
+    DIR *d = opendir("/proc");
+    if (!d) return -1;
+    struct dirent *de;
+    pid_t found = -1;
+    size_t plen = strlen(pkg);
+    while ((de = readdir(d))) {
+        if (de->d_name[0] < '0' || de->d_name[0] > '9') continue;
+        char path[256];
+        snprintf(path, sizeof(path), "/proc/%s/cmdline", de->d_name);
+        FILE *f = fopen(path, "r");
+        if (!f) continue;
+        char buf[256] = {0};
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+        fclose(f);
+        if (n > plen && strncmp(buf, pkg, plen) == 0) { found = (pid_t)atoi(de->d_name); break; }
+    }
+    closedir(d);
+    return found;
+}
+
 int main(int argc, char **argv) {
     if (argc < 5) {
         fprintf(stderr, "usage: %s <big_mask> <small_mask> <mid_mask> <pkg...>\n", argv[0]);
@@ -133,7 +155,7 @@ int main(int argc, char **argv) {
     signal(SIGINT, on_sig);
     fprintf(stderr, "fpsbind poll start big=0x%lx mid=0x%lx small=0x%lx all=0x%lx\n", g_mask, g_mid_mask, g_small_mask, g_all_mask);
     // 轮询：每 100ms 遍历目标进程线程绑核
-    while (!g_stop) {
+    while (g_run) {
         for (int i = 0; i < g_npkgs; i++) {
             pid_t pid = find_pid(g_pkgs[i]);
             if (pid > 0) bind_pid(pid);
