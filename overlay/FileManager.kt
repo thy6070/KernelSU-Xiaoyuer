@@ -6366,7 +6366,7 @@ class FpsOverlayService : Service() {
         if (fps < 64.0) { fpsPlusLow = 0; return }  // 64 以下不触发
         // 固定档位：90/120/144/165。在档位（±3）不触发；掉到档位外立即触发
         val tiers = listOf(90.0, 120.0, 144.0, 165.0)
-        val onTier = tiers.any { kotlin.math.abs(it - fps) <= 6.0 }
+        val onTier = tiers.any { kotlin.math.abs(it - fps) <= 4.0 }
         if (onTier) {
             fpsPlusLow = 0
             fpsPlusHigh++
