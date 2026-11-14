@@ -1102,6 +1102,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             updateProgress = -1
                                             updateVer = null
                                             runMessage = if (install.contains("Success")) "安装成功！" else "安装: " + install.take(80)
+                                            // 下载完定位到左侧（文件管理器高亮）
+                                            try {
+                                                FileLocate.path = dst.absolutePath
+                                                FileLocate.tick += 1
+                                            } catch (t: Throwable) {}
                                         }
                                     } catch (t: Throwable) {
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
