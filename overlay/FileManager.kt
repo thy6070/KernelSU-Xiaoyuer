@@ -1027,8 +1027,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 conn.connectTimeout = 8000
                 conn.readTimeout = 8000
                 val body = conn.inputStream.bufferedReader().readText()
-                val tag = Regex("\"tag_name\":\"([^\"]+)\"").find(body)?.groupValues?.get(1) ?: ""
-                val url = Regex("\"browser_download_url\":\"([^\"]+\.apk)\"").find(body)?.groupValues?.get(1) ?: ""
+                val tag = body.substringAfter("\"tag_name\":\"").substringBefore("\"")
+                val url = body.substringAfter("\"browser_download_url\":\"").substringBefore("\"")
                 if (tag.isNotEmpty() && url.isNotEmpty()) {
                     updateVer = tag
                     updateUrl = url
