@@ -6035,13 +6035,16 @@ class FpsOverlayService : Service() {
     // 画面静止（最新帧距今 > 1.5s）返回 0。
     private fun refreshLayer() {
         val now = System.currentTimeMillis()
-        if (activePkg.isEmpty() || now - lastPkgRefresh > 1000L) {
+        // 合并成一次 sh（一个 su 进程，减少开锁开销）
+        val combined = sh("dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity; echo '===SFL==='; dumpsys SurfaceFlinger --list 2>/dev/null", 3L)
+        val parts = combined.split("===SFL===")
+        val actOut = parts.getOrNull(0) ?: ""
+        val out = parts.getOrNull(1) ?: ""
+        if (activePkg.isEmpty() || now - lastPkgRefresh > 3000L) {
             lastPkgRefresh = now
-            val out = sh("dumpsys activity activities 2>/dev/null | grep -m1 topResumedActivity", 2L)
-            val m = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(out)
+            val m = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(actOut)
             if (m != null) activePkg = m.groupValues[1]
         }
-        val out = sh("dumpsys SurfaceFlinger --list 2>/dev/null", 3L)
         val scored = ArrayList<Pair<String, Int>>()
         for (l in out.lines()) {
             val i = l.indexOf('{')
@@ -6130,13 +6133,29 @@ class FpsOverlayService : Service() {
 
     private fun tick() {
         try {
-            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 2000L) {
+            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 3000L) {
                 lastLayerRefresh = System.currentTimeMillis()
                 refreshLayer()
                 val ln = layerName
                 // 只在层名变化时启停 daemon；同名层重建后 --latency 仍按名字查得到
                 if (ln != null && ln != daemonLayer) startDaemon(ln)
             }
+            // 轻量前台检测（切游戏/进游戏才重扫层）：dumpsys window 比 activity 轻
+            try {
+                val wnow = System.currentTimeMillis()
+                if (wnow - lastPkgRefresh > 2000L) {
+                    lastPkgRefresh = wnow
+                    val wout = sh("dumpsys window displays 2>/dev/null | grep -m1 mCurrentFocus", 2L)
+                    val wm = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(wout)
+                    if (wm != null) {
+                        val newPkg = wm.groupValues[1]
+                        if (newPkg != activePkg) {
+                            activePkg = newPkg
+                            layerName = null   // 切游戏 → 重扫层
+                        }
+                    }
+                }
+            } catch (t: Throwable) {}
             // 唯一数据源：SurfaceFlinger present 时间戳（帧真正上屏的时刻）
             // fps_raw 文件长时间不更新（>2.5 秒）→ 层失效，强制重扫
             try {
@@ -6464,14 +6483,13 @@ class FpsOverlayService : Service() {
         lastBoost = now
         fpsPlusBoosted = true
         logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 非档位，拉满拉频（绑核已常驻）")
-        // 首次触发保存原始频率 + GPU 原值（恢复时用）
+        // 保存原值 + 拉频（合并成一次 su，减少开销）
         sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null; " +
-           "[ -f /data/local/tmp/fps_plus_gpu ] || echo \"\$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null) \$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" > /data/local/tmp/fps_plus_gpu 2>/dev/null", 2L)
-        // 激进拉频（补帧用）：CPU 全部满频 + GPU 锁最高
-        sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
-            "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
-            "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
-            "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
+           "[ -f /data/local/tmp/fps_plus_gpu ] || echo \"\$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null) \$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" > /data/local/tmp/fps_plus_gpu 2>/dev/null; " +
+           "for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
+           "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
+           "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
+           "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
     }
 
     private var emaFps = 0.0
