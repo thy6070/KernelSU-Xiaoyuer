@@ -4828,7 +4828,7 @@ internal fun gameCleanCache(ctx: android.content.Context) {
         // 用超级用户列表（KSU 授权列表，和提取功能一致）
         val suList = try {
             val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
-            val res = repo.getAppList()
+            val res = kotlinx.coroutines.runBlocking { repo.getAppList() }
             res.getOrNull()?.first ?: emptyList()
         } catch (t: Throwable) { emptyList() }
         val apps: List<SuApp> = if (suList.isNotEmpty()) {
