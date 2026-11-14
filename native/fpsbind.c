@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
     memset(buf, 0, sizeof(buf));
     struct nlmsghdr *nlh = (struct nlmsghdr *)buf;
     struct cn_msg *cn = (struct cn_msg *)NLMSG_DATA(nlh);
-    struct proc_cn_mcast_op *mc = (struct proc_cn_mcast_op *)cn->data;
+    int *mc = (int *)cn->data;
     nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(*mc));
     nlh->nlmsg_type = NLMSG_DONE;
     nlh->nlmsg_pid = getpid();
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
     // 取消订阅
     nlh = (struct nlmsghdr *)buf;
     cn = (struct cn_msg *)NLMSG_DATA(nlh);
-    mc = (struct proc_cn_mcast_op *)cn->data;
+    mc = (int *)cn->data;
     nlh->nlmsg_len = NLMSG_LENGTH(sizeof(*cn) + sizeof(*mc));
     nlh->nlmsg_type = NLMSG_DONE;
     nlh->nlmsg_pid = getpid();
