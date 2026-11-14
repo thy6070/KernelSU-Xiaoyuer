@@ -6470,9 +6470,13 @@ class FpsOverlayService : Service() {
             if (fpsPlusBoosted && fpsPlusHigh >= 100) {  // 稳定 4 秒 → 恢复（防抖）
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
-                logLine("FPS+ 恢复：fps=" + String.format("%.1f", fps) + " 在档位")
-                sh("[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
-                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
+                logLine("FPS+ 恢复：fps=" + String.format("%.1f", fps) + " 在档位，慢降频率")
+                // 慢降：先还原 min（系统可降频），2 秒后还原 max，再清文件
+                sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig; " +
+                   "sleep 2; " +
+                   "[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig; " +
+                   "if [ -f /data/local/tmp/fps_plus_gpu ]; then read go gk < /data/local/tmp/fps_plus_gpu; [ -n \"\$go\" ] && [ -f /proc/gpufreqv2/fix_target_opp_index ] && echo \$go > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; [ -n \"\$gk\" ] && [ -f /sys/class/kgsl/kgsl-3d0/devfreq/min_freq ] && echo \$gk > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; fi; " +
+                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 4L)
             }
             return
         }
