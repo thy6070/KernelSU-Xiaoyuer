@@ -4785,6 +4785,14 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("resetprop ro.vaid '").append(hex(16)).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.aaid '").append(hex(16)).append("' 2>/dev/null; ")
                 sb.append("settings put secure oaid '").append(hex(24)).append("' 2>/dev/null; ")
+                // DRM ID（Widevine device id）——删掉让系统重建（drmidswap 同款）
+                sb.append("rm -f /data/vendor/mediadrm/*.id /data/vendor/mediadrm/*.key 2>/dev/null; ")
+                // MAC / 蓝牙 / GSF 等更多标识（全随机）
+                sb.append("settings put global wifi_mac ").append(hex(12)).append(" 2>/dev/null; ")
+                sb.append("settings put global ble_mac ").append(hex(12)).append(" 2>/dev/null; ")
+                sb.append("settings put secure android_id_g ").append(hex(16)).append(" 2>/dev/null; ")
+                sb.append("resetprop ro.com.google.clientidbase 'android-").append(hex(8)).append("' 2>/dev/null; ")
+                sb.append("settings put secure imei '").append(hex(15)).append("' 2>/dev/null; ")
                 sb.append("settings put secure vaid '").append(hex(24)).append("' 2>/dev/null; ")
                 sb.append("settings put secure aaid '").append(hex(24)).append("' 2>/dev/null; ")
                 // 应用 ID（SSAID）双方案：
