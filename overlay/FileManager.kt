@@ -6194,7 +6194,7 @@ class FpsOverlayService : Service() {
                     fpsHist.clear()
                     fpsBindStarted = false
                     refreshPkg = ""
-                    sh("pkill -f fps_bind.sh 2>/dev/null; pkill -f fpsbind 2>/dev/null", 1L)
+                    sh("pkill -f fps_bind.sh 2>/dev/null; pkill -x fpsbind 2>/dev/null", 1L)
                 }
                 // 进入游戏：把屏幕刷新率拉到设备最高
                 if (isGamePkg(activePkg) && refreshPkg != activePkg) {
@@ -6295,10 +6295,8 @@ class FpsOverlayService : Service() {
     private var fpsBindPkg = ""
     // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
-        // 线程绑定已删除（用户要求：卡0，不再绑核）
-        return
         if (!isGamePkg(activePkg)) return
-        // 从 cpufreq 按 max_freq 分三级（小/中/大核，AppOpt 同款）
+        // 自适应分核：cpufreq 按 max_freq 分三级（任何设备）
         val policies = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); c=\$(cat \$p/affected_cpus 2>/dev/null); [ -n \"\$m\" ] && echo \"\$m \$c\"; done | sort -n", 2L)
         val groups = ArrayList<Pair<Long, String>>()
         for (line in policies.lines()) {
@@ -6308,21 +6306,55 @@ class FpsOverlayService : Service() {
             groups.add(m to parts[1].replace(" ", ","))
         }
         if (groups.size < 2) return
-        val small = cpusToMask(groups[0].second)
-        val mid = if (groups.size >= 3) cpusToMask(groups[1].second) else cpusToMask(groups[0].second)
-        val big = cpusToMask(groups.last().second)
-        // fpsbind（proc connector，常驻监听）
-        val bin = File(filesDir, "fpsbind")
-        if (!bin.exists()) {
-            try { assets.open("fpsbind").use { input -> bin.outputStream().use { input.copyTo(it) } } } catch (t: Throwable) {}
+        val small = groups[0].second
+        val mid = if (groups.size >= 3) groups[1].second else groups[0].second
+        val big = groups.last().second
+        // 双通道：eBPF 优先（AppOpt），不支持则走 netlink（fpsbind）
+        val hasEbpf = sh("ls /sys/fs/bpf >/dev/null 2>&1 && ls /sys/kernel/btf/vmlinux >/dev/null 2>&1 && echo yes", 1L).trim() == "yes"
+        if (!hasEbpf) {
+            // netlink 通道（fpsbind）
+            val fb = File(filesDir, "fpsbind")
+            if (!fb.exists()) {
+                try { assets.open("fpsbind").use { i -> fb.outputStream().use { i.copyTo(it) } } } catch (t: Throwable) {}
+            }
+            if (fb.exists() && fb.length() > 10000) {
+                fb.setExecutable(true)
+                sh("pkill -x fpsbind 2>/dev/null; chmod 755 " + fb.absolutePath + "; setsid " + fb.absolutePath + " " + big + " " + small + " " + mid + " " + activePkg + " >> " + filesDir.absolutePath + "/fpsbind.log 2>&1 &", 2L)
+                logLine("fpsbind(netlink) 启动: big=" + big + " mid=" + mid + " small=" + small)
+            }
+            return
         }
-        if (bin.exists() && bin.length() > 10000) {
-            bin.setExecutable(true)
-            sh("pkill -f fpsbind 2>/dev/null; chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " " + big + " " + small + " " + mid + " " + activePkg + " >> " + filesDir + "/fpsbind.log 2>&1 &", 2L)
-            logLine("fpsbind 启动: big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
-        }
+        // 提取 AppOpt
+        val ebpf = File(filesDir, "AppOpt-ebpf")
+        try {
+            if (!bin.exists() || bin.length() < 100000) assets.open("AppOpt").use { i -> bin.outputStream().use { i.copyTo(it) } }
+            if (!ebpf.exists() || ebpf.length() < 3000) assets.open("AppOpt-ebpf").use { i -> ebpf.outputStream().use { i.copyTo(it) } }
+        } catch (t: Throwable) { logLine("AppOpt 提取失败: " + t); return }
+        bin.setExecutable(true); ebpf.setReadable(true)
+        // 生成自适应 applist.conf（实际核号，不写死）
+        val conf = File(filesDir, "applist.conf")
+        conf.writeText("# 自适应分核: big=" + big + " mid=" + mid + " small=" + small + "\n" +
+            "# 渲染/主线程 -> 大核\n" +
+            activePkg + "=" + big + "\n" +
+            activePkg + "{*Render*}" + "=" + big + "\n" +
+            activePkg + "{*GL*}" + "=" + big + "\n" +
+            activePkg + "{*gfx*}" + "=" + big + "\n" +
+            activePkg + "{*Unity*}" + "=" + big + "\n" +
+            activePkg + "{*main*}" + "=" + big + "\n" +
+            "# 音频/网络/IO -> 小核\n" +
+            activePkg + "{*Audio*}" + "=" + small + "\n" +
+            activePkg + "{*audio*}" + "=" + small + "\n" +
+            activePkg + "{*Net*}" + "=" + small + "\n" +
+            activePkg + "{*net*}" + "=" + small + "\n" +
+            activePkg + "{*binder*}" + "=" + small + "\n" +
+            "# 其他 -> 中核\n" +
+            activePkg + "{*}" + "=" + mid + "\n")
+        // 启动 AppOpt（eBPF 事件驱动，常驻）
+        sh("pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 2 </dev/null >> " + filesDir.absolutePath + "/appopt.log 2>&1 &", 3L)
+        logLine("AppOpt 启动(eBPF): big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
     }
 
+    // "4-7" → "f0"
     // "4-7" → "f0"
     // "4-7" → "f0"
     private fun cpusToMask(cpus: String): String {
