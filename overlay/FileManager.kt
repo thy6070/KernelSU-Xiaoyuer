@@ -6430,9 +6430,16 @@ class FpsOverlayService : Service() {
             getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
         } catch (t: Throwable) { false }
         if (!on) { fpsPlusLow = 0; return }
-        // 只在游戏时生效；退出游戏 → 强制停止 boost（恢复频率+停 AppOpt）
+        // 只在游戏时生效；退出游戏 → 强制停止 boost + 停绑核
         if (!isGamePkg(activePkg)) {
             fpsPlusLow = 0
+            // 退出游戏：无条件停绑核（不管有没有触发过 boost）
+            if (fpsBindStarted) {
+                fpsBindStarted = false
+                bindChannel = "无"
+                sh("pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null", 1L)
+                logLine("退出游戏，停止绑核")
+            }
             if (fpsPlusBoosted) {
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
