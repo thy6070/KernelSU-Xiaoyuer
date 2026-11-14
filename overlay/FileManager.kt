@@ -6413,8 +6413,19 @@ class FpsOverlayService : Service() {
             return
         }
         if (panelHz <= 0.0) return
-        // 过滤 63 帧以下：60 帧游戏不参与判断
-        if (fps < 64.0) { fpsPlusLow = 0; return }  // 64 以下不触发
+        // 64 帧以下：不触发；若已在 boost 则强制退出（60 帧游戏不补帧）
+        if (fps < 64.0) {
+            fpsPlusLow = 0
+            if (fpsPlusBoosted) {
+                fpsPlusBoosted = false
+                fpsPlusHigh = 0
+                bindChannel = "无"
+                logLine("低帧(<64)停止 boost: fps=" + String.format("%.1f", fps))
+                sh("pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
+                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
+            }
+            return
+        }
         // 固定档位：90/120/144/165。在档位（±3）不触发；掉到档位外立即触发
         val tiers = listOf(90.0, 120.0, 144.0, 165.0)
         val onTier = tiers.any { kotlin.math.abs(it - fps) <= 4.0 }
