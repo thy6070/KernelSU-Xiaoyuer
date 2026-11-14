@@ -1067,7 +1067,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 uiScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
                                         val conn = (java.net.URL(updateUrl).openConnection() as java.net.HttpURLConnection)
-                                        conn.setRequestProperty("User-Agent", "dsh")
+                                        conn.instanceFollowRedirects = true
+                                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15)")
                                         conn.connectTimeout = 10000
                                         conn.readTimeout = 30000
                                         val total = conn.contentLengthLong
@@ -6004,7 +6005,7 @@ class FpsOverlayService : Service() {
                 val bg = android.graphics.drawable.GradientDrawable()
                 bg.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 bg.cornerRadius = 999f
-                bg.setColor(android.graphics.Color.parseColor("#66808080"))  // 半透明灰
+                bg.setColor(android.graphics.Color.parseColor("#66000000"))  // 半透明黑（最初）
                 background = bg
             }
             val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
