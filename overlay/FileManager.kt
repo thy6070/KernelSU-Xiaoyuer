@@ -5812,6 +5812,7 @@ class FpsOverlayService : Service() {
     private var zeroCount = 0
     private var fpsBindStarted = false
     private var bindChannel = "无"
+    private var fpsFrozen = false
     private var lastProbe = 0L
     private var idleCount = 0
     private var lastShown: Int = -1
@@ -6235,6 +6236,18 @@ class FpsOverlayService : Service() {
                     zeroCount = 0
                 }
                 showFps(fpsRaw, reading = true)
+                // FPS+ 开启 → 冻结系统游戏助手/云控（Scene 同款，可恢复）
+                val fpOnX = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
+                if (fpOnX && !fpsFrozen) {
+                    fpsFrozen = true
+                    sh("for pkg in com.oplus.games com.heytap.gamespace com.nearme.gamecenter com.xiaomi.joyose com.miui.securitycenter; do " +
+                       "for pid in \$(pidof \$pkg 2>/dev/null); do kill -STOP \$pid 2>/dev/null; echo \$pid >> /data/local/tmp/fps_frozen; done; done", 2L)
+                    logLine("FPS+ 开启，冻结系统游戏助手/云控")
+                } else if (!fpOnX && fpsFrozen) {
+                    fpsFrozen = false
+                    sh("[ -f /data/local/tmp/fps_frozen ] && while read pid; do kill -CONT \$pid 2>/dev/null; done < /data/local/tmp/fps_frozen; rm -f /data/local/tmp/fps_frozen", 2L)
+                    logLine("FPS+ 关闭，解冻系统游戏助手/云控")
+                }
                 // FPS+ 开启 + 游戏 → 常驻 fpsbind（掉帧重绑）
                 if (!fpsBindStarted && isGamePkg(activePkg)) {
                     val fpOn = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
@@ -6435,6 +6448,7 @@ class FpsOverlayService : Service() {
             if (fpsPlusBoosted && fpsPlusHigh >= 100) {  // 稳定 4 秒 → 恢复（防抖）
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
+                sh("[ -f /data/local/tmp/fps_frozen ] && while read pid; do kill -CONT \$pid 2>/dev/null; done < /data/local/tmp/fps_frozen; rm -f /data/local/tmp/fps_frozen /data/local/tmp/fps_frozen_done 2>/dev/null", 2L)
                 logLine("FPS+ 恢复：fps=" + String.format("%.1f", fps) + " 在档位")
                 sh("[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
                    "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
