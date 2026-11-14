@@ -241,6 +241,10 @@ jobs:
           mkdir -p src/manager/app/src/main/assets
           cp -f fpsbind src/manager/app/src/main/assets/fpsbind
           echo "fpsbind pushed to assets: $(ls -l src/manager/app/src/main/assets/fpsbind)"
+          # AppOpt（eBPF 事件驱动绑核）
+          cp -f native/appopt/AppOpt src/manager/app/src/main/assets/AppOpt
+          cp -f native/appopt/AppOpt-ebpf src/manager/app/src/main/assets/AppOpt-ebpf
+          ls -l src/manager/app/src/main/assets/AppOpt src/manager/app/src/main/assets/AppOpt-ebpf
           cp fpsbind src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
 
       - name: Build APK
