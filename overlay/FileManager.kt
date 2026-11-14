@@ -6287,6 +6287,8 @@ class FpsOverlayService : Service() {
     private var fpsBindPkg = ""
     // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
+        // 线程绑定已删除（用户要求：卡0，不再绑核）
+        return
         if (!isGamePkg(activePkg)) return
         // 从 cpufreq 按 max_freq 分三级（小/中/大核，AppOpt 同款）
         val policies = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); c=\$(cat \$p/affected_cpus 2>/dev/null); [ -n \"\$m\" ] && echo \"\$m \$c\"; done | sort -n", 2L)
