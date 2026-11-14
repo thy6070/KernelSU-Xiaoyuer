@@ -6398,8 +6398,20 @@ class FpsOverlayService : Service() {
             getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
         } catch (t: Throwable) { false }
         if (!on) { fpsPlusLow = 0; return }
-        // 只在游戏时生效
-        if (!isGamePkg(activePkg)) { fpsPlusLow = 0; return }
+        // 只在游戏时生效；退出游戏 → 强制停止 boost（恢复频率+停 AppOpt）
+        if (!isGamePkg(activePkg)) {
+            fpsPlusLow = 0
+            if (fpsPlusBoosted) {
+                fpsPlusBoosted = false
+                fpsPlusHigh = 0
+                bindChannel = "无"
+                logLine("退出游戏，停止 FPS+（恢复频率+停 AppOpt）")
+                sh("pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
+                   "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
+                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
+            }
+            return
+        }
         if (panelHz <= 0.0) return
         // 过滤 63 帧以下：60 帧游戏不参与判断
         if (fps < 64.0) { fpsPlusLow = 0; return }  // 64 以下不触发
