@@ -6448,7 +6448,6 @@ class FpsOverlayService : Service() {
             if (fpsPlusBoosted && fpsPlusHigh >= 100) {  // 稳定 4 秒 → 恢复（防抖）
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
-                sh("[ -f /data/local/tmp/fps_frozen ] && while read pid; do kill -CONT \$pid 2>/dev/null; done < /data/local/tmp/fps_frozen; rm -f /data/local/tmp/fps_frozen /data/local/tmp/fps_frozen_done 2>/dev/null", 2L)
                 logLine("FPS+ 恢复：fps=" + String.format("%.1f", fps) + " 在档位")
                 sh("[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
                    "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
