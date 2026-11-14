@@ -133,7 +133,7 @@ jobs:
           printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<paths><external-files-path name="download" path="."/><cache-path name="cache" path="."/></paths>' > src/manager/app/src/main/res/xml/file_paths.xml
           grep -c "fileprovider" src/manager/app/src/main/AndroidManifest.xml || true
           # 每次构建递增版本号（云更新可识别）
-          sed -i 's|versionName = ".*"|versionName = "1.0.' + "${{ github.run_number }}" + '"|' src/manager/app/build.gradle.kts 2>/dev/null || true
+          perl -pi -e 's/versionName = ".*"/versionName = "1.0.${{ github.run_number }}"/' src/manager/app/build.gradle.kts 2>/dev/null || true
           grep -n "versionName" src/manager/app/build.gradle.kts | head -2 || true
           cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
           cp manager/app/src/main/res/mipmap-xxhdpi/mod_icon.png src/manager/app/src/main/res/mipmap-xxhdpi/mod_icon.png 2>/dev/null || true
