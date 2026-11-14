@@ -6326,6 +6326,7 @@ class FpsOverlayService : Service() {
             return
         }
         // 提取 AppOpt
+        val bin = File(filesDir, "AppOpt")
         val ebpf = File(filesDir, "AppOpt-ebpf")
         try {
             if (!bin.exists() || bin.length() < 100000) assets.open("AppOpt").use { i -> bin.outputStream().use { i.copyTo(it) } }
@@ -6355,8 +6356,6 @@ class FpsOverlayService : Service() {
         bindChannel = "eBPF"; logLine("绑核通道=eBPF(AppOpt) big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
     }
 
-    // "4-7" → "f0"
-    // "4-7" → "f0"
     // "4-7" → "f0"
     private fun cpusToMask(cpus: String): String {
         var mask = 0L
