@@ -85,7 +85,7 @@ static void bind_pid(pid_t pid) {
                           strstr(tcomm, "binder") || strstr(tcomm, "io") ||
                           strstr(tcomm, "IO") || strstr(tcomm, "file") ||
                           strstr(tcomm, "log") || strstr(tcomm, "Worker"));
-            if (is_render) use = g_mask;                          // 渲染 → 大核
+            if (is_render) use = g_mask | g_mid_mask;              // 渲染 → 大核+中核（多核，避免单核卡）
             else if (is_low && g_small_mask) use = g_small_mask;  // 音频/网络/IO → 小核
             else if (g_mid_mask) use = g_mid_mask;                // 其他 → 中核
             else use = g_all_mask & ~g_mask;
