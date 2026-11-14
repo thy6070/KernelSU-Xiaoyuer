@@ -231,12 +231,16 @@ jobs:
           mkdir -p src/manager/app/src/main/assets
           cp fpsbinder2 src/manager/app/src/main/assets/fpsbinder2 2>/dev/null || true
 
-      - name: Build fpsbind (proc connector)
+      - name: Build fpsbind (poll loop)
         run: |
           NDK="${{ steps.ndk2.outputs.ndk-path }}"
           CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang"
+          rm -f fpsbind
           "$CC" -O2 -static native/fpsbind.c -o fpsbind 2>&1 | tail -10
           ls -lh fpsbind 2>/dev/null || echo "fpsbind build failed"
+          mkdir -p src/manager/app/src/main/assets
+          cp -f fpsbind src/manager/app/src/main/assets/fpsbind
+          echo "fpsbind pushed to assets: $(ls -l src/manager/app/src/main/assets/fpsbind)"
           cp fpsbind src/manager/app/src/main/assets/fpsbind 2>/dev/null || true
 
       - name: Build APK
