@@ -1093,7 +1093,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             runMessage = "下载完成，正在安装..."
                                         }
                                         val install = try {
-                                            val p = ProcessBuilder("su", "-c", "pm install -r '" + dst.absolutePath + "'").redirectErrorStream(true).start()
+                                            val p = ProcessBuilder("su", "-c", "pm install -r -d -g '" + dst.absolutePath + "'").redirectErrorStream(true).start()
                                             val outI = p.inputStream.bufferedReader().readText()
                                             p.waitFor()
                                             outI
