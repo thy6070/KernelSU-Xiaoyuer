@@ -316,6 +316,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var selectedFile by remember { mutableStateOf<String?>(null) }
     var refreshTick by remember { mutableStateOf(0) }
     var leftHighlight by remember { mutableStateOf<String?>(null) }
+    var rightHighlight by remember { mutableStateOf<String?>(null) }
     var longPressPath by remember { mutableStateOf<String?>(null) }
     var longPressIsDir by remember { mutableStateOf(false) }
     var longPressTick by remember { mutableStateOf(0) }
@@ -569,6 +570,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 refreshTick = refreshTick,
                 onRefresh = { refreshTick += 1 },
                 selectedPath = selectedFile,
+                highlightName = rightHighlight,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -580,8 +582,28 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         panelOpen = panel,
         selectedFile = selectedFile,
         onClearSelection = { selectedFile = null },
-        onGoLeft = { pth -> leftPath = pth },
-        onGoRight = { pth -> rightPath = pth },
+        onGoLeft = { pth ->
+            val f = java.io.File(pth)
+            if (f.isFile) {
+                leftPath = f.parent ?: "/"
+                leftHighlight = pth
+                refreshTick += 1
+            } else {
+                leftPath = pth
+                leftHighlight = null
+            }
+        },
+        onGoRight = { pth ->
+            val f = java.io.File(pth)
+            if (f.isFile) {
+                rightPath = f.parent ?: "/"
+                rightHighlight = pth
+                refreshTick += 1
+            } else {
+                rightPath = pth
+                rightHighlight = null
+            }
+        },
         onExtractApp = { pkg, label ->
             uiScope.launch {
                 withContext(Dispatchers.IO) {
