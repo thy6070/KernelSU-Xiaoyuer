@@ -6145,14 +6145,10 @@ class FpsOverlayService : Service() {
                 val wnow = System.currentTimeMillis()
                 if (wnow - lastPkgRefresh > 2000L) {
                     lastPkgRefresh = wnow
-                    val wout = sh("dumpsys window displays 2>/dev/null | grep -m1 mCurrentFocus", 2L)
-                    val wm = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(wout)
-                    if (wm != null) {
-                        val newPkg = wm.groupValues[1]
-                        if (newPkg != activePkg) {
-                            activePkg = newPkg
-                            layerName = null   // 切游戏 → 重扫层
-                        }
+                    val newPkg = currentForegroundPkg()
+                    if (newPkg.isNotEmpty() && newPkg != activePkg) {
+                        activePkg = newPkg
+                        layerName = null   // 切游戏 → 重扫层
                     }
                 }
             } catch (t: Throwable) {}
@@ -6384,7 +6380,7 @@ class FpsOverlayService : Service() {
             "# 其他 -> 中核\n" +
             activePkg + "{*}" + "=" + mid + "\n")
         // 启动 AppOpt（eBPF 事件驱动，常驻）
-        sh("pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 2 </dev/null >> " + filesDir.absolutePath + "/appopt.log 2>&1 &", 3L)
+        sh("pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/appopt.log 2>&1 &", 3L)
         bindChannel = "eBPF"; logLine("绑核通道=eBPF(AppOpt) big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
     }
 
