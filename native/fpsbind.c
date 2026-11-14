@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 // fpsbind: 通过 netlink proc connector 监听进程/线程创建，
 // 对匹配规则的进程立即设置 CPU 亲和性（毫秒级，替代 shell 轮询）
 // 编译：aarch64-linux-android-clang -O2 -static fpsbind.c -o fpsbind
