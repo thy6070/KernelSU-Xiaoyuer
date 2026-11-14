@@ -1013,6 +1013,108 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
         }
 
+    // ===== 云更新 =====
+    var updateVer by remember { mutableStateOf<String?>(null) }
+    var updateUrl by remember { mutableStateOf("") }
+    var updateProgress by remember { mutableStateOf(-1) }
+    val updCtx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val conn = (java.net.URL("https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases/latest").openConnection() as java.net.HttpURLConnection)
+                conn.setRequestProperty("Accept", "application/vnd.github+json")
+                conn.setRequestProperty("User-Agent", "dsh")
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                val body = conn.inputStream.bufferedReader().readText()
+                val tag = Regex("\"tag_name\":\"([^\"]+)\"").find(body)?.groupValues?.get(1) ?: ""
+                val url = Regex("\"browser_download_url\":\"([^\"]+\.apk)\"").find(body)?.groupValues?.get(1) ?: ""
+                if (tag.isNotEmpty() && url.isNotEmpty()) {
+                    updateVer = tag
+                    updateUrl = url
+                }
+            } catch (t: Throwable) {}
+        }
+    }
+    if (updateVer != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { if (updateProgress < 0) updateVer = null }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF2C2C2E))
+                    .padding(20.dp)
+            ) {
+                Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, color = Color.White, textAlign = TextAlign.Center)
+                Text(updateVer!!, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 13.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
+                if (updateProgress >= 0) {
+                    Spacer(Modifier.height(14.dp))
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { (updateProgress / 100f).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(updateProgress.toString() + "%", modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 12.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) {
+                        IslandActionButton("稍后", Color(0xFF3A3A3C)) { if (updateProgress < 0) updateVer = null }
+                    }
+                    Box(Modifier.weight(1f)) {
+                        IslandActionButton("立即更新", Color(0xFF0A84FF)) {
+                            if (updateProgress < 0) {
+                                updateProgress = 0
+                                uiScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        val conn = (java.net.URL(updateUrl).openConnection() as java.net.HttpURLConnection)
+                                        conn.setRequestProperty("User-Agent", "dsh")
+                                        conn.connectTimeout = 10000
+                                        conn.readTimeout = 30000
+                                        val total = conn.contentLengthLong
+                                        val dst = java.io.File(updCtx.getExternalFilesDir(null) ?: updCtx.cacheDir, "update.apk")
+                                        var done = 0L
+                                        conn.inputStream.use { ins ->
+                                            dst.outputStream().use { out ->
+                                                val buf = ByteArray(16384)
+                                                var n = ins.read(buf)
+                                                while (n > 0) {
+                                                    out.write(buf, 0, n)
+                                                    done += n
+                                                    if (total > 0) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                        updateProgress = ((done * 100) / total).toInt()
+                                                    }
+                                                    n = ins.read(buf)
+                                                }
+                                            }
+                                        }
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            updateProgress = -1
+                                            updateVer = null
+                                            try {
+                                                val i = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                                                val uri = androidx.core.content.FileProvider.getUriForFile(updCtx, "com.tencent.THY.fileprovider", dst)
+                                                i.setDataAndType(uri, "application/vnd.android.package-archive")
+                                                i.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                updCtx.startActivity(i)
+                                            } catch (t: Throwable) {
+                                                runMessage = "已下载到: " + dst.absolutePath
+                                            }
+                                        }
+                                    } catch (t: Throwable) {
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            updateProgress = -1
+                                            runMessage = "下载失败: " + t
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // iOS 风格选择框
     val pickList = uiPicker
     val pickTitle = uiPickerTitle
@@ -5902,7 +6004,7 @@ class FpsOverlayService : Service() {
                 val bg = android.graphics.drawable.GradientDrawable()
                 bg.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 bg.cornerRadius = 999f
-                bg.setColor(android.graphics.Color.parseColor("#66FFFFFF"))  // 半透明白（毛玻璃感）
+                bg.setColor(android.graphics.Color.parseColor("#66808080"))  // 半透明灰
                 background = bg
             }
             val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
