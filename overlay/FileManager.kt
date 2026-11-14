@@ -5880,7 +5880,7 @@ class FpsOverlayService : Service() {
                 val bg = android.graphics.drawable.GradientDrawable()
                 bg.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 bg.cornerRadius = 999f
-                bg.setColor(android.graphics.Color.parseColor("#66000000"))
+                bg.setColor(android.graphics.Color.parseColor("#66FFFFFF"))  // 半透明白（毛玻璃感）
                 background = bg
             }
             val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -6286,7 +6286,7 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {
             logLine("tick 异常: " + t)
         }
-        try { executor?.schedule({ tick() }, 40L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, 26L, TimeUnit.MILLISECONDS)  // 26ms×3≈80ms 掉帧检测 } catch (t: Throwable) {}
     }
 
     // ===== 日志：帧率 + FPS+ 全链路 =====
