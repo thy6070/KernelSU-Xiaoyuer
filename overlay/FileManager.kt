@@ -5871,7 +5871,7 @@ class FpsOverlayService : Service() {
         try {
             val tv = TextView(this).apply {
                 text = "--"
-                setTextColor(android.graphics.Color.WHITE)
+                setTextColor(0xFFFFD700.toInt())  // 金色
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                 setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
                 gravity = Gravity.CENTER
@@ -6515,7 +6515,7 @@ class FpsOverlayService : Service() {
         val alpha = if (delta > 0.03) 0.95 else 0.65
         emaFps = if (emaFps <= 0.0) fps else emaFps * (1 - alpha) + fps * alpha
         val v = Math.round(emaFps).toInt().coerceIn(0, 240)
-        val color = if (fpsPlusBoosted) 0xFFFF4444.toInt() else 0xFFFFFFFF.toInt()
+        val color = if (fpsPlusBoosted) 0xFFFF4444.toInt() else 0xFFFFD700.toInt()  // 金色
         if (v == lastShown && color == lastColor) return
         lastShown = v
         lastColor = color
