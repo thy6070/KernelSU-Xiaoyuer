@@ -6310,7 +6310,7 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {
             logLine("tick 异常: " + t)
         }
-        try { executor?.schedule({ tick() }, 26L, TimeUnit.MILLISECONDS)  // 26ms×3≈80ms 掉帧检测 } catch (t: Throwable) {}
+        try { executor?.schedule({ tick() }, 26L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}  // 26ms×3≈80ms 掉帧检测
     }
 
     // ===== 日志：帧率 + FPS+ 全链路 =====
