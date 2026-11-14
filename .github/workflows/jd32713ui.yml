@@ -123,6 +123,18 @@ jobs:
         run: |
           cp manager/app/build.gradle.kts src/manager/app/build.gradle.kts
           cp manager/app/src/main/AndroidManifest.xml src/manager/app/src/main/AndroidManifest.xml
+          # 加 PACKAGE_USAGE_STATS（前台检测免 su）
+          sed -i 's|</manifest>|<uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
+          grep -c "PACKAGE_USAGE_STATS" src/manager/app/src/main/AndroidManifest.xml || true
+          # 云更新：安装权限 + FileProvider
+          sed -i 's|</application>|<provider android:name="androidx.core.content.FileProvider" android:authorities="com.tencent.THY.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/></provider></application>|' src/manager/app/src/main/AndroidManifest.xml
+          sed -i 's|</manifest>|<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml
+          mkdir -p src/manager/app/src/main/res/xml
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<paths><external-files-path name="download" path="."/><cache-path name="cache" path="."/></paths>' > src/manager/app/src/main/res/xml/file_paths.xml
+          grep -c "fileprovider" src/manager/app/src/main/AndroidManifest.xml || true
+          # 每次构建递增版本号（云更新可识别）
+          sed -i 's|versionName = ".*"|versionName = "1.0.' + "${{ github.run_number }}" + '"|' src/manager/app/build.gradle.kts 2>/dev/null || true
+          grep -n "versionName" src/manager/app/build.gradle.kts | head -2 || true
           cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
           cp manager/app/src/main/res/mipmap-xxhdpi/mod_icon.png src/manager/app/src/main/res/mipmap-xxhdpi/mod_icon.png 2>/dev/null || true
           cp manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg src/manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg
