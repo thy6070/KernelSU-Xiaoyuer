@@ -5811,6 +5811,7 @@ class FpsOverlayService : Service() {
     private var failCount = 0
     private var zeroCount = 0
     private var fpsBindStarted = false
+    private var bindChannel = "无"
     private var lastProbe = 0L
     private var idleCount = 0
     private var lastShown: Int = -1
@@ -6247,7 +6248,7 @@ class FpsOverlayService : Service() {
                 val nowT = System.currentTimeMillis()
                 if (nowT - lastStatLog > 5000L) {
                     lastStatLog = nowT
-                    logLine("fps=${String.format("%.1f", fpsRaw)} 层=${layerName ?: "-"} 面板=${String.format("%.0f", panelHz)}Hz fpsPlus=${fpsPlusBoosted}")
+                    logLine("fps=${String.format("%.1f", fpsRaw)} 层=${layerName ?: "-"} 面板=${String.format("%.0f", panelHz)}Hz fpsPlus=${fpsPlusBoosted} 绑核通道=${bindChannel}")
                 }
             }
         } catch (t: Throwable) {
@@ -6260,7 +6261,7 @@ class FpsOverlayService : Service() {
     private var lastStatLog = 0L
     private fun logLine(msg: String) {
         try {
-            val f = File(filesDir, "fps_display.log")
+            val f = File(filesDir, "帧率日志.txt")
             if (f.length() > 512 * 1024) f.writeText("")
             f.appendText(
                 java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
@@ -6320,7 +6321,7 @@ class FpsOverlayService : Service() {
             if (fb.exists() && fb.length() > 10000) {
                 fb.setExecutable(true)
                 sh("pkill -x fpsbind 2>/dev/null; chmod 755 " + fb.absolutePath + "; setsid " + fb.absolutePath + " " + big + " " + small + " " + mid + " " + activePkg + " >> " + filesDir.absolutePath + "/fpsbind.log 2>&1 &", 2L)
-                logLine("fpsbind(netlink) 启动: big=" + big + " mid=" + mid + " small=" + small)
+                bindChannel = "netlink"; logLine("绑核通道=netlink(fpsbind) big=" + big + " mid=" + mid + " small=" + small)
             }
             return
         }
@@ -6351,7 +6352,7 @@ class FpsOverlayService : Service() {
             activePkg + "{*}" + "=" + mid + "\n")
         // 启动 AppOpt（eBPF 事件驱动，常驻）
         sh("pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 2 </dev/null >> " + filesDir.absolutePath + "/appopt.log 2>&1 &", 3L)
-        logLine("AppOpt 启动(eBPF): big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
+        bindChannel = "eBPF"; logLine("绑核通道=eBPF(AppOpt) big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
     }
 
     // "4-7" → "f0"
