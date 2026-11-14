@@ -1021,7 +1021,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     LaunchedEffect(Unit) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val conn = (java.net.URL("https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases/latest").openConnection() as java.net.HttpURLConnection)
+                val conn = (java.net.URL("https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases/tags/jd-32713-ui").openConnection() as java.net.HttpURLConnection)
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
                 conn.setRequestProperty("User-Agent", "dsh")
                 conn.connectTimeout = 8000
