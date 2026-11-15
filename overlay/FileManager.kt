@@ -1085,7 +1085,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 val body = conn.inputStream.bufferedReader().readText()
                 val tag = body.substringAfter("\"tag_name\":\"").substringBefore("\"")
                 // 只取 .apk 的 asset（fpsbinder2 等不是 APK）
-                val url = Regex("\"browser_download_url\":\"([^\"]+\.apk)\"").find(body)?.groupValues?.get(1) ?: ""
+                val url = Regex("\"browser_download_url\":\"([^\"]+\\.apk)\"").find(body)?.groupValues?.get(1) ?: ""
                 val localVer = try { com.tencent.THY.BuildConfig.VERSION_NAME } catch (t: Throwable) { "" }
                 if (tag.isNotEmpty() && url.isNotEmpty() && tag != localVer) {
                     updateVer = tag
