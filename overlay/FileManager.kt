@@ -2303,9 +2303,10 @@ private fun ProMaxIsland(
                                                         // 未安装 → 先安装（内置 zip）；已装 → 删 disable + 启动服务
                                                         val installed = java.io.File("/data/adb/modules/oh_my_keymint/module.prop").exists()
                                                         if (!installed) installOhMyKeymint(navCtx)
-                                                        // 只删 disable + 后台启动 service.sh（service.sh 内部会跑 post-fs-data）
+                                                        // KSU 原版命令：ksud module enable + 启动 service
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "M=/data/adb/modules/oh_my_keymint; rm -f \$M/disable 2>/dev/null; " +
+                                                            "ksud module enable oh_my_keymint 2>/dev/null; " +
+                                                            "M=/data/adb/modules/oh_my_keymint; " +
                                                             "setsid sh \$M/service.sh >/dev/null 2>&1 &").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
@@ -2319,7 +2320,7 @@ private fun ProMaxIsland(
                                                 Thread {
                                                     try {
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "mkdir -p /data/adb/modules/oh_my_keymint; touch /data/adb/modules/oh_my_keymint/disable 2>/dev/null; " +
+                                                            "ksud module disable oh_my_keymint 2>/dev/null; " +
                                                             "pkill -9 -f 'keymint-daemon' 2>/dev/null; pkill -9 -f 'injector-daemon' 2>/dev/null; " +
                                                             "pkill -9 -f '/data/adb/modules/oh_my_keymint/daemon' 2>/dev/null").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
