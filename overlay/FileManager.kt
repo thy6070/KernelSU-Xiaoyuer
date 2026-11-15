@@ -1454,8 +1454,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             return@ModePanel
                         }
                         uiScope.launch {
-                            // 等面板关闭动画（280ms）结束再开终端，避免动画抢占
-                            kotlinx.coroutines.delay(320)
                             running = true
                             termText = ""
                             runMessage = null
