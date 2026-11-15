@@ -3741,7 +3741,15 @@ private fun ModeButton(
                     o.trim()
                 }.getOrDefault("other")
             }
-            on = false
+            val off = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                        "if [ -f /data/local/tmp/xy_thermal_off ] || [ -d /data/local/tmp/thermal_bak ]; then echo 1; else echo 0; fi"))
+                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
+                    o == "1"
+                }.getOrDefault(false)
+            }
+            on = off
             onInitDone = true
             return@LaunchedEffect
         }
@@ -3862,7 +3870,7 @@ private fun ModeButton(
                                    "batt-therm|usb-therm) echo \$bat_t > \"\$tz/emul_temp\" 2>/dev/null ;; esac; done; " +
                                    "stop horae 2>/dev/null; " +
                                    "for i in \$(seq 0 9); do echo \$i \$t > /proc/shell-temp 2>/dev/null; done; " +
-                                   "gu=/proc/oplus-votable/GAUGE_UPDATE; if [ -d \"\$gu\" ]; then chmod 666 \"\$gu/force_val\" 2>/dev/null; echo 2000 > \"\$gu/force_val\" 2>/dev/null; chmod 666 \"\$gu/force_active\" 2>/dev/null; echo 1 > \"\$gu/force_active\" 2>/dev/null; fi")
+                                   "gu=/proc/oplus-votable/GAUGE_UPDATE; if [ -d \"\$gu\" ]; then chmod 666 \"\$gu/force_val\" 2>/dev/null; echo 2000 > \"\$gu/force_val\" 2>/dev/null; chmod 666 \"\$gu/force_active\" 2>/dev/null; echo 1 > \"\$gu/force_active\" 2>/dev/null; fi; touch /data/local/tmp/xy_thermal_off")
                                 "已禁用温控（绿厂）"
                             } else if (sys == "mi") {
                                 // 小米：备份原配置 → 覆盖为无限制配置
@@ -3875,7 +3883,7 @@ private fun ModeButton(
                                     su("if [ -d /data/vendor/thermal ] && [ ! -d /data/local/tmp/thermal_bak ]; then " +
                                        "cp -rf /data/vendor/thermal /data/local/tmp/thermal_bak 2>/dev/null; fi; " +
                                        "mkdir -p /data/vendor/thermal; cp -f " + dir.absolutePath + "/*.conf /data/vendor/thermal/ 2>/dev/null; " +
-                                       "chmod 644 /data/vendor/thermal/*.conf 2>/dev/null")
+                                       "chmod 644 /data/vendor/thermal/*.conf 2>/dev/null; touch /data/local/tmp/xy_thermal_off")
                                 } catch (t: Throwable) {}
                                 "已禁用温控（小米）"
                             } else {
@@ -3884,7 +3892,7 @@ private fun ModeButton(
                         } else {
                             // 恢复：绿厂 emul_temp 清空 + horae 重启；小米恢复备份
                             su("for tz in /sys/class/thermal/*; do [ -f \"\$tz/emul_temp\" ] && echo 0 > \"\$tz/emul_temp\" 2>/dev/null; done; start horae 2>/dev/null; " +
-                               "if [ -d /data/local/tmp/thermal_bak ]; then cp -rf /data/local/tmp/thermal_bak/. /data/vendor/thermal/ 2>/dev/null; rm -rf /data/local/tmp/thermal_bak; fi")
+                               "if [ -d /data/local/tmp/thermal_bak ]; then cp -rf /data/local/tmp/thermal_bak/. /data/vendor/thermal/ 2>/dev/null; rm -rf /data/local/tmp/thermal_bak; fi; rm -f /data/local/tmp/xy_thermal_off")
                             "已恢复温控"
                         }
                     } catch (t: Throwable) { "失败: " + (t.message ?: "") }
@@ -6688,8 +6696,35 @@ class FpsOverlayService : Service() {
         return System.nanoTime() - maxT
     }
 
+    // FPS+ 冻结：与帧率数据无关，按钮一开就执行（原先写在 fpsRaw!=null 分支里，daemon 没数据时永远不生效）
+    // 深度冻结：pm hide + disable-user + force-stop + stop-app + kill -STOP（含 :ui/:cache 子进程）
+    private fun applyFpsFreeze() {
+        val fpOn = try {
+            getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
+        } catch (t: Throwable) {
+            false
+        }
+        if (fpOn && !fpsFrozen) {
+            fpsFrozen = true
+            sh("PKGS=\"com.oplus.games com.heytap.gamespace com.nearme.gamecenter com.xiaomi.joyose com.miui.securitycenter\"; " +
+               "for pkg in \$PKGS; do " +
+               "pm hide --user 0 \$pkg >/dev/null 2>&1; pm disable-user --user 0 \$pkg >/dev/null 2>&1; " +
+               "am force-stop \$pkg >/dev/null 2>&1; cmd activity stop-app \$pkg >/dev/null 2>&1; " +
+               "for pid in \$(pidof \$pkg 2>/dev/null) \$(ps -A -o PID,ARGS 2>/dev/null | grep \"[c]\${pkg}\" | awk '{print \$1}'); do " +
+               "kill -STOP \$pid 2>/dev/null; echo \$pid >> /data/local/tmp/fps_frozen; done; done", 20L)
+            logLine("FPS+ 开启，已深度冻结系统游戏助手/云控")
+        } else if (!fpOn && fpsFrozen) {
+            fpsFrozen = false
+            sh("PKGS=\"com.oplus.games com.heytap.gamespace com.nearme.gamecenter com.xiaomi.joyose com.miui.securitycenter\"; " +
+               "for pkg in \$PKGS; do pm enable --user 0 \$pkg >/dev/null 2>&1; pm unhide --user 0 \$pkg >/dev/null 2>&1; am force-stop \$pkg >/dev/null 2>&1; done; " +
+               "[ -f /data/local/tmp/fps_frozen ] && while read pid; do kill -CONT \$pid 2>/dev/null; done < /data/local/tmp/fps_frozen; rm -f /data/local/tmp/fps_frozen", 20L)
+            logLine("FPS+ 关闭，已解冻系统游戏助手/云控")
+        }
+    }
+
     private fun tick() {
         try {
+            applyFpsFreeze()
             if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 3000L) {
                 lastLayerRefresh = System.currentTimeMillis()
                 refreshLayer()
@@ -6808,18 +6843,6 @@ class FpsOverlayService : Service() {
                     zeroCount = 0
                 }
                 showFps(fpsRaw, reading = true)
-                // FPS+ 开启 → 冻结系统游戏助手/云控（Scene 同款，可恢复）
-                val fpOnX = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
-                if (fpOnX && !fpsFrozen) {
-                    fpsFrozen = true
-                    sh("for pkg in com.oplus.games com.heytap.gamespace com.nearme.gamecenter com.xiaomi.joyose com.miui.securitycenter; do " +
-                       "for pid in \$(pidof \$pkg 2>/dev/null); do kill -STOP \$pid 2>/dev/null; echo \$pid >> /data/local/tmp/fps_frozen; done; done", 2L)
-                    logLine("FPS+ 开启，冻结系统游戏助手/云控")
-                } else if (!fpOnX && fpsFrozen) {
-                    fpsFrozen = false
-                    sh("[ -f /data/local/tmp/fps_frozen ] && while read pid; do kill -CONT \$pid 2>/dev/null; done < /data/local/tmp/fps_frozen; rm -f /data/local/tmp/fps_frozen", 2L)
-                    logLine("FPS+ 关闭，解冻系统游戏助手/云控")
-                }
                 // FPS+ 开启 + 游戏 → 常驻 fpsbind（掉帧重绑）
                 if (!fpsBindStarted && isGamePkg(activePkg)) {
                     val fpOn = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
