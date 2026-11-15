@@ -336,9 +336,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     LaunchedEffect(FileLocate.tick) {
         val target = FileLocate.path ?: return@LaunchedEffect
         val dir = target.substringBeforeLast('/', "/")
-        if (leftPath == dir) refreshTick += 1 else leftPath = dir
-        // 存完整路径（不是文件名），避免同名文件跳错
-        leftHighlight = target
+        if (FileLocate.side == "R") {
+            if (rightPath == dir) refreshTick += 1 else rightPath = dir
+            rightHighlight = target
+            longPressFromRight = true
+        } else {
+            if (leftPath == dir) refreshTick += 1 else leftPath = dir
+            leftHighlight = target
+            longPressFromRight = false
+        }
     }
 
     var runMessage by remember { mutableStateOf<String?>(null) }
@@ -497,6 +503,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 path = leftPath,
                 dirScroll = dirScroll,
                 onNavigate = { np ->
+                    longPressFromRight = false
                     // 切目录：清残留选中（防解压旧包/操作错文件）
                     selectedFile = null
                     longPressPath = null
@@ -545,6 +552,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 multiSel = leftMultiSel,
                 onMultiSelect = { p6 -> leftMultiSel = leftMultiSel + p6 },
                 onMultiDeselect = { p6 -> leftMultiSel = leftMultiSel - p6 },
+                onActivate = { longPressFromRight = false },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -554,6 +562,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 path = rightPath,
                 dirScroll = dirScroll,
                 onNavigate = { np2 ->
+                    longPressFromRight = true
                     selectedFile = null
                     longPressPath = null
                     rightHighlight = null
@@ -596,6 +605,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 multiSel = rightMultiSel,
                 onMultiSelect = { p6 -> rightMultiSel = rightMultiSel + p6 },
                 onMultiDeselect = { p6 -> rightMultiSel = rightMultiSel - p6 },
+                onActivate = { longPressFromRight = true },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -1145,6 +1155,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
+                                        FileLocate.side = if (longPressFromRight) "R" else "L"
                                         FileLocate.path = r
                                         FileLocate.tick += 1
                                         showSearch = false
@@ -4615,6 +4626,7 @@ private fun BrowserPane(
     multiSel: Set<String> = emptySet(),
     onMultiSelect: (String) -> Unit = {},
     onMultiDeselect: (String) -> Unit = {},
+    onActivate: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
@@ -4644,6 +4656,11 @@ private fun BrowserPane(
 
     val parent = parentOf(path)
     val listState = rememberLazyListState()
+    // 滑动（滚动）该区域 → 激活该区域
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { onActivate() }
+    }
     // 记住每个目录的滚动位置，返回上级时恢复而不是跳到顶部（根层共享）
     val scrollPositions = dirScroll
     var restoredPath by remember { mutableStateOf<String?>(null) }
