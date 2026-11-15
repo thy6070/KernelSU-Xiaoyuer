@@ -3528,7 +3528,7 @@ private fun ModeButton(
                 runCatching {
                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                         "b=$(getprop ro.product.brand 2>/dev/null); m=$(getprop ro.product.manufacturer 2>/dev/null); " +
-                        "case \"$b$m\" in *Xiaomi*|*xiaomi*|*Redmi*|*redmi*|*POCO*|*poco*) echo mi ;; " +
+                        "case \"\$b\$m\" in *Xiaomi*|*xiaomi*|*Redmi*|*redmi*|*POCO*|*poco*) echo mi ;; " +
                         "*OnePlus*|*oneplus*|*OPPO*|*oppo*|*realme*|*oplus*|*Oplus*) echo oplus ;; " +
                         "*) echo other ;; esac"))
                     val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
@@ -3644,7 +3644,7 @@ private fun ModeButton(
                         }
                         // 系统识别
                         val sys = su("b=$(getprop ro.product.brand 2>/dev/null); m=$(getprop ro.product.manufacturer 2>/dev/null); " +
-                            "case \"$b$m\" in *Xiaomi*|*xiaomi*|*Redmi*|*redmi*|*POCO*|*poco*) echo mi ;; " +
+                            "case \"\$b\$m\" in *Xiaomi*|*xiaomi*|*Redmi*|*redmi*|*POCO*|*poco*) echo mi ;; " +
                             "*OnePlus*|*oneplus*|*OPPO*|*oppo*|*realme*|*oplus*|*Oplus*) echo oplus ;; *) echo other ;; esac").trim()
                         if (enabling) {
                             if (sys == "oplus") {
@@ -6730,21 +6730,26 @@ class FpsOverlayService : Service() {
 
     // 自适应调频（闭环）：帧率稳定降频省电，掉帧升频保帧
     private var lastAdaptMs = 0L
+    private var lastAdaptLog = 0L
     private var adaptIdx = 100  // 0-100 频率比例
     private fun adaptiveFreq(fps: Double) {
         val now = System.currentTimeMillis()
         if (now - lastAdaptMs < 400L) return  // 2.5Hz 更新
         lastAdaptMs = now
-        val target = panelHz.coerceAtLeast(60.0)
+        // 锁帧检测：游戏锁 60/90/120 时，目标=该档（否则按面板）
+        val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
+        val lockedTier = stdTiers.firstOrNull { kotlin.math.abs(it - fps) <= 2.0 }
+        val target = if (lockedTier != null && lockedTier < panelHz - 5) lockedTier else panelHz.coerceAtLeast(60.0)
         val ratio = (fps / target).coerceIn(0.3, 1.0)
         // 闭环：帧率偏高 → 降档；偏低 → 升档（每次一步，防抖）
         val step = if (ratio >= 0.92) -4 else if (ratio < 0.75) 8 else 0
         val oldIdx = adaptIdx
         adaptIdx = (adaptIdx + step).coerceIn(30, 100)
         val pct = adaptIdx
-        if (step != 0) {
+        if (step != 0 && now - lastAdaptLog >= 1000L) {
+            lastAdaptLog = now
             logLine("自适应调频: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
-                " 比例=" + String.format("%.2f", ratio) + " 档位=" + adaptIdx + "%" + (if (oldIdx != adaptIdx) "" else "(边界)"))
+                " 比例=" + String.format("%.2f", ratio) + " 档位=" + adaptIdx + "%")
         }
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
            "mn=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); mx=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); " +
