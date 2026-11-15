@@ -2152,6 +2152,8 @@ private fun ProMaxIsland(
                                     } catch (t: Throwable) { false }
                                 )
                             }
+                            // OhMyKeymint 模块开关（默认关）
+                            var omkOn by remember { mutableStateOf(false) }
                             // 进界面时校验：Service 没在跑就同步关闭状态
                             LaunchedEffect(Unit) {
                                 try {
