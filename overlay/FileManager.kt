@@ -5177,6 +5177,33 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
     }
 }
 
+// 防设备标记（复刻 Fish 工具箱：备份权限 + 清 ano_tmp + 重置设备 ID + 权限 000）
+internal fun doAntiDetect(ctx: android.content.Context) {
+    Thread {
+        try {
+            val cmd = "D=/data/adb/防设备标记; mkdir -p \$D; " +
+                "if [ ! -f \$D/permissions_backup.txt ]; then echo '# Permissions backup' > \$D/permissions_backup.txt; " +
+                "find /mnt/vendor/persist/data -exec stat -c '%a %U:%G %n' {} \\; >> \$D/permissions_backup.txt 2>/dev/null; fi; " +
+                "for u in 0 10 11 999; do rm -rf /data/user/\$u/com.tencent.tmgp.*/files/ano_tmp 2>/dev/null; done; " +
+                "resetprop ro.serialno \$(tr -dc '1-9' < /dev/urandom | head -c 8); " +
+                "settings put secure android_id \$(tr -cd 'abcdef0123456789' < /dev/urandom | head -c 16); " +
+                "for i in \$(getprop | grep imei | awk -F '[][]' '{print \$2}'); do imei=\$(getprop \$i); " +
+                "[ \${#imei} -lt 15 ] && continue; resetprop \$i 86916\$(tr -dc '1-9' < /dev/urandom | head -c 10); done; " +
+                "chmod -R 000 /mnt/vendor/persist/data 2>/dev/null; echo ANTI_OK"
+            val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
+            val out = pr.inputStream.bufferedReader().readText()
+            pr.waitFor()
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(ctx, if (out.contains("ANTI_OK")) "防设备标记已执行（重启生效）" else "执行失败", android.widget.Toast.LENGTH_LONG).show()
+            }
+        } catch (t: Throwable) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(ctx, "执行失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }.start()
+}
+
 // 恢复原机型/指纹
 internal fun restoreDeviceModel(ctx: android.content.Context) {
     try {
@@ -5312,6 +5339,9 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("settings put secure oaid '").append(hex(24)).append("' 2>/dev/null; ")
                 // DRM ID（Widevine device id）——删掉让系统重建（drmidswap 同款）
                 sb.append("rm -f /data/vendor/mediadrm/*.id /data/vendor/mediadrm/*.key 2>/dev/null; ")
+                // 防设备标记：清 ano_tmp（游戏设备标记缓存）+ 锁定 persist 权限（000）
+                sb.append("for u in 0 10 11 999; do rm -rf /data/user/\$u/").append(pkg).append("/files/ano_tmp 2>/dev/null; done; ")
+                sb.append("chmod -R 000 /mnt/vendor/persist/data 2>/dev/null; ")
                 // MAC / 蓝牙 / GSF 等更多标识（全随机）
                 sb.append("settings put global wifi_mac ").append(hex(12)).append(" 2>/dev/null; ")
                 sb.append("settings put global ble_mac ").append(hex(12)).append(" 2>/dev/null; ")
