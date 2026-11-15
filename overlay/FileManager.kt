@@ -3760,22 +3760,26 @@ private fun ModeButton(
                                    "gu=/proc/oplus-votable/GAUGE_UPDATE; if [ -d \"\$gu\" ]; then chmod 666 \"\$gu/force_val\" 2>/dev/null; echo 2000 > \"\$gu/force_val\" 2>/dev/null; chmod 666 \"\$gu/force_active\" 2>/dev/null; echo 1 > \"\$gu/force_active\" 2>/dev/null; fi")
                                 "已禁用温控（绿厂）"
                             } else if (sys == "mi") {
-                                // 小米：释放 assets 温控配置 → /data/vendor/thermal/
+                                // 小米：备份原配置 → 覆盖为无限制配置
                                 try {
                                     val dir = java.io.File(ctx3.filesDir, "mi_thermal")
                                     dir.mkdirs()
                                     ctx3.assets.list("mi_thermal")?.forEach { n ->
                                         try { ctx3.assets.open("mi_thermal/" + n).use { i -> java.io.File(dir, n).outputStream().use { o -> i.copyTo(o) } } } catch (t: Throwable) {}
                                     }
-                                    su("mkdir -p /data/vendor/thermal; cp -f " + dir.absolutePath + "/*.conf /data/vendor/thermal/ 2>/dev/null; chmod 644 /data/vendor/thermal/*.conf 2>/dev/null")
+                                    su("if [ -d /data/vendor/thermal ] && [ ! -d /data/local/tmp/thermal_bak ]; then " +
+                                       "cp -rf /data/vendor/thermal /data/local/tmp/thermal_bak 2>/dev/null; fi; " +
+                                       "mkdir -p /data/vendor/thermal; cp -f " + dir.absolutePath + "/*.conf /data/vendor/thermal/ 2>/dev/null; " +
+                                       "chmod 644 /data/vendor/thermal/*.conf 2>/dev/null")
                                 } catch (t: Throwable) {}
                                 "已禁用温控（小米）"
                             } else {
                                 "未识别系统"
                             }
                         } else {
-                            // 恢复：emul_temp 清空 + horae 重启
-                            su("for tz in /sys/class/thermal/*; do [ -f \"\$tz/emul_temp\" ] && echo 0 > \"\$tz/emul_temp\" 2>/dev/null; done; start horae 2>/dev/null")
+                            // 恢复：绿厂 emul_temp 清空 + horae 重启；小米恢复备份
+                            su("for tz in /sys/class/thermal/*; do [ -f \"\$tz/emul_temp\" ] && echo 0 > \"\$tz/emul_temp\" 2>/dev/null; done; start horae 2>/dev/null; " +
+                               "if [ -d /data/local/tmp/thermal_bak ]; then cp -rf /data/local/tmp/thermal_bak/. /data/vendor/thermal/ 2>/dev/null; rm -rf /data/local/tmp/thermal_bak; fi")
                             "已恢复温控"
                         }
                     } catch (t: Throwable) { "失败: " + (t.message ?: "") }
