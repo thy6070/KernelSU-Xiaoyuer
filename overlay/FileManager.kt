@@ -4627,13 +4627,6 @@ private fun FsRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                .pointerInput(fullPath) {
-                    // 长按后拖动：向右 → 选中，向左 → 取消（长按向右多选）
-                    detectDragGesturesAfterLongPress { _, dragAmount ->
-                        if (dragAmount.x > 30f) onSwipeSelect()
-                        else if (dragAmount.x < -30f) onSwipeDeselect()
-                    }
-                }
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
@@ -5045,9 +5038,13 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
         val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
         val out = pr.inputStream.bufferedReader().readText()
         pr.waitFor()
-        android.widget.Toast.makeText(ctx, "已安装 OhMyKeymint（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(ctx, "已安装 OhMyKeymint（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+        }
     } catch (t: Throwable) {
-        android.widget.Toast.makeText(ctx, "安装失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(ctx, "安装失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 }
 
