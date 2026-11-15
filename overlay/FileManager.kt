@@ -526,6 +526,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressTick += 1
                 },
                 onFileClick = { picked ->
+                    longPressFromRight = false
                     if (longPressPath != null) longPressPath = null
                     if (selectedFile != null && selectedFile != picked) {
                         selectedFile = null
@@ -576,6 +577,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressTick += 1
                 },
                 onFileClick = { picked ->
+                    longPressFromRight = true
                     if (longPressPath != null) longPressPath = null
                     if (selectedFile != null && selectedFile != picked) {
                         selectedFile = null
@@ -1109,14 +1111,26 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         searching = true
                         searchResults = emptyList()
                         uiScope.launch {
-                            val res = withContext(Dispatchers.IO) {
+                            val q = searchQ.replace("'", "'\''")
+                            withContext(Dispatchers.IO) {
                                 try {
-                                    val q = searchQ.replace("'", "'\''")
-                                    Shell.cmd("find /storage/emulated/0 /data -iname '*" + q + "*' -type f 2>/dev/null | head -100").exec().out
-                                        .filter { it.isNotBlank() }
-                                } catch (t: Throwable) { emptyList() }
+                                    val basePath = if (longPressFromRight) rightPath else leftPath
+                                    val pb = ProcessBuilder(suBin(), "--mount-master", "-c",
+                                        "find '" + basePath.replace("'", "'\\''") + "' -iname '*" + q + "*' -type f 2>/dev/null | head -200")
+                                    pb.redirectErrorStream(true)
+                                    val pr = pb.start()
+                                    pr.inputStream.bufferedReader().useLines { lines ->
+                                        lines.forEach { line ->
+                                            if (line.isNotBlank()) {
+                                                withContext(Dispatchers.Main) {
+                                                    searchResults = searchResults + line
+                                                }
+                                            }
+                                        }
+                                    }
+                                    pr.waitFor()
+                                } catch (t: Throwable) {}
                             }
-                            searchResults = res
                             searching = false
                         }
                     }
@@ -1125,19 +1139,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
                     items(searchResults.size) { i ->
                         val r = searchResults[i]
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 8.dp)
-                                .clickable {
-                                    FileLocate.path = r
-                                    FileLocate.tick += 1
-                                    showSearch = false
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(r.substringAfterLast('/'), fontSize = 13.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Column {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        FileLocate.path = r
+                                        FileLocate.tick += 1
+                                        showSearch = false
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(r.substringAfterLast('/'), fontSize = 13.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            if (i < searchResults.size - 1) {
+                                Box(modifier = Modifier.fillMaxWidth().padding(start = 10.dp).height(0.5.dp).background(Color(0x33FFFFFF)))
+                            }
                         }
                     }
                 }
@@ -3086,21 +3104,11 @@ private fun ProMaxIsland(
                                         ),
                                         singleLine = true
                                     )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("向左", Color(0xFF3A3A3C)) {
-                                                onGoLeft(jumpInput)
-                                                closeIsland()
-                                            }
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("向右", Color(0xFF0A84FF)) {
-                                                onGoRight(jumpInput)
-                                                closeIsland()
-                                            }
+                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                        IslandActionButton("跳转", Color(0xFF0A84FF)) {
+                                            // 按活动区域跳转（右滑右、左滑左）
+                                            if (longPressFromRight) onGoRight(jumpInput) else onGoLeft(jumpInput)
+                                            closeIsland()
                                         }
                                     }
                                 }
