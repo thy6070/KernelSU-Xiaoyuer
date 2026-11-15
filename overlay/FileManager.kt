@@ -1154,8 +1154,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             updateVer = null
                                             runMessage = "已下载: " + dlPath + "（请手动安装）"
                                             try {
-                                                // 定位到父目录（/storage/emulated/0/），高亮 Download 文件夹（不进目录，防闪退）
-                                                FileLocate.path = "/storage/emulated/0/Download"
+                                                // 定位到 Download 目录并高亮下载的 APK
+                                                FileLocate.path = dlPath
                                                 FileLocate.tick += 1
                                             } catch (t: Throwable) {}
                                         }
