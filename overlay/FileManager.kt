@@ -949,7 +949,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
                             ).exec()
                             val txt = (out.out + out.err).joinToString("\n")
-                            if (txt.contains("Success")) "已安装" else "安装失败"
+                            if (txt.contains("Success")) "已完成" else "安装失败"
                         } catch (t: Throwable) {
                             "安装失败：" + (t.message ?: "")
                         }
@@ -1638,6 +1638,7 @@ private fun ProMaxIsland(
     var paneTarget by remember(currentPath) { mutableStateOf(currentPath.trimEnd('/') + "/") }
     var createIsDir by remember { mutableStateOf(true) }
     var extractDone by remember { mutableStateOf(false) }
+    var extractFailed by remember { mutableStateOf(false) }
     var rootOk by remember { mutableStateOf(true) }
     var rootChecked by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -1772,8 +1773,15 @@ private fun ProMaxIsland(
         }
     }
     LaunchedEffect(runMessage) {
-        if (runMessage == "安装中…" || runMessage == "已安装" ||
-            runMessage == "安装失败" || runMessage == "已完成") {
+        if (runMessage == "已完成") {
+            extractDone = true
+            extractFailed = false
+            expanded = false
+        } else if (runMessage == "安装失败") {
+            extractFailed = true
+            extractDone = false
+            expanded = false
+        } else if (runMessage == "安装中…" || runMessage == "已安装") {
             expanded = false
         }
     }
@@ -2068,13 +2076,22 @@ private fun ProMaxIsland(
                     contentDescription = null,
                     modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
                 )
+                if (extractFailed) {
+                    Text(
+                        text = "安装失败",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        color = Color(0xFFFF3B30)
+                    )
+                }
                 if (extractDone) {
                     Text(
                         text = "已完成",
                         modifier = Modifier.weight(1f),
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
-                        color = Color(0xFF4CAF50)
+                        color = Color(0xFF0A84FF)
                     )
                 }
                 if (terminalMode || (running && expanded)) {
