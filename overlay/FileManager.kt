@@ -1127,13 +1127,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 try {
                                     // 全局搜索：先 /storage（快），再 /data（慢），流式输出
                                     val pb = ProcessBuilder(suBin(), "--mount-master", "-c",
-                                        "(find /storage/emulated/0 -maxdepth 8 -iname '*" + q + "*' -type f 2>/dev/null; " +
-                                        "find /data -maxdepth 6 -iname '*" + q + "*' -type f 2>/dev/null) | head -300")
+                                        "find /storage/emulated/0 -maxdepth 8 -iname '*" + q + "*' -type f 2>/dev/null; " +
+                                        "find /data -maxdepth 6 -iname '*" + q + "*' -type f 2>/dev/null")
                                     pb.redirectErrorStream(true)
                                     val pr = pb.start()
                                     pr.inputStream.bufferedReader().useLines { lines ->
                                         lines.forEach { line ->
-                                            if (line.isNotBlank()) {
+                                            if (line.isNotBlank() && searchResults.size < 300) {
                                                 withContext(Dispatchers.Main) {
                                                     searchResults = searchResults + line
                                                 }
@@ -1453,6 +1453,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             return@ModePanel
                         }
                         uiScope.launch {
+                            // 等面板关闭动画（280ms）结束再开终端，避免动画抢占
+                            kotlinx.coroutines.delay(320)
                             running = true
                             termText = ""
                             runMessage = null
