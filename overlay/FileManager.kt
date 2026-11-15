@@ -6565,6 +6565,11 @@ class FpsOverlayService : Service() {
                     }
                 }
                 maybeFpsPlusBoost(fpsRaw)
+                // 自适应调频（FPS+ 开启 + 游戏 + 未 boost 时）
+                try {
+                    val fpOnA = getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
+                    if (fpOnA && isGamePkg(activePkg) && !fpsPlusBoosted) adaptiveFreq(fpsRaw)
+                } catch (t: Throwable) {}
                 val nowT = System.currentTimeMillis()
                 if (nowT - lastStatLog > 5000L) {
                     lastStatLog = nowT
@@ -6671,6 +6676,10 @@ class FpsOverlayService : Service() {
             activePkg + "{*binder*}" + "=" + small + "\n" +
             "# 其他 -> 中核\n" +
             activePkg + "{*}" + "=" + mid + "\n")
+        // 调速器（骁龙/天玑自适应）：sugov_ext（MTK 平滑）/ schedutil（高通）
+        sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do av=\$(cat \$p/scaling_available_governors 2>/dev/null); " +
+           "case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null ;; " +
+           "*schedutil*) echo schedutil > \$p/scaling_governor 2>/dev/null ;; esac; done", 1L)
         // 写 AppOpt.json（cpuset 名改系统风格，防检测）
         try {
             File(filesDir, "AppOpt.json").writeText(
@@ -6717,6 +6726,24 @@ class FpsOverlayService : Service() {
             val mask = sorted.take(2).flatMap { it.second }.fold(0L) { acc, c -> acc or (1L shl c) }
             java.lang.Long.toHexString(mask)
         } catch (t: Throwable) { "" }
+    }
+
+    // 自适应调频（闭环）：帧率稳定降频省电，掉帧升频保帧
+    private var lastAdaptMs = 0L
+    private var adaptIdx = 100  // 0-100 频率比例
+    private fun adaptiveFreq(fps: Double) {
+        val now = System.currentTimeMillis()
+        if (now - lastAdaptMs < 400L) return  // 2.5Hz 更新
+        lastAdaptMs = now
+        val target = panelHz.coerceAtLeast(60.0)
+        val ratio = (fps / target).coerceIn(0.3, 1.0)
+        // 闭环：帧率偏高 → 降档；偏低 → 升档（每次一步，防抖）
+        val step = if (ratio >= 0.92) -2 else if (ratio < 0.75) 8 else 0
+        adaptIdx = (adaptIdx + step).coerceIn(30, 100)
+        val pct = adaptIdx
+        sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
+           "mn=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); mx=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); " +
+           "[ -n \"\$mn\" ] && [ -n \"\$mx\" ] && echo \$(( mn + (mx - mn) * " + pct + " / 100 )) > \$p/scaling_max_freq 2>/dev/null; done", 1L)
     }
 
     private fun maybeFpsPlusBoost(fps: Double) {
