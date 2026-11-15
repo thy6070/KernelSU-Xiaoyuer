@@ -1896,6 +1896,13 @@ private fun ProMaxIsland(
             extractDone = false
         }
     }
+    // 安装成功同样 2.2s 后自动消失（之前没有清除逻辑，会一直常驻）
+    LaunchedEffect(installDone) {
+        if (installDone) {
+            kotlinx.coroutines.delay(2200)
+            installDone = false
+        }
+    }
     LaunchedEffect(runMessage) {
         if (runMessage == "安装成功") {
             installDone = true
@@ -2205,34 +2212,23 @@ private fun ProMaxIsland(
                     contentDescription = null,
                     modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
                 )
-                if (installDone) {
-                    Text(
-                        text = "安装成功",
-                        modifier = Modifier.weight(1f),
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center,
-                        color = Color(0xFF0A84FF)
-                    )
+                val statusText = when {
+                    installDone -> "安装成功"
+                    extractFailed -> "安装失败"
+                    extractDone -> "已完成"
+                    else -> null
                 }
-                if (extractFailed) {
-                    Text(
-                        text = "安装失败",
-                        modifier = Modifier.weight(1f),
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center,
-                        color = Color(0xFFFF3B30)
-                    )
-                }
-                if (extractDone) {
-                    Text(
-                        text = "已完成",
-                        modifier = Modifier.weight(1f),
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center,
-                        color = Color(0xFF0A84FF)
-                    )
-                }
-                if (terminalMode || (running && expanded)) {
+                if (statusText != null) {
+                    // 状态文字独占整行并居中，不再被左右元素分摊宽度
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = statusText,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            color = if (extractFailed) Color(0xFFFF3B30) else Color(0xFF0A84FF)
+                        )
+                    }
+                } else if (terminalMode || (running && expanded)) {
                     YukiWave(
                         color = Color(0xFFFFB6C8),
                         running = running,
