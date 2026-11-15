@@ -2162,8 +2162,16 @@ private fun ProMaxIsland(
                                     } catch (t: Throwable) { false }
                                 )
                             }
-                            // OhMyKeymint 模块开关（默认关）
+                            // OhMyKeymint 模块开关（按实际状态检测）
                             var omkOn by remember { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                omkOn = withContext(Dispatchers.IO) {
+                                    try {
+                                        val dir = java.io.File("/data/adb/modules/oh_my_keymint")
+                                        dir.exists() && !java.io.File(dir, "disable").exists() && java.io.File(dir, "module.prop").exists()
+                                    } catch (t: Throwable) { false }
+                                }
+                            }
                             // 进界面时校验：Service 没在跑就同步关闭状态
                             LaunchedEffect(Unit) {
                                 try {
