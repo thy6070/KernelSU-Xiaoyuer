@@ -1456,6 +1456,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             // 直接执行路径文件（和正常点击 sh 完全一样）
                             selectedFile = path
                             uiScope.launch {
+                                kotlinx.coroutines.delay(320)  // 等面板关闭动画结束
                                 running = true
                                 termText = ""
                                 runMessage = null
@@ -1489,8 +1490,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     },
                     onDismiss = {
-                    // 立即关闭面板（不播动画，避免与终端灵动岛动画抢占）
-                    panel = false
+                    uiScope.launch {
+                        panelP.animateTo(0f, tween(280, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                        panel = false
+                    }
                 })
             }
         }
