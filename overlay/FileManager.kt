@@ -489,6 +489,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 path = leftPath,
                 dirScroll = dirScroll,
                 onNavigate = { np ->
+                    // 切目录：清残留选中（防解压旧包/操作错文件）
+                    selectedFile = null
+                    longPressPath = null
+                    leftHighlight = null
                     // 从压缩包临时目录返回 → 回到压缩包原目录
                     if (leftPath == "/data/local/tmp/yx_arch" && np.startsWith("/data/local/tmp")) {
                         leftPath = archiveReturnPath ?: np
@@ -537,7 +541,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = rightPath,
                 dirScroll = dirScroll,
-                onNavigate = { rightPath = it },
+                onNavigate = { np2 ->
+                    selectedFile = null
+                    longPressPath = null
+                    rightHighlight = null
+                    rightPath = np2
+                },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
                         runCatching {
@@ -679,7 +688,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         onTermClose = { showTerminal = false },
         onArchiveEnter = {
             // 定位（高亮）时没有选中态，回退用 leftHighlight 路径
-            val p = longPressPath ?: selectedFile ?: leftHighlight
+            val p0 = longPressPath ?: selectedFile ?: leftHighlight
+            // 校验：必须是真实存在的文件（防用残留路径解压旧包）
+            val p = if (p0 != null && runCatching { java.io.File(p0).isFile }.getOrDefault(false)) p0 else null
             if (p != null) {
                 uiScope.launch {
                     running = true
@@ -699,7 +710,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                     running = false
                     showTerminal = false
-                    leftPath = "/data/local/tmp/yx_arch"
+                    // 解压后校验：目录非空才进入（否则提示失败）
+                    val arch = java.io.File("/data/local/tmp/yx_arch")
+                    val hasContent = runCatching { arch.listFiles()?.isNotEmpty() == true }.getOrDefault(false)
+                    if (hasContent) {
+                        leftPath = "/data/local/tmp/yx_arch"
+                    } else {
+                        runMessage = "解压失败或无内容"
+                    }
                     refreshTick += 1
                 }
             }
