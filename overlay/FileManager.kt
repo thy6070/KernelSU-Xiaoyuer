@@ -1115,9 +1115,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 Text(updateVer!!, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 13.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 if (updateProgress >= 0) {
                     Spacer(Modifier.height(14.dp))
+                    // iOS 风格进度条：细（5dp）+ 圆角 + 半透明轨道 + iOS 蓝进度
                     androidx.compose.material3.LinearProgressIndicator(
                         progress = { (updateProgress / 100f).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(2.5.dp)),
+                        color = Color(0xFF0A84FF),
+                        trackColor = Color(0x33FFFFFF)
                     )
                     Text(updateProgress.toString() + "%", modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 12.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 }
