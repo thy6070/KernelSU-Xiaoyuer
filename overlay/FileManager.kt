@@ -2315,7 +2315,10 @@ private fun ProMaxIsland(
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
                                                             "ksud module disable oh_my_keymint 2>/dev/null; " +
                                                             "pkill -9 -f 'keymint-daemon' 2>/dev/null; pkill -9 -f 'injector-daemon' 2>/dev/null; " +
-                                                            "pkill -9 -f '/data/adb/modules/oh_my_keymint/daemon' 2>/dev/null").redirectErrorStream(true).start().waitFor()
+                                                            "pkill -9 -f '/data/adb/modules/oh_my_keymint/daemon' 2>/dev/null; " +
+                                                            "rm -rf /data/adb/modules/oh_my_keymint 2>/dev/null; " +
+                                                            "rm -rf /data/misc/keystore/omk 2>/dev/null; " +
+                                                            "rm -rf /data/adb/omk 2>/dev/null").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
                                                 android.widget.Toast.makeText(navCtx, "模块已关闭（服务已停）", android.widget.Toast.LENGTH_SHORT).show()
