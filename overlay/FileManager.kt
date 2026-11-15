@@ -6738,9 +6738,14 @@ class FpsOverlayService : Service() {
         val target = panelHz.coerceAtLeast(60.0)
         val ratio = (fps / target).coerceIn(0.3, 1.0)
         // 闭环：帧率偏高 → 降档；偏低 → 升档（每次一步，防抖）
-        val step = if (ratio >= 0.92) -2 else if (ratio < 0.75) 8 else 0
+        val step = if (ratio >= 0.92) -4 else if (ratio < 0.75) 8 else 0
+        val oldIdx = adaptIdx
         adaptIdx = (adaptIdx + step).coerceIn(30, 100)
         val pct = adaptIdx
+        if (step != 0) {
+            logLine("自适应调频: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
+                " 比例=" + String.format("%.2f", ratio) + " 档位=" + adaptIdx + "%" + (if (oldIdx != adaptIdx) "" else "(边界)"))
+        }
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
            "mn=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); mx=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); " +
            "[ -n \"\$mn\" ] && [ -n \"\$mx\" ] && echo \$(( mn + (mx - mn) * " + pct + " / 100 )) > \$p/scaling_max_freq 2>/dev/null; done", 1L)
