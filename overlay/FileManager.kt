@@ -1892,14 +1892,14 @@ private fun ProMaxIsland(
     }
     LaunchedEffect(extractDone) {
         if (extractDone) {
-            kotlinx.coroutines.delay(2200)
+            kotlinx.coroutines.delay(1000)
             extractDone = false
         }
     }
-    // 安装成功同样 2.2s 后自动消失（之前没有清除逻辑，会一直常驻）
+    // 安装成功同样 1s 后自动消失（之前没有清除逻辑，会一直常驻）
     LaunchedEffect(installDone) {
         if (installDone) {
-            kotlinx.coroutines.delay(2200)
+            kotlinx.coroutines.delay(1000)
             installDone = false
         }
     }
