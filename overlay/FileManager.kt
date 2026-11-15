@@ -138,6 +138,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -1489,7 +1490,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     onDismiss = {
                     // 立即关闭面板（不播动画，避免与终端灵动岛动画抢占）
                     panel = false
-                    try { panelP.snapTo(0f) } catch (t: Throwable) {}
                 })
             }
         }
