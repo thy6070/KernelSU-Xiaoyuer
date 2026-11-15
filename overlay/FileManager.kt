@@ -1347,10 +1347,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             return@ModePanel
                         }
                         uiScope.launch {
-                            kotlinx.coroutines.delay(320)  // 等面板滑出动画结束，终端动画才可见
+                            // 先关终端（触发收起），再开（触发滑出动画）
+                            showTerminal = false
+                            kotlinx.coroutines.delay(120)
                             running = true
                             termText = ""
                             runMessage = null
+                            kotlinx.coroutines.delay(320)  // 等面板滑出动画结束，终端动画才可见
                             showTerminal = true
                             withContext(Dispatchers.IO) {
                                 try {
