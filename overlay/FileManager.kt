@@ -1145,26 +1145,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                 }
                                             }
                                         }
-                                        // 安装：root pm install（最可靠）
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            updateProgress = 100
-                                            runMessage = "下载完成，正在安装..."
-                                        }
-                                        val install = try {
-                                            val p = ProcessBuilder("su", "-c", "pm install -r -d -g '" + dst.absolutePath + "'").redirectErrorStream(true).start()
-                                            val outI = p.inputStream.bufferedReader().readText()
-                                            p.waitFor()
-                                            outI
-                                        } catch (t: Throwable) { "install err: " + t }
+                                        // 下载完成：提示手动安装（不自动装/不自动定位，避免闪退）
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                             updateProgress = -1
                                             updateVer = null
-                                            runMessage = if (install.contains("Success")) "安装成功！" else "安装: " + install.take(80)
-                                            // 下载完定位到左侧（文件管理器高亮）
-                                            try {
-                                                FileLocate.path = dst.absolutePath
-                                                FileLocate.tick += 1
-                                            } catch (t: Throwable) {}
+                                            runMessage = "已下载: " + dst.absolutePath + "（请手动安装）"
                                         }
                                     } catch (t: Throwable) {
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
