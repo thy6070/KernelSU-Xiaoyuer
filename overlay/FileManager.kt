@@ -636,6 +636,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     } catch (t: Throwable) {
                     }
                 }
+                // 提取成功 → 左侧定位高亮
+                try {
+                    val safe = label.replace("/", "_").replace("\"", "_")
+                    FileLocate.path = "/storage/emulated/0/小鱼儿/" + safe + ".apk"
+                    FileLocate.tick += 1
+                } catch (t: Throwable) {}
                 refreshTick += 1
             }
         },
@@ -696,6 +702,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
         },
         onTermClose = { showTerminal = false },
+        onSearch = { showSearch = true },
         onArchiveEnter = {
             // 定位（高亮）时没有选中态，回退用 leftHighlight 路径
             val p0 = longPressPath ?: selectedFile ?: leftHighlight
@@ -949,7 +956,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
                             ).exec()
                             val txt = (out.out + out.err).joinToString("\n")
-                            if (txt.contains("Success")) "已完成" else "安装失败"
+                            if (txt.contains("Success")) "安装成功" else "安装失败"
                         } catch (t: Throwable) {
                             "安装失败：" + (t.message ?: "")
                         }
@@ -1069,6 +1076,74 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
         }
+
+    // ===== 搜索文件 =====
+    var showSearch by remember { mutableStateOf(false) }
+    var searchQ by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<String>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    if (showSearch) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showSearch = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF2C2C2E))
+                    .padding(16.dp)
+            ) {
+                Text("搜索文件", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, color = Color.White, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.foundation.text.BasicTextField(
+                    value = searchQ,
+                    onValueChange = { searchQ = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1C1C1E), RoundedCornerShape(10.dp))
+                        .padding(10.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(12.dp))
+                IslandActionButton(if (searching) "搜索中…" else "搜索此文件", Color(0xFF0A84FF)) {
+                    if (!searching && searchQ.isNotBlank()) {
+                        searching = true
+                        searchResults = emptyList()
+                        uiScope.launch {
+                            val res = withContext(Dispatchers.IO) {
+                                try {
+                                    val q = searchQ.replace("'", "'\''")
+                                    val out = sh("find /storage/emulated/0 /data -iname '*" + q + "*' -type f 2>/dev/null | head -100", 15L)
+                                    out.lines().filter { it.isNotBlank() }
+                                } catch (t: Throwable) { emptyList() }
+                            }
+                            searchResults = res
+                            searching = false
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                    items(searchResults.size) { i ->
+                        val r = searchResults[i]
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                                .clickable {
+                                    FileLocate.path = r
+                                    FileLocate.tick += 1
+                                    showSearch = false
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(r.substringAfterLast('/'), fontSize = 13.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // ===== 云更新 =====
     var updateVer by remember { mutableStateOf<String?>(null) }
@@ -1578,6 +1653,7 @@ private fun ProMaxIsland(
     onExtractApp: (String, String) -> Unit,
     onDelete: () -> Unit,
     onAction: (String) -> Unit,
+    onSearch: () -> Unit = {},
     onArchiveEnter: () -> Unit,
     onArchiveMount: () -> Unit,
     longPressPath: String?,
@@ -1639,6 +1715,7 @@ private fun ProMaxIsland(
     var createIsDir by remember { mutableStateOf(true) }
     var extractDone by remember { mutableStateOf(false) }
     var extractFailed by remember { mutableStateOf(false) }
+    var installDone by remember { mutableStateOf(false) }
     var rootOk by remember { mutableStateOf(true) }
     var rootChecked by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -1773,7 +1850,12 @@ private fun ProMaxIsland(
         }
     }
     LaunchedEffect(runMessage) {
-        if (runMessage == "已完成") {
+        if (runMessage == "安装成功") {
+            installDone = true
+            extractDone = false
+            extractFailed = false
+            expanded = false
+        } else if (runMessage == "已完成") {
             extractDone = true
             extractFailed = false
             expanded = false
@@ -2076,6 +2158,15 @@ private fun ProMaxIsland(
                     contentDescription = null,
                     modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
                 )
+                if (installDone) {
+                    Text(
+                        text = "安装成功",
+                        modifier = Modifier.weight(1f),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        color = Color(0xFF0A84FF)
+                    )
+                }
                 if (extractFailed) {
                     Text(
                         text = "安装失败",
@@ -2922,6 +3013,7 @@ private fun ProMaxIsland(
                                     GradientActionButton("data/储存", Color(0xFF0A84FF)) { switchStep(2) }
                                     GradientActionButton("文件/文件夹", Color(0xFF0A84FF)) { switchStep(1) }
                                     GradientActionButton("跳转", Color(0xFF0A84FF)) { switchStep(4) }
+                                    GradientActionButton("搜索", Color(0xFF0A84FF)) { onSearch() }
                                 }
                                 1 -> {
                                     Row(
