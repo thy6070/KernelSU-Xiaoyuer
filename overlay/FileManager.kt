@@ -718,6 +718,134 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
         },
+        val doActionFile: (String) -> Unit = { soKey ->
+            val p = longPressPath ?: selectedFile
+            val apkName = p?.substringAfterLast('/') ?: ""
+            if (p != null && isApk(apkName)) {
+                selectedFile = null
+                uiScope.launch {
+                    runMessage = "安装中…"
+                    val msg = withContext(Dispatchers.IO) {
+                        try {
+                            val q = "'" + p.replace("'", "'\''") + "'"
+                            val out = Shell.cmd(
+                                "cp -f " + q + " /data/local/tmp/xy_install.apk; " +
+                                    "chmod 644 /data/local/tmp/xy_install.apk; " +
+                                    "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
+                            ).exec()
+                            val txt = (out.out + out.err).joinToString("\n")
+                            if (txt.contains("Success")) "安装成功" else "安装失败"
+                        } catch (t: Throwable) {
+                            "安装失败：" + (t.message ?: "")
+                        }
+                    }
+                    runMessage = msg
+                    refreshTick += 1
+                }
+            } else if (p != null) {
+                val lower = p.lowercase()
+                uiScope.launch {
+                    running = true
+                    termText = ""
+                    runMessage = null
+                    showTerminal = true
+                    try {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val dir = p.substringBeforeLast('/', "/")
+                            val file = p.substringAfterLast('/')
+                            // 诊断：输出分支判断
+                            val _dbg = "p=" + p + " lower=" + lower + " isZip=" + lower.endsWith(".zip") + " isSh=" + lower.endsWith(".sh") + "\n"
+                            run { }
+                            val cmd = when {
+                                lower.endsWith(".apk") ->
+                                    "cp -f " + shq(p) + " /data/local/tmp/xy_install.apk ; " +
+                                        "chmod 644 /data/local/tmp/xy_install.apk ; " +
+                                        "pm install -r /data/local/tmp/xy_install.apk"
+                                lower.endsWith(".zip") -> {
+                                    // 模块 zip：走官方 ksud（/data/adb/ksud 优先）
+                                    // 用 shell 判断（root 能查 /data/adb）；app 的 canExecute 会误判
+                                    val libKsud = appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
+                                    val ksudZip = "/data/adb/ksud"
+                                    // 1) 从 zip 读模块 id → 清理残留（防残缺安装）2) ksud 安装 3) 验证
+                                    "ZID=$(unzip -p " + shq(p) + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
+                                        "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
+                                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                                        "\"/data/adb/ksud\" module install " + shq(p) + " 2>&1 ; " +
+                                        "echo '--- verify:' ; " +
+                                        "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then " +
+                                        "echo \"[OK] \$ZID installed\" ; else echo \"[FAIL] \$ZID incomplete\" ; fi"
+                                }
+                                lower.endsWith(".so") -> {
+                                    val key = soKey.trim()
+                                    "cp -f \"$p\" /data/local/tmp/xy_exec.so 2>/dev/null ; " +
+                                        "chmod 755 /data/local/tmp/xy_exec.so 2>/dev/null ; " +
+                                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                                        (if (key.isEmpty()) "/data/local/tmp/xy_exec.so" else "/data/local/tmp/xy_exec.so -k \"$key\"") +
+                                        " 2>&1 ; rm -f /data/local/tmp/xy_exec.so"
+                                }
+                                else -> {
+                                    // /data 等 app 读不到 → 先 root 复制到缓存，检测副本是否 ELF
+                                    val dst2 = java.io.File(appCtx.cacheDir, "xy_probe.bin")
+                                    try {
+                                        val cp = ProcessBuilder(suBin(), "--mount-master", "-c",
+                                            "cp -f " + shq(p) + " " + shq(dst2.absolutePath) + " ; chmod 644 " + shq(dst2.absolutePath))
+                                        cp.redirectErrorStream(true); cp.start().waitFor()
+                                    } catch (e: Throwable) { }
+                                    val elfMagic = try {
+                                        val b = ByteArray(4)
+                                        java.io.FileInputStream(dst2).use { it.read(b) }
+                                        b[0] == 0x7F.toByte() && b[1] == 'E'.code.toByte() && b[2] == 'L'.code.toByte() && b[3] == 'F'.code.toByte()
+                                    } catch (e: Throwable) { false }
+                                    if (elfMagic) {
+                                        "cp -f " + shq(p) + " /data/local/tmp/xy_exec.so 2>/dev/null ; " +
+                                            "chmod 755 /data/local/tmp/xy_exec.so 2>/dev/null ; " +
+                                            "export TERM=xterm-256color ; /data/local/tmp/xy_exec.so 2>&1 ; " +
+                                            "rm -f /data/local/tmp/xy_exec.so"
+                                    } else {
+                                        "cp -f " + shq(p) + " /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
+                                            "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
+                                            "export TERM=xterm-256color ; sh /data/local/tmp/xy_exec.sh 2>&1 ; " +
+                                            "rm -f /data/local/tmp/xy_exec.sh"
+                                    }
+                                }
+                            }
+                            withContext(Dispatchers.Main) { termText = termText + "\n[debug] " + _dbg }
+                            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
+                            pb.redirectErrorStream(true)
+                            pb.directory(java.io.File("/data/local/tmp"))
+                            pb.environment()["PATH"] = "/system/bin:/system/xbin:/sbin:/vendor/bin"
+                            pb.environment()["HOME"] = "/data"
+                            pb.environment()["TMPDIR"] = "/data/local/tmp"
+                            val proc = pb.start()
+                            withContext(Dispatchers.Main) { activeProc = proc }
+                            val inp = proc.inputStream
+                            val buf = ByteArray(4096)
+                            while (true) {
+                                val n = inp.read(buf)
+                                if (n < 0) break
+                                if (n > 0) {
+                                    val chunk = String(buf, 0, n)
+                                    withContext(Dispatchers.Main) {
+                                        termText = termText + chunk
+                                    }
+                                }
+                            }
+                            proc.waitFor()
+                        } catch (t: Throwable) {
+                            withContext(Dispatchers.Main) {
+                                termText = termText + "执行失败: " + (t.message ?: "") + "\n"
+                            }
+                        }
+                    }
+                    } finally {
+                        running = false
+                    }
+                    refreshTick += 1
+                }
+            }
+        }
+        onAction = doActionFile,
         onTermClose = { showTerminal = false },
         onSearch = { showSearch = true },
         fromRight = longPressFromRight,
@@ -958,133 +1086,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
         },
-        onAction = { soKey ->
-            val p = longPressPath ?: selectedFile
-            val apkName = p?.substringAfterLast('/') ?: ""
-            if (p != null && isApk(apkName)) {
-                selectedFile = null
-                uiScope.launch {
-                    runMessage = "安装中…"
-                    val msg = withContext(Dispatchers.IO) {
-                        try {
-                            val q = "'" + p.replace("'", "'\''") + "'"
-                            val out = Shell.cmd(
-                                "cp -f " + q + " /data/local/tmp/xy_install.apk; " +
-                                    "chmod 644 /data/local/tmp/xy_install.apk; " +
-                                    "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
-                            ).exec()
-                            val txt = (out.out + out.err).joinToString("\n")
-                            if (txt.contains("Success")) "安装成功" else "安装失败"
-                        } catch (t: Throwable) {
-                            "安装失败：" + (t.message ?: "")
-                        }
-                    }
-                    runMessage = msg
-                    refreshTick += 1
-                }
-            } else if (p != null) {
-                val lower = p.lowercase()
-                uiScope.launch {
-                    running = true
-                    termText = ""
-                    runMessage = null
-                    showTerminal = true
-                    try {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            val dir = p.substringBeforeLast('/', "/")
-                            val file = p.substringAfterLast('/')
-                            // 诊断：输出分支判断
-                            val _dbg = "p=" + p + " lower=" + lower + " isZip=" + lower.endsWith(".zip") + " isSh=" + lower.endsWith(".sh") + "\n"
-                            run { }
-                            val cmd = when {
-                                lower.endsWith(".apk") ->
-                                    "cp -f " + shq(p) + " /data/local/tmp/xy_install.apk ; " +
-                                        "chmod 644 /data/local/tmp/xy_install.apk ; " +
-                                        "pm install -r /data/local/tmp/xy_install.apk"
-                                lower.endsWith(".zip") -> {
-                                    // 模块 zip：走官方 ksud（/data/adb/ksud 优先）
-                                    // 用 shell 判断（root 能查 /data/adb）；app 的 canExecute 会误判
-                                    val libKsud = appCtx.applicationInfo.nativeLibraryDir + "/libksud.so"
-                                    val ksudZip = "/data/adb/ksud"
-                                    // 1) 从 zip 读模块 id → 清理残留（防残缺安装）2) ksud 安装 3) 验证
-                                    "ZID=$(unzip -p " + shq(p) + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
-                                        "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
-                                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
-                                        "\"/data/adb/ksud\" module install " + shq(p) + " 2>&1 ; " +
-                                        "echo '--- verify:' ; " +
-                                        "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then " +
-                                        "echo \"[OK] \$ZID installed\" ; else echo \"[FAIL] \$ZID incomplete\" ; fi"
-                                }
-                                lower.endsWith(".so") -> {
-                                    val key = soKey.trim()
-                                    "cp -f \"$p\" /data/local/tmp/xy_exec.so 2>/dev/null ; " +
-                                        "chmod 755 /data/local/tmp/xy_exec.so 2>/dev/null ; " +
-                                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
-                                        (if (key.isEmpty()) "/data/local/tmp/xy_exec.so" else "/data/local/tmp/xy_exec.so -k \"$key\"") +
-                                        " 2>&1 ; rm -f /data/local/tmp/xy_exec.so"
-                                }
-                                else -> {
-                                    // /data 等 app 读不到 → 先 root 复制到缓存，检测副本是否 ELF
-                                    val dst2 = java.io.File(appCtx.cacheDir, "xy_probe.bin")
-                                    try {
-                                        val cp = ProcessBuilder(suBin(), "--mount-master", "-c",
-                                            "cp -f " + shq(p) + " " + shq(dst2.absolutePath) + " ; chmod 644 " + shq(dst2.absolutePath))
-                                        cp.redirectErrorStream(true); cp.start().waitFor()
-                                    } catch (e: Throwable) { }
-                                    val elfMagic = try {
-                                        val b = ByteArray(4)
-                                        java.io.FileInputStream(dst2).use { it.read(b) }
-                                        b[0] == 0x7F.toByte() && b[1] == 'E'.code.toByte() && b[2] == 'L'.code.toByte() && b[3] == 'F'.code.toByte()
-                                    } catch (e: Throwable) { false }
-                                    if (elfMagic) {
-                                        "cp -f " + shq(p) + " /data/local/tmp/xy_exec.so 2>/dev/null ; " +
-                                            "chmod 755 /data/local/tmp/xy_exec.so 2>/dev/null ; " +
-                                            "export TERM=xterm-256color ; /data/local/tmp/xy_exec.so 2>&1 ; " +
-                                            "rm -f /data/local/tmp/xy_exec.so"
-                                    } else {
-                                        "cp -f " + shq(p) + " /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
-                                            "chmod 755 /data/local/tmp/xy_exec.sh 2>/dev/null ; " +
-                                            "export TERM=xterm-256color ; sh /data/local/tmp/xy_exec.sh 2>&1 ; " +
-                                            "rm -f /data/local/tmp/xy_exec.sh"
-                                    }
-                                }
-                            }
-                            withContext(Dispatchers.Main) { termText = termText + "\n[debug] " + _dbg }
-                            val pb = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
-                            pb.redirectErrorStream(true)
-                            pb.directory(java.io.File("/data/local/tmp"))
-                            pb.environment()["PATH"] = "/system/bin:/system/xbin:/sbin:/vendor/bin"
-                            pb.environment()["HOME"] = "/data"
-                            pb.environment()["TMPDIR"] = "/data/local/tmp"
-                            val proc = pb.start()
-                            withContext(Dispatchers.Main) { activeProc = proc }
-                            val inp = proc.inputStream
-                            val buf = ByteArray(4096)
-                            while (true) {
-                                val n = inp.read(buf)
-                                if (n < 0) break
-                                if (n > 0) {
-                                    val chunk = String(buf, 0, n)
-                                    withContext(Dispatchers.Main) {
-                                        termText = termText + chunk
-                                    }
-                                }
-                            }
-                            proc.waitFor()
-                        } catch (t: Throwable) {
-                            withContext(Dispatchers.Main) {
-                                termText = termText + "执行失败: " + (t.message ?: "") + "\n"
-                            }
-                        }
-                    }
-                    } finally {
-                        running = false
-                    }
-                    refreshTick += 1
-                }
-            }
-        }
     ) {
         uiScope.launch {
             panelP.snapTo(0f)
