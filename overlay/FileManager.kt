@@ -1095,6 +1095,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     } ?: ""
                 val url = if (assetId.isNotEmpty()) "https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases/assets/" + assetId else ""
                 val localVer = try { com.tencent.THY.BuildConfig.VERSION_NAME } catch (t: Throwable) { "" }
+                try {
+                    File(updCtx.filesDir, "帧率日志.txt").appendText(
+                        java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()) +
+                        " 云更新检查: tag=" + tag + " local=" + localVer + " url=" + url.takeLast(20) +
+                        (if (tag.isNotEmpty() && url.isNotEmpty() && tag != localVer) " -> 弹新版" else " -> 不弹") + "\n"
+                    )
+                } catch (t: Throwable) {}
                 if (tag.isNotEmpty() && url.isNotEmpty() && tag != localVer) {
                     updateVer = tag
                     updateUrl = url
