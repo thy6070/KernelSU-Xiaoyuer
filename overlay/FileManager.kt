@@ -5348,6 +5348,9 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("settings put secure android_id_g ").append(hex(16)).append(" 2>/dev/null; ")
                 sb.append("resetprop ro.com.google.clientidbase 'android-").append(hex(8)).append("' 2>/dev/null; ")
                 sb.append("settings put secure imei '").append(hex(15)).append("' 2>/dev/null; ")
+                // IMEI 用 resetprop（更彻底，模块同款）
+                sb.append("for i in \$(getprop | grep imei | awk -F '[][]' '{print \$2}'); do imei=\$(getprop \$i); ")
+                sb.append("[ \${#imei} -lt 15 ] && continue; resetprop \$i 86916\$(tr -dc '1-9' < /dev/urandom | head -c 10); done; ")
                 sb.append("settings put secure vaid '").append(hex(24)).append("' 2>/dev/null; ")
                 sb.append("settings put secure aaid '").append(hex(24)).append("' 2>/dev/null; ")
                 // 应用 ID（SSAID）双方案：
