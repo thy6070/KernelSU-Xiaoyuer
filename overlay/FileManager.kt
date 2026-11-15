@@ -4800,11 +4800,12 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                               "ro.odm_dlkm.build.fingerprint", "ro.vendor_dlkm.build.fingerprint", "ro.system_ext.build.fingerprint")) {
                 propScript.append("resetprop ").append(fp).append(" \"\$NEWFP\" 2>/dev/null\n")
             }
-            // 持久化脚本
-            val persist = "mkdir -p /data/adb/service.d; " +
-                    "cat > /data/adb/service.d/xy_spoof.sh <<'XYEOF'\n#!/system/bin/sh\n" +
+            // 持久化脚本：post-fs-data（zygote 启动前执行，Build.* 才能生效）
+            val persist = "mkdir -p /data/adb/post-fs-data.d; " +
+                    "cat > /data/adb/post-fs-data.d/xy_spoof.sh <<'XYEOF'\n#!/system/bin/sh\n" +
                     propScript.toString() +
-                    "XYEOF\nchmod 755 /data/adb/service.d/xy_spoof.sh; "
+                    "XYEOF\nchmod 755 /data/adb/post-fs-data.d/xy_spoof.sh; " +
+                    "rm -f /data/adb/service.d/xy_spoof.sh 2>/dev/null; "
             val cmd = propScript.toString() + persist
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
             pr.waitFor()
