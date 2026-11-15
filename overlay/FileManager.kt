@@ -1652,7 +1652,7 @@ private fun ProMaxIsland(
             modules = withContext(Dispatchers.IO) {
                 try {
                     val ids = Shell.cmd("ls -1 /data/adb/modules 2>/dev/null").exec().out
-                        .filter { it.isNotBlank() }
+                        .filter { it.isNotBlank() && it != "oh_my_keymint" }  // 不显示认证模块
                     ids.mapNotNull { id ->
                         val prop = Shell.cmd("cat /data/adb/modules/$id/module.prop 2>/dev/null").exec().out
                         if (prop.isEmpty()) null else {
@@ -2231,6 +2231,69 @@ private fun ProMaxIsland(
                                         Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
                                         Text(text = "关", fontSize = 12.sp,
                                             color = if (softReboot) Color(0xFF5A5A5E) else Color.White)
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            // 打开 OhMyKeymint 的 WebUI（模块 id = oh_my_keymint）
+                                            navScope.launch {
+                                                try {
+                                                    val token = me.weishu.kernelsu.data.repository.SettingsRepositoryImpl().intentToken
+                                                    val it = android.content.Intent(
+                                                        navCtx,
+                                                        me.weishu.kernelsu.ui.webui.WebUIActivity::class.java
+                                                    ).apply {
+                                                        putExtra("is_internal_transition", true)
+                                                        setData(android.net.Uri.parse("ksu://webui?id=oh_my_keymint&token=$token"))
+                                                        putExtra("id", "oh_my_keymint")
+                                                        putExtra("name", "OhMyKeymint")
+                                                    }
+                                                    navCtx.startActivity(it)
+                                                } catch (t: Throwable) {
+                                                    android.widget.Toast.makeText(navCtx, "打开失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "伪装BL\n将BL设为回锁状态",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = "开", fontSize = 12.sp,
+                                            color = if (omkOn) Color.White else Color(0xFF5A5A5E),
+                                            modifier = Modifier.clickable {
+                                                omkOn = true
+                                                Thread {
+                                                    try {
+                                                        // 未安装 → 先安装（内置 zip）；已装 → 删 disable
+                                                        val installed = java.io.File("/data/adb/modules/oh_my_keymint/module.prop").exists()
+                                                        if (!installed) installOhMyKeymint(navCtx)
+                                                        ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                            "rm -f /data/adb/modules/oh_my_keymint/disable 2>/dev/null").redirectErrorStream(true).start().waitFor()
+                                                    } catch (t: Throwable) {}
+                                                }.start()
+                                                android.widget.Toast.makeText(navCtx, "模块已开启（重启生效）", android.widget.Toast.LENGTH_SHORT).show()
+                                            })
+                                        Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
+                                        Text(text = "关", fontSize = 12.sp,
+                                            color = if (omkOn) Color(0xFF5A5A5E) else Color.White,
+                                            modifier = Modifier.clickable {
+                                                omkOn = false
+                                                Thread {
+                                                    try {
+                                                        ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                            "mkdir -p /data/adb/modules/oh_my_keymint; touch /data/adb/modules/oh_my_keymint/disable 2>/dev/null").redirectErrorStream(true).start().waitFor()
+                                                    } catch (t: Throwable) {}
+                                                }.start()
+                                                android.widget.Toast.makeText(navCtx, "模块已关闭（重启生效）", android.widget.Toast.LENGTH_SHORT).show()
+                                            })
                                     }
                                 }
                                 Row(
@@ -4538,8 +4601,9 @@ private fun FsRow(
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .pointerInput(fullPath) {
                     detectHorizontalDragGestures { _, dragAmount ->
-                        if (dragAmount > 6f) onSwipeSelect()
-                        else if (dragAmount < -6f) onSwipeDeselect()
+                        // 阈值提高（40f）防误触（单击/小滑动不触发）
+                        if (dragAmount > 40f) onSwipeSelect()
+                        else if (dragAmount < -40f) onSwipeDeselect()
                     }
                 }
                 .background(
@@ -4940,6 +5004,22 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
         } catch (t: Throwable) {
             android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+}
+
+// 安装 OhMyKeymint（内置 zip → ksud install，模块列表不显示）
+internal fun installOhMyKeymint(ctx: android.content.Context) {
+    try {
+        val zip = java.io.File(ctx.cacheDir, "ohmykeymint.zip")
+        ctx.assets.open("ohmykeymint.zip").use { i -> zip.outputStream().use { o -> i.copyTo(o) } }
+        val cmd = "if command -v ksud >/dev/null 2>&1; then ksud install '" + zip.absolutePath + "' 2>&1; " +
+            "else mkdir -p /data/adb/modules/oh_my_keymint && unzip -o -q '" + zip.absolutePath + "' -d /data/adb/modules/oh_my_keymint 2>&1; fi"
+        val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
+        val out = pr.inputStream.bufferedReader().readText()
+        pr.waitFor()
+        android.widget.Toast.makeText(ctx, "已安装 OhMyKeymint（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+    } catch (t: Throwable) {
+        android.widget.Toast.makeText(ctx, "安装失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
