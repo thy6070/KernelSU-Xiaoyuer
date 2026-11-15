@@ -709,6 +709,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
         onTermClose = { showTerminal = false },
         onSearch = { showSearch = true },
+        fromRight = longPressFromRight,
         onArchiveEnter = {
             // 定位（高亮）时没有选中态，回退用 leftHighlight 路径
             val p0 = longPressPath ?: selectedFile ?: leftHighlight
@@ -1672,6 +1673,7 @@ private fun ProMaxIsland(
     onDelete: () -> Unit,
     onAction: (String) -> Unit,
     onSearch: () -> Unit = {},
+    fromRight: Boolean = false,
     onArchiveEnter: () -> Unit,
     onArchiveMount: () -> Unit,
     longPressPath: String?,
@@ -3107,7 +3109,7 @@ private fun ProMaxIsland(
                                     Box(modifier = Modifier.fillMaxWidth()) {
                                         IslandActionButton("跳转", Color(0xFF0A84FF)) {
                                             // 按活动区域跳转（右滑右、左滑左）
-                                            if (longPressFromRight) onGoRight(jumpInput) else onGoLeft(jumpInput)
+                                            if (fromRight) onGoRight(jumpInput) else onGoLeft(jumpInput)
                                             closeIsland()
                                         }
                                     }
