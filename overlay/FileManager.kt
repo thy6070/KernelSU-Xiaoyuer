@@ -2300,14 +2300,16 @@ private fun ProMaxIsland(
                                                 omkOn = true
                                                 Thread {
                                                     try {
-                                                        // 未安装 → 先安装（内置 zip）；已装 → 删 disable
+                                                        // 未安装 → 先安装（内置 zip）；已装 → 删 disable + 启动服务
                                                         val installed = java.io.File("/data/adb/modules/oh_my_keymint/module.prop").exists()
                                                         if (!installed) installOhMyKeymint(navCtx)
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "rm -f /data/adb/modules/oh_my_keymint/disable 2>/dev/null").redirectErrorStream(true).start().waitFor()
+                                                            "M=/data/adb/modules/oh_my_keymint; rm -f \$M/disable 2>/dev/null; " +
+                                                            "sh \$M/post-fs-data.sh >/dev/null 2>&1; " +
+                                                            "sh \$M/service.sh >/dev/null 2>&1 &").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
-                                                android.widget.Toast.makeText(navCtx, "模块已开启（重启生效）", android.widget.Toast.LENGTH_SHORT).show()
+                                                android.widget.Toast.makeText(navCtx, "模块已启用（服务已启动）", android.widget.Toast.LENGTH_SHORT).show()
                                             })
                                         Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
                                         Text(text = "关", fontSize = 12.sp,
@@ -2317,10 +2319,12 @@ private fun ProMaxIsland(
                                                 Thread {
                                                     try {
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "mkdir -p /data/adb/modules/oh_my_keymint; touch /data/adb/modules/oh_my_keymint/disable 2>/dev/null").redirectErrorStream(true).start().waitFor()
+                                                            "mkdir -p /data/adb/modules/oh_my_keymint; touch /data/adb/modules/oh_my_keymint/disable 2>/dev/null; " +
+                                                            "pkill -9 -f 'keymint-daemon' 2>/dev/null; pkill -9 -f 'injector-daemon' 2>/dev/null; " +
+                                                            "pkill -9 -f '/data/adb/modules/oh_my_keymint/daemon' 2>/dev/null").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
-                                                android.widget.Toast.makeText(navCtx, "模块已关闭（重启生效）", android.widget.Toast.LENGTH_SHORT).show()
+                                                android.widget.Toast.makeText(navCtx, "模块已关闭（服务已停）", android.widget.Toast.LENGTH_SHORT).show()
                                             })
                                     }
                                 }
