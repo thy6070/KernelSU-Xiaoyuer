@@ -1347,6 +1347,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             return@ModePanel
                         }
                         uiScope.launch {
+                            kotlinx.coroutines.delay(320)  // 等面板滑出动画结束，终端动画才可见
                             running = true
                             termText = ""
                             runMessage = null
@@ -2170,8 +2171,14 @@ private fun ProMaxIsland(
                             LaunchedEffect(Unit) {
                                 omkOn = withContext(Dispatchers.IO) {
                                     try {
-                                        val dir = java.io.File("/data/adb/modules/oh_my_keymint")
-                                        dir.exists() && !java.io.File(dir, "disable").exists() && java.io.File(dir, "module.prop").exists()
+                                        // 用 su 检测（App 无权限直接读 /data/adb）
+                                        val pr = ProcessBuilder(suBin(), "--mount-master", "-c",
+                                            "M=/data/adb/modules/oh_my_keymint; " +
+                                            "[ -s \$M/module.prop ] && [ ! -e \$M/disable ] && echo ON || echo OFF")
+                                            .redirectErrorStream(true).start()
+                                        val o = pr.inputStream.bufferedReader().readText()
+                                        pr.waitFor()
+                                        o.contains("ON")
                                     } catch (t: Throwable) { false }
                                 }
                             }
