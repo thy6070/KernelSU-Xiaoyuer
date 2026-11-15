@@ -3087,21 +3087,11 @@ private fun ProMaxIsland(
                                     }
                                 }
                                 3 -> {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("向左", Color(0xFF3A3A3C)) {
-                                                onGoLeft(paneTarget)
-                                                closeIsland()
-                                            }
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("向右", Color(0xFF0A84FF)) {
-                                                onGoRight(paneTarget)
-                                                closeIsland()
-                                            }
+                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                        IslandActionButton("跳转", Color(0xFF0A84FF)) {
+                                            // 按活动区域跳转
+                                            if (fromRight) onGoRight(paneTarget) else onGoLeft(paneTarget)
+                                            closeIsland()
                                         }
                                     }
                                 }
@@ -3199,51 +3189,24 @@ private fun ProMaxIsland(
                                         ),
                                         singleLine = true
                                     )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("向左", Color(0xFF3A3A3C)) {
-                                                val nm = jumpInput.trim()
-                                                if (nm.isNotEmpty()) {
-                                                    navScope.launch {
-                                                        withContext(Dispatchers.IO) {
-                                                            try {
-                                                                val base = leftPath.trimEnd('/') + "/"
-                                                                if (createIsDir) {
-                                                                    Shell.cmd("mkdir -p \"$base$nm\"").exec()
-                                                                } else {
-                                                                    Shell.cmd("touch \"$base$nm\"").exec()
-                                                                }
-                                                            } catch (t: Throwable) {
+                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                        IslandActionButton("创建", Color(0xFF0A84FF)) {
+                                            val nm = jumpInput.trim()
+                                            if (nm.isNotEmpty()) {
+                                                navScope.launch {
+                                                    withContext(Dispatchers.IO) {
+                                                        try {
+                                                            val base = if (fromRight) rightPath.trimEnd('/') + "/" else leftPath.trimEnd('/') + "/"
+                                                            if (createIsDir) {
+                                                                Shell.cmd("mkdir -p \"$base$nm\"").exec()
+                                                            } else {
+                                                                Shell.cmd("touch \"$base$nm\"").exec()
                                                             }
+                                                        } catch (t: Throwable) {
                                                         }
-                                                        onGoLeft(leftPath.trimEnd('/') + "/")
-                                                        closeIsland()
                                                     }
-                                                }
-                                            }
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            IslandActionButton("向右", Color(0xFF0A84FF)) {
-                                                val nm = jumpInput.trim()
-                                                if (nm.isNotEmpty()) {
-                                                    navScope.launch {
-                                                        withContext(Dispatchers.IO) {
-                                                            try {
-                                                                val base = rightPath.trimEnd('/') + "/"
-                                                                if (createIsDir) {
-                                                                    Shell.cmd("mkdir -p \"$base$nm\"").exec()
-                                                                } else {
-                                                                    Shell.cmd("touch \"$base$nm\"").exec()
-                                                                }
-                                                            } catch (t: Throwable) {
-                                                            }
-                                                        }
-                                                        onGoRight(rightPath.trimEnd('/') + "/")
-                                                        closeIsland()
-                                                    }
+                                                    if (fromRight) onGoRight(rightPath.trimEnd('/') + "/") else onGoLeft(leftPath.trimEnd('/') + "/")
+                                                    closeIsland()
                                                 }
                                             }
                                         }
