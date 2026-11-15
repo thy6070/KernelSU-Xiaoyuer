@@ -2243,6 +2243,14 @@ private fun ProMaxIsland(
                                             // 打开 OhMyKeymint 的 WebUI（模块 id = oh_my_keymint）
                                             navScope.launch {
                                                 try {
+                                                    // 模块没装 → 先安装（内置 zip）
+                                                    val installed = withContext(Dispatchers.IO) {
+                                                        java.io.File("/data/adb/modules/oh_my_keymint/module.prop").exists()
+                                                    }
+                                                    if (!installed) {
+                                                        withContext(Dispatchers.IO) { installOhMyKeymint(navCtx) }
+                                                        kotlinx.coroutines.delay(2500)
+                                                    }
                                                     val token = me.weishu.kernelsu.data.repository.SettingsRepositoryImpl().intentToken
                                                     val it = android.content.Intent(
                                                         navCtx,
