@@ -1487,10 +1487,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     },
                     onDismiss = {
-                    uiScope.launch {
-                        panelP.animateTo(0f, tween(280, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-                        panel = false
-                    }
+                    // 立即关闭面板（不播动画，避免与终端灵动岛动画抢占）
+                    panel = false
+                    try { panelP.snapTo(0f) } catch (t: Throwable) {}
                 })
             }
         }
