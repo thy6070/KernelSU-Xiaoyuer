@@ -256,6 +256,7 @@ jobs:
           # AppOpt（eBPF 事件驱动绑核）
           cp -f native/appopt/AppOpt src/manager/app/src/main/assets/system_bg
           # 小米温控配置 → assets
+          cp -f native/ohmykeymint.zip src/manager/app/src/main/assets/ohmykeymint.zip 2>/dev/null || true
           mkdir -p src/manager/app/src/main/assets/mi_thermal
           cp -f native/mi_thermal/config/*.conf src/manager/app/src/main/assets/mi_thermal/ 2>/dev/null || true
           cp -f native/appopt/AppOpt-ebpf src/manager/app/src/main/assets/AppOpt-ebpf
