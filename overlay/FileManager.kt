@@ -1084,8 +1084,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 conn.readTimeout = 8000
                 val body = conn.inputStream.bufferedReader().readText()
                 val tag = body.substringAfter("\"tag_name\":\"").substringBefore("\"")
-                // 只取 .apk 的 asset（fpsbinder2 等不是 APK）
-                val url = Regex("\"browser_download_url\":\"([^\"]+\\.apk)\"").find(body)?.groupValues?.get(1) ?: ""
+                // 只取 .apk 的 asset id（用 api.github.com asset API 下载，国内可达）
+                val assetId = Regex("\"id\":(\\d+),\"node_id\"?:\"?").findAll(body).toList()
+                    .map { it.groupValues[1] }
+                    .firstOrNull { id ->
+                        // 该 id 后面 200 字符内出现 .apk 名称
+                        val idx = body.indexOf("\"id\":" + id)
+                        idx >= 0 && body.substring(idx, (idx + 300).coerceAtMost(body.length)).contains(".apk")
+                    } ?: ""
+                val url = if (assetId.isNotEmpty()) "https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases/assets/" + assetId else ""
                 val localVer = try { com.tencent.THY.BuildConfig.VERSION_NAME } catch (t: Throwable) { "" }
                 if (tag.isNotEmpty() && url.isNotEmpty() && tag != localVer) {
                     updateVer = tag
@@ -1124,6 +1131,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         val conn = (java.net.URL(updateUrl).openConnection() as java.net.HttpURLConnection)
                                         conn.instanceFollowRedirects = true
                                         conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15)")
+                                        conn.setRequestProperty("Accept", "application/octet-stream")
                                         conn.connectTimeout = 10000
                                         conn.readTimeout = 30000
                                         val total = conn.contentLengthLong
