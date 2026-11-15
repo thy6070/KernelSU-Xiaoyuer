@@ -11,6 +11,8 @@ import com.topjohnwu.superuser.Shell
 object FileLocate {
     var path by mutableStateOf<String?>(null)
     var tick by mutableStateOf(0)
+    /** "L" 左区域 / "R" 右区域（定位到哪个 pane） */
+    var side by mutableStateOf("L")
 
     fun request(target: String) {
         path = target
