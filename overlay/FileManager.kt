@@ -4635,7 +4635,13 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
         if (isDir || !isApk(name)) return@produceState
         value = withContext(Dispatchers.IO) {
             apkIconMutex.withLock {
-                apkIconCache.getOrPut(fullPath) { loadApkIcon(ctx, fullPath) }
+                val cached = apkIconCache[fullPath]
+                if (cached != null) cached
+                else {
+                    val icon = loadApkIcon(ctx, fullPath)
+                    if (icon != null) apkIconCache[fullPath] = icon  // 只存非 null（ConcurrentHashMap 不允许 null）
+                    icon
+                }
             }
         }
     }
