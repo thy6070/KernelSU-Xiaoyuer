@@ -4601,14 +4601,13 @@ private fun FsRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                .pointerInput(fullPath) {
-                    detectHorizontalDragGestures { _, dragAmount ->
-                        // 阈值提高（40f）防误触（单击/小滑动不触发）
-                        if (dragAmount > 40f) onSwipeSelect()
-                        else if (dragAmount < -40f) onSwipeDeselect()
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = {
+                        // 长按切换多选（选中/取消），不弹原菜单
+                        if (multiSelected) onSwipeDeselect() else onSwipeSelect()
                     }
-                }
+                )
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
