@@ -3744,7 +3744,7 @@ private fun ModeButton(
             val off = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "if [ -f /data/local/tmp/xy_thermal_off ] || [ -d /data/local/tmp/thermal_bak ]; then echo 1; else echo 0; fi"))
+                        "if [ -f /data/local/tmp/xy_thermal_off ] || [ -d /data/local/tmp/thermal_bak ] || [ -f /data/local/tmp/xy_thermal_stopped ]; then echo 1; elif [ \"\$(getprop init.svc.horae 2>/dev/null)\" = \"stopped\" ]; then echo 1; else echo 0; fi"))
                     val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
                     o == "1"
                 }.getOrDefault(false)
@@ -3870,7 +3870,7 @@ private fun ModeButton(
                                    "batt-therm|usb-therm) echo \$bat_t > \"\$tz/emul_temp\" 2>/dev/null ;; esac; done; " +
                                    "stop horae 2>/dev/null; " +
                                    "for i in \$(seq 0 9); do echo \$i \$t > /proc/shell-temp 2>/dev/null; done; " +
-                                   "gu=/proc/oplus-votable/GAUGE_UPDATE; if [ -d \"\$gu\" ]; then chmod 666 \"\$gu/force_val\" 2>/dev/null; echo 2000 > \"\$gu/force_val\" 2>/dev/null; chmod 666 \"\$gu/force_active\" 2>/dev/null; echo 1 > \"\$gu/force_active\" 2>/dev/null; fi; touch /data/local/tmp/xy_thermal_off")
+                                   "gu=/proc/oplus-votable/GAUGE_UPDATE; if [ -d \"\$gu\" ]; then chmod 666 \"\$gu/force_val\" 2>/dev/null; echo 2000 > \"\$gu/force_val\" 2>/dev/null; chmod 666 \"\$gu/force_active\" 2>/dev/null; echo 1 > \"\$gu/force_active\" 2>/dev/null; fi; : > /data/local/tmp/xy_thermal_stopped; for s in thermal_core thermald vendor.thermal-mediatek; do if [ \"\$(getprop init.svc.\$s)\" = \"running\" ]; then stop \$s 2>/dev/null; echo \$s >> /data/local/tmp/xy_thermal_stopped; fi; done; touch /data/local/tmp/xy_thermal_off")
                                 "已禁用温控（绿厂）"
                             } else if (sys == "mi") {
                                 // 小米：备份原配置 → 覆盖为无限制配置
@@ -3883,7 +3883,7 @@ private fun ModeButton(
                                     su("if [ -d /data/vendor/thermal ] && [ ! -d /data/local/tmp/thermal_bak ]; then " +
                                        "cp -rf /data/vendor/thermal /data/local/tmp/thermal_bak 2>/dev/null; fi; " +
                                        "mkdir -p /data/vendor/thermal; cp -f " + dir.absolutePath + "/*.conf /data/vendor/thermal/ 2>/dev/null; " +
-                                       "chmod 644 /data/vendor/thermal/*.conf 2>/dev/null; touch /data/local/tmp/xy_thermal_off")
+                                       "chmod 644 /data/vendor/thermal/*.conf 2>/dev/null; : > /data/local/tmp/xy_thermal_stopped; for s in thermal_core thermald vendor.thermal-mediatek; do if [ \"\$(getprop init.svc.\$s)\" = \"running\" ]; then stop \$s 2>/dev/null; echo \$s >> /data/local/tmp/xy_thermal_stopped; fi; done; touch /data/local/tmp/xy_thermal_off")
                                 } catch (t: Throwable) {}
                                 "已禁用温控（小米）"
                             } else {
@@ -3892,7 +3892,7 @@ private fun ModeButton(
                         } else {
                             // 恢复：绿厂 emul_temp 清空 + horae 重启；小米恢复备份
                             su("for tz in /sys/class/thermal/*; do [ -f \"\$tz/emul_temp\" ] && echo 0 > \"\$tz/emul_temp\" 2>/dev/null; done; start horae 2>/dev/null; " +
-                               "if [ -d /data/local/tmp/thermal_bak ]; then cp -rf /data/local/tmp/thermal_bak/. /data/vendor/thermal/ 2>/dev/null; rm -rf /data/local/tmp/thermal_bak; fi; rm -f /data/local/tmp/xy_thermal_off")
+                               "if [ -d /data/local/tmp/thermal_bak ]; then cp -rf /data/local/tmp/thermal_bak/. /data/vendor/thermal/ 2>/dev/null; rm -rf /data/local/tmp/thermal_bak; fi; if [ -f /data/local/tmp/xy_thermal_stopped ]; then while read s; do start \$s 2>/dev/null; done < /data/local/tmp/xy_thermal_stopped; else for s in thermal_core thermald vendor.thermal-mediatek; do start \$s 2>/dev/null; done; fi; rm -f /data/local/tmp/xy_thermal_stopped /data/local/tmp/xy_thermal_off")
                             "已恢复温控"
                         }
                     } catch (t: Throwable) { "失败: " + (t.message ?: "") }
