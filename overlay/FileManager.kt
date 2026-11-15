@@ -613,111 +613,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
     val uiCtx = androidx.compose.ui.platform.LocalContext.current
-    ProMaxIsland(
-        onNavigate = onNavigate,
-        panelOpen = panel,
-        selectedFile = selectedFile,
-        onClearSelection = { selectedFile = null },
-        onGoLeft = { pth ->
-            val f = java.io.File(pth)
-            if (f.isFile) {
-                leftPath = f.parent ?: "/"
-                leftHighlight = pth
-                refreshTick += 1
-            } else {
-                leftPath = pth
-                leftHighlight = null
-            }
-        },
-        onGoRight = { pth ->
-            val f = java.io.File(pth)
-            if (f.isFile) {
-                rightPath = f.parent ?: "/"
-                rightHighlight = pth
-                refreshTick += 1
-            } else {
-                rightPath = pth
-                rightHighlight = null
-            }
-        },
-        onExtractApp = { pkg, label ->
-            uiScope.launch {
-                withContext(Dispatchers.IO) {
-                    try {
-                        val safe = label.replace("/", "_").replace("\"", "_")
-                        val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
-                            "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
-                            "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
-                            "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
-                        ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
-                    } catch (t: Throwable) {
-                    }
-                }
-                // 提取成功 → 左侧定位高亮
-                try {
-                    val safe = label.replace("/", "_").replace("\"", "_")
-                    FileLocate.path = "/storage/emulated/0/小鱼儿/" + safe + ".apk"
-                    FileLocate.tick += 1
-                } catch (t: Throwable) {}
-                refreshTick += 1
-            }
-        },
-        onOpenStorage = { leftPath = "/storage/emulated/0" },
-        onOpenData = { rightPath = "/data" },
-        onExtract = {
-            val from = selectedFile
-            if (from != null) {
-                uiScope.launch {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            Shell.cmd("cp -rf \"$from\" \"$leftPath/\" 2>/dev/null").exec()
-                        } catch (t: Throwable) {
-                        }
-                    }
-                    refreshTick += 1
-                }
-            }
-        },
-        onDelete = {
-            val p = selectedFile
-            if (p != null) uiScope.launch {
-                withContext(Dispatchers.IO) { Shell.cmd("rm -rf \"$p\"").exec() }
-                selectedFile = null
-                refreshTick += 1
-            }
-        },
-        runMessage = runMessage,
-        runOk = runOk,
-        running = running,
-        terminalMode = showTerminal,
-        onOpenTerminal = { termFull = true },
-        onPreview = { previewPath = it },
-        termText = termText,
-        termInput = termInput,
-        onTermInput = { termInput = it },
-        onTermRun = {
-            val cmd = termInput
-            // 允许空输入（发送换行给等待中的脚本）
-            if (true) {
-                termInput = ""
-                val alive = activeProc
-                if (alive != null && alive.isAlive) {
-                    try {
-                        alive.outputStream.write((cmd + "\n").toByteArray())
-                        alive.outputStream.flush()
-                        termText = termText + cmd + "\n"
-                    } catch (t: Throwable) {
-                        termText = termText + "写入失败: " + (t.message ?: "") + "\n"
-                    }
-                } else {
-                    termText = termText + "\n$ " + cmd + "\n"
-                    uiScope.launch {
-                        val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
-                        termText = termText + out.out.joinToString("\n") + out.err.joinToString("\n") + "\n"
-                    }
-                }
-            }
-        },
         val doActionFile: (String) -> Unit = { soKey ->
             val p = longPressPath ?: selectedFile
             val apkName = p?.substringAfterLast('/') ?: ""
@@ -845,6 +740,111 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
         }
+    ProMaxIsland(
+        onNavigate = onNavigate,
+        panelOpen = panel,
+        selectedFile = selectedFile,
+        onClearSelection = { selectedFile = null },
+        onGoLeft = { pth ->
+            val f = java.io.File(pth)
+            if (f.isFile) {
+                leftPath = f.parent ?: "/"
+                leftHighlight = pth
+                refreshTick += 1
+            } else {
+                leftPath = pth
+                leftHighlight = null
+            }
+        },
+        onGoRight = { pth ->
+            val f = java.io.File(pth)
+            if (f.isFile) {
+                rightPath = f.parent ?: "/"
+                rightHighlight = pth
+                refreshTick += 1
+            } else {
+                rightPath = pth
+                rightHighlight = null
+            }
+        },
+        onExtractApp = { pkg, label ->
+            uiScope.launch {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val safe = label.replace("/", "_").replace("\"", "_")
+                        val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
+                            "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
+                            "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
+                            "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
+                        ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
+                    } catch (t: Throwable) {
+                    }
+                }
+                // 提取成功 → 左侧定位高亮
+                try {
+                    val safe = label.replace("/", "_").replace("\"", "_")
+                    FileLocate.path = "/storage/emulated/0/小鱼儿/" + safe + ".apk"
+                    FileLocate.tick += 1
+                } catch (t: Throwable) {}
+                refreshTick += 1
+            }
+        },
+        onOpenStorage = { leftPath = "/storage/emulated/0" },
+        onOpenData = { rightPath = "/data" },
+        onExtract = {
+            val from = selectedFile
+            if (from != null) {
+                uiScope.launch {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            Shell.cmd("cp -rf \"$from\" \"$leftPath/\" 2>/dev/null").exec()
+                        } catch (t: Throwable) {
+                        }
+                    }
+                    refreshTick += 1
+                }
+            }
+        },
+        onDelete = {
+            val p = selectedFile
+            if (p != null) uiScope.launch {
+                withContext(Dispatchers.IO) { Shell.cmd("rm -rf \"$p\"").exec() }
+                selectedFile = null
+                refreshTick += 1
+            }
+        },
+        runMessage = runMessage,
+        runOk = runOk,
+        running = running,
+        terminalMode = showTerminal,
+        onOpenTerminal = { termFull = true },
+        onPreview = { previewPath = it },
+        termText = termText,
+        termInput = termInput,
+        onTermInput = { termInput = it },
+        onTermRun = {
+            val cmd = termInput
+            // 允许空输入（发送换行给等待中的脚本）
+            if (true) {
+                termInput = ""
+                val alive = activeProc
+                if (alive != null && alive.isAlive) {
+                    try {
+                        alive.outputStream.write((cmd + "\n").toByteArray())
+                        alive.outputStream.flush()
+                        termText = termText + cmd + "\n"
+                    } catch (t: Throwable) {
+                        termText = termText + "写入失败: " + (t.message ?: "") + "\n"
+                    }
+                } else {
+                    termText = termText + "\n$ " + cmd + "\n"
+                    uiScope.launch {
+                        val out = withContext(Dispatchers.IO) { Shell.cmd(cmd).exec() }
+                        termText = termText + out.out.joinToString("\n") + out.err.joinToString("\n") + "\n"
+                    }
+                }
+            }
+        },
         onAction = doActionFile,
         onTermClose = { showTerminal = false },
         onSearch = { showSearch = true },
