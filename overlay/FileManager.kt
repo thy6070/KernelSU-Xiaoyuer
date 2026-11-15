@@ -769,8 +769,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     rightMultiSel = emptySet()
                     refreshTick += 1
                 }
-                return@onFileOp
-            }
+            } else run {
             val srcPath = longPressPath ?: selectedFile
             if (srcPath != null) {
                 uiScope.launch {
@@ -878,6 +877,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     runOk = true
                     runMessage = if (op == "share") null else ("已完成")
                 }
+            }
             }
         },
         onArchiveMount = {
