@@ -2303,10 +2303,10 @@ private fun ProMaxIsland(
                                                         // 未安装 → 先安装（内置 zip）；已装 → 删 disable + 启动服务
                                                         val installed = java.io.File("/data/adb/modules/oh_my_keymint/module.prop").exists()
                                                         if (!installed) installOhMyKeymint(navCtx)
+                                                        // 只删 disable + 后台启动 service.sh（service.sh 内部会跑 post-fs-data）
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
                                                             "M=/data/adb/modules/oh_my_keymint; rm -f \$M/disable 2>/dev/null; " +
-                                                            "sh \$M/post-fs-data.sh >/dev/null 2>&1; " +
-                                                            "sh \$M/service.sh >/dev/null 2>&1 &").redirectErrorStream(true).start().waitFor()
+                                                            "setsid sh \$M/service.sh >/dev/null 2>&1 &").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
                                                 android.widget.Toast.makeText(navCtx, "模块已启用（服务已启动）", android.widget.Toast.LENGTH_SHORT).show()
