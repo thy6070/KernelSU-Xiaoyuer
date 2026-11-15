@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -317,6 +318,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var refreshTick by remember { mutableStateOf(0) }
     var leftHighlight by remember { mutableStateOf<String?>(null) }
     var rightHighlight by remember { mutableStateOf<String?>(null) }
+    var leftMultiSel by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var rightMultiSel by remember { mutableStateOf<Set<String>>(emptySet()) }
     var longPressPath by remember { mutableStateOf<String?>(null) }
     var longPressIsDir by remember { mutableStateOf(false) }
     var longPressTick by remember { mutableStateOf(0) }
@@ -533,6 +536,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onRefresh = { refreshTick += 1 },
                 selectedPath = selectedFile,
                 highlightName = leftHighlight,
+                multiSel = leftMultiSel,
+                onMultiSelect = { p6 -> leftMultiSel = leftMultiSel + p6 },
+                onMultiDeselect = { p6 -> leftMultiSel = leftMultiSel - p6 },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -580,6 +586,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onRefresh = { refreshTick += 1 },
                 selectedPath = selectedFile,
                 highlightName = rightHighlight,
+                multiSel = rightMultiSel,
+                onMultiSelect = { p6 -> rightMultiSel = rightMultiSel + p6 },
+                onMultiDeselect = { p6 -> rightMultiSel = rightMultiSel - p6 },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -733,6 +742,35 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         leftPath = leftPath,
         rightPath = rightPath,
         onFileOp = { op, arg ->
+            // 多选批量：delete/copy/move 对选中列表一起执行
+            val multi = leftMultiSel + rightMultiSel
+            if (multi.size > 1) {
+                val paths = multi.toList()
+                uiScope.launch {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
+                            val list = paths.joinToString(" ") { q(it) }
+                            val cmd = when (op) {
+                                "delete" -> "rm -rf " + list
+                                "copy" -> if (arg.isNotEmpty()) "cp -rf " + list + " " + q(arg) else ""
+                                "move" -> if (arg.isNotEmpty()) "mv -f " + list + " " + q(arg) else ""
+                                else -> ""
+                            }
+                            if (cmd.isNotEmpty()) {
+                                val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
+                                    .redirectErrorStream(true).start()
+                                proc.inputStream.bufferedReader().readText()
+                                proc.waitFor()
+                            }
+                        } catch (t: Throwable) {}
+                    }
+                    leftMultiSel = emptySet()
+                    rightMultiSel = emptySet()
+                    refreshTick += 1
+                }
+                return@onFileOp
+            }
             val srcPath = longPressPath ?: selectedFile
             if (srcPath != null) {
                 uiScope.launch {
@@ -4285,6 +4323,9 @@ private fun BrowserPane(
     highlightName: String? = null,
     onLongPress: (String) -> Unit = {},
     onRefresh: () -> Unit = {},
+    multiSel: Set<String> = emptySet(),
+    onMultiSelect: (String) -> Unit = {},
+    onMultiDeselect: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
@@ -4398,6 +4439,9 @@ private fun BrowserPane(
                 selected = selectedPath == rowPath,
                 highlight = highlightName,
                 isLast = idx == entries.lastIndex,
+                multiSelected = multiSel.contains(rowPath),
+                onSwipeSelect = { onMultiSelect(rowPath) },
+                onSwipeDeselect = { onMultiDeselect(rowPath) },
                 onClick = {
                     if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
@@ -4415,6 +4459,9 @@ private fun FsRow(
     selected: Boolean = false,
     highlight: String? = null,
     isLast: Boolean = false,
+    multiSelected: Boolean = false,
+    onSwipeSelect: () -> Unit = {},
+    onSwipeDeselect: () -> Unit = {},
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
@@ -4424,8 +4471,15 @@ private fun FsRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .pointerInput(fullPath) {
+                    detectHorizontalDragGestures { _, dragAmount ->
+                        if (dragAmount > 6f) onSwipeSelect()
+                        else if (dragAmount < -6f) onSwipeDeselect()
+                    }
+                }
                 .background(
-                    if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
+                    if (multiSelected) Color(0x88FF69B4)
+                    else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
                     else Color.Transparent
                 )
                 .padding(horizontal = 14.dp, vertical = 12.dp),
