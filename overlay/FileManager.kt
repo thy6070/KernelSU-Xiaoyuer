@@ -5033,13 +5033,18 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
     try {
         val zip = java.io.File(ctx.cacheDir, "ohmykeymint.zip")
         ctx.assets.open("ohmykeymint.zip").use { i -> zip.outputStream().use { o -> i.copyTo(o) } }
-        val cmd = "if command -v ksud >/dev/null 2>&1; then ksud install '" + zip.absolutePath + "' 2>&1; " +
-            "else mkdir -p /data/adb/modules/oh_my_keymint && unzip -o -q '" + zip.absolutePath + "' -d /data/adb/modules/oh_my_keymint 2>&1; fi"
+        // 手动解压安装（ksud install 不可靠）
+        val cmd = "rm -rf /data/adb/modules/oh_my_keymint; " +
+            "mkdir -p /data/adb/modules/oh_my_keymint; " +
+            "unzip -o -q '" + zip.absolutePath + "' -d /data/adb/modules/oh_my_keymint 2>&1; " +
+            "chmod 755 /data/adb/modules/oh_my_keymint/*.sh 2>/dev/null; " +
+            "test -s /data/adb/modules/oh_my_keymint/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
         val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
         val out = pr.inputStream.bufferedReader().readText()
         pr.waitFor()
+        val ok = out.contains("INSTALL_OK")
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            android.widget.Toast.makeText(ctx, "已安装 OhMyKeymint（重启生效）", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(ctx, if (ok) "已安装 OhMyKeymint（重启生效）" else "安装失败", android.widget.Toast.LENGTH_LONG).show()
         }
     } catch (t: Throwable) {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
