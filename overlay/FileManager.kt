@@ -1108,7 +1108,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     Spacer(Modifier.height(14.dp))
                     androidx.compose.material3.LinearProgressIndicator(
                         progress = { (updateProgress / 100f).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        color = Color(0xFFFFFFFF),
+                        trackColor = Color(0xFFFFFFFF)
                     )
                     Text(updateProgress.toString() + "%", modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 12.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 }
