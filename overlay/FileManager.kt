@@ -319,6 +319,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var refreshTick by remember { mutableStateOf(0) }
     var leftHighlight by remember { mutableStateOf<String?>(null) }
     var rightHighlight by remember { mutableStateOf<String?>(null) }
+    var showSearch by remember { mutableStateOf(false) }
+    var searchQ by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<String>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
     var leftMultiSel by remember { mutableStateOf<Set<String>>(emptySet()) }
     var rightMultiSel by remember { mutableStateOf<Set<String>>(emptySet()) }
     var longPressPath by remember { mutableStateOf<String?>(null) }
@@ -1078,10 +1082,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
 
     // ===== 搜索文件 =====
-    var showSearch by remember { mutableStateOf(false) }
-    var searchQ by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<String>>(emptyList()) }
-    var searching by remember { mutableStateOf(false) }
     if (showSearch) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { showSearch = false }) {
             Column(
@@ -1112,8 +1112,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             val res = withContext(Dispatchers.IO) {
                                 try {
                                     val q = searchQ.replace("'", "'\''")
-                                    val out = sh("find /storage/emulated/0 /data -iname '*" + q + "*' -type f 2>/dev/null | head -100", 15L)
-                                    out.lines().filter { it.isNotBlank() }
+                                    Shell.cmd("find /storage/emulated/0 /data -iname '*" + q + "*' -type f 2>/dev/null | head -100").exec().out
+                                        .filter { it.isNotBlank() }
                                 } catch (t: Throwable) { emptyList() }
                             }
                             searchResults = res
