@@ -3480,7 +3480,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                 }
             }
             ModeButton(Icons.Outlined.DarkMode, "FPS+", subtitle = "根据帧率调节频率")
-            ModeButton(Icons.Outlined.AcUnit, "能量守恒", subtitle = devLabel)
+            ModeButton(Icons.Outlined.AcUnit, "禁用温控", subtitle = "小米/OPPO禁用温控")
             ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3", onRun = {
                 onDismiss()
                 onRunExec(it)
@@ -3521,8 +3521,25 @@ private fun ModeButton(
     var on by remember { mutableStateOf(false) }
     var clickTick by remember { mutableStateOf(0) }
     var onInitDone by remember { mutableStateOf(false) }
-    // 只有“能量守恒”检测 xy_perf_daemon 状态；其他按钮各自检测（FPS+ 读 prefs 等）
+    // 禁用温控：识别系统（小米/绿厂）
     LaunchedEffect(Unit) {
+        if (title == "禁用温控") {
+            val sysName = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                        "b=$(getprop ro.product.brand 2>/dev/null); m=$(getprop ro.product.manufacturer 2>/dev/null); " +
+                        "case \"$b$m\" in *Xiaomi*|*xiaomi*|*Redmi*|*redmi*|*POCO*|*poco*) echo mi ;; " +
+                        "*OnePlus*|*oneplus*|*OPPO*|*oppo*|*realme*|*oplus*|*Oplus*) echo oplus ;; " +
+                        "*) echo other ;; esac"))
+                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
+                    o.trim()
+                }.getOrDefault("other")
+            }
+            on = false
+            onInitDone = true
+            return@LaunchedEffect
+        }
+        // 只有“能量守恒”检测 xy_perf_daemon 状态；其他按钮各自检测（FPS+ 读 prefs 等）
         if (title == "能量守恒") {
             val running = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
@@ -3611,6 +3628,59 @@ private fun ModeButton(
             val enabling = on
             ctx3.getSharedPreferences("settings", 0).edit().putBoolean("fps_plus", enabling).apply()
             latencyMsg = if (enabling) "已开启（按实时帧率调节）" else "已关闭"
+            return@LaunchedEffect
+        }
+        if (title == "禁用温控") {
+            val enabling = on
+            latencyMsg = "处理中…"
+            scope2.launch {
+                val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        fun su(c: String): String {
+                            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
+                            val o = pr.inputStream.bufferedReader().readText()
+                            pr.waitFor()
+                            return o
+                        }
+                        // 系统识别
+                        val sys = su("b=$(getprop ro.product.brand 2>/dev/null); m=$(getprop ro.product.manufacturer 2>/dev/null); " +
+                            "case \"$b$m\" in *Xiaomi*|*xiaomi*|*Redmi*|*redmi*|*POCO*|*poco*) echo mi ;; " +
+                            "*OnePlus*|*oneplus*|*OPPO*|*oppo*|*realme*|*oplus*|*Oplus*) echo oplus ;; *) echo other ;; esac").trim()
+                        if (enabling) {
+                            if (sys == "oplus") {
+                                // 绿厂：复刻 Extreme GT（emul_temp 虚报 + stop horae + shell-temp + GAUGE）
+                                su("t=29500; bat_t=29500; " +
+                                   "for tz in /sys/class/thermal/*; do [ -f \"\$tz/temp\" ] || continue; " +
+                                   "case \$(cat \"\$tz/type\" 2>/dev/null) in " +
+                                   "rear-tof-therm|cam-flash-therm|wlan-therm|xo-therm|oplus_thermal_ipa|shell*) echo \$t > \"\$tz/emul_temp\" 2>/dev/null ;; " +
+                                   "batt-therm|usb-therm) echo \$bat_t > \"\$tz/emul_temp\" 2>/dev/null ;; esac; done; " +
+                                   "stop horae 2>/dev/null; " +
+                                   "for i in \$(seq 0 9); do echo \$i \$t > /proc/shell-temp 2>/dev/null; done; " +
+                                   "gu=/proc/oplus-votable/GAUGE_UPDATE; if [ -d \"\$gu\" ]; then chmod 666 \"\$gu/force_val\" 2>/dev/null; echo 2000 > \"\$gu/force_val\" 2>/dev/null; chmod 666 \"\$gu/force_active\" 2>/dev/null; echo 1 > \"\$gu/force_active\" 2>/dev/null; fi")
+                                "已禁用温控（绿厂）"
+                            } else if (sys == "mi") {
+                                // 小米：释放 assets 温控配置 → /data/vendor/thermal/
+                                try {
+                                    val dir = java.io.File(ctx3.filesDir, "mi_thermal")
+                                    dir.mkdirs()
+                                    ctx3.assets.list("mi_thermal")?.forEach { n ->
+                                        try { ctx3.assets.open("mi_thermal/" + n).use { i -> java.io.File(dir, n).outputStream().use { o -> i.copyTo(o) } } } catch (t: Throwable) {}
+                                    }
+                                    su("mkdir -p /data/vendor/thermal; cp -f " + dir.absolutePath + "/*.conf /data/vendor/thermal/ 2>/dev/null; chmod 644 /data/vendor/thermal/*.conf 2>/dev/null")
+                                } catch (t: Throwable) {}
+                                "已禁用温控（小米）"
+                            } else {
+                                "未识别系统"
+                            }
+                        } else {
+                            // 恢复：emul_temp 清空 + horae 重启
+                            su("for tz in /sys/class/thermal/*; do [ -f \"\$tz/emul_temp\" ] && echo 0 > \"\$tz/emul_temp\" 2>/dev/null; done; start horae 2>/dev/null")
+                            "已恢复温控"
+                        }
+                    } catch (t: Throwable) { "失败: " + (t.message ?: "") }
+                }
+                latencyMsg = msg
+            }
             return@LaunchedEffect
         }
         if (title == "能量守恒") {
