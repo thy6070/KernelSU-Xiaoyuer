@@ -567,7 +567,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     selectedFile = null
                     longPressPath = null
                     rightHighlight = null
-                    rightPath = np2
+                    // 从压缩包临时目录返回 → 回到压缩包原目录
+                    if (rightPath == "/data/local/tmp/yx_arch" && np2.startsWith("/data/local/tmp")) {
+                        rightPath = archiveReturnPath ?: np2
+                    } else {
+                        rightPath = np2
+                    }
                 },
                 onLongPress = { lp ->
                     longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
@@ -878,7 +883,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val arch = java.io.File("/data/local/tmp/yx_arch")
                     val hasContent = runCatching { arch.listFiles()?.isNotEmpty() == true }.getOrDefault(false)
                     if (hasContent) {
-                        leftPath = "/data/local/tmp/yx_arch"
+                        // 只刷新触发「进入」的那一侧，并从头显示（不恢复旧滚动位置）
+                        archiveReturnPath = if (longPressFromRight) rightPath else leftPath
+                        dirScroll.remove("/data/local/tmp/yx_arch")
+                        if (longPressFromRight) rightPath = "/data/local/tmp/yx_arch"
+                        else leftPath = "/data/local/tmp/yx_arch"
                     } else {
                         runMessage = "解压失败或无内容"
                     }
@@ -4999,7 +5008,7 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
         "【小米】Xiaomi 14 Ultra", "【小米】Xiaomi Pad 8 Pro", "【小米】Xiaomi Pad 7 Ultra",
         "【小米】Xiaomi MIX Fold 4",
         // ── 红米（2026）──
-        "【红米】Redmi K Pad", "【红米】Redmi K90 Pro Max", "【红米】Redmi K90 Pro", "【红米】Redmi K90",
+        "【红米】Redmi K Pad 2", "【红米】Redmi K Pad", "【红米】Redmi K90 Pro Max", "【红米】Redmi K90 Pro", "【红米】Redmi K90",
         "【红米】Redmi Turbo 5 Pro", "【红米】Redmi Pad 3 Pro",
         // ── 红米（2025）──
         "【红米】Redmi K80 Pro", "【红米】Redmi K80 Ultra", "【红米】Redmi K70 Pro",
@@ -5079,6 +5088,7 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
             // 显示名 -> 真实型号（游戏按 ro.product.model 识别）
             val realModel = when (m) {
                 // 已验证的真实型号
+                "Redmi K Pad 2" -> "26048RP6AC"
                 "Redmi K Pad" -> "25079RPDCC"
                 "Xiaomi Pad 8 Pro" -> "25091RP04C"
                 "Xiaomi 15 Ultra" -> "25010PN30C"
@@ -5090,67 +5100,45 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                 "Xiaomi 14 Ultra" -> "24030PN60C"
                 else -> m
             }
-            val origFp = sp.getString("orig_fingerprint", "") ?: ""
-            // 指纹：替换 brand/model
-            val newFp = if (origFp.isNotEmpty()) {
-                origFp.replaceFirst(Regex("^(\\w+)/"), brand.lowercase() + "/")
-                    .replaceFirst(Regex("/[^/]+:"), "/" + realModel.replace(" ", "_") + ":")
-            } else ""
-            // 按源码优化：7组基础 + 5前缀×4 全量写入
-            val code = realModel.replace(" ", "_").lowercase()
-            val mfr = brand
-            val baseKeys = listOf("brand", "manufacturer", "model", "device", "name", "marketname")
-            val baseVals = listOf(brand, mfr, realModel, code, code, realModel)
-            val propScript = StringBuilder()
-            for (i in baseKeys.indices) {
-                propScript.append("resetprop ro.product.").append(baseKeys[i]).append(" '").append(baseVals[i]).append("' 2>/dev/null\n")
+            // ── 模块形式：只写白名单 3 条属性 ──
+            // 由 KernelSU/Magisk 在 post-fs-data 阶段用 resetprop -n 内存态加载，
+            // 重启即还原；出问题删 /data/adb/modules/xy_spoof 即可，永不影响开机。
+            // 写法对齐「全局机型模拟-红米 K Pad 2」模块：brand 用厂商官方写法、manufacturer 填真厂商
+            val (spoofBrand, spoofMfr) = when (brand) {
+                "Redmi" -> "REDMI" to "Xiaomi"
+                "Xiaomi" -> "Xiaomi" to "Xiaomi"
+                "HUAWEI" -> "HUAWEI" to "HUAWEI"
+                "OPPO" -> "OPPO" to "OPPO"
+                "vivo" -> "vivo" to "vivo"
+                "iQOO" -> "iQOO" to "vivo"
+                "真我" -> "realme" to "realme"
+                "一加" -> "OnePlus" to "OnePlus"
+                "红魔" -> "REDMAGIC" to "nubia"
+                "荣耀" -> "HONOR" to "HONOR"
+                "三星" -> "samsung" to "samsung"
+                "ROG" -> "ASUS" to "ASUS"
+                else -> brand to brand
             }
-            propScript.append("resetprop ro.build.product '").append(code).append("' 2>/dev/null\n")
-            // 前缀扩展：全分区（含 dlkm，游戏/校验会读 vendor/odm 分区）
-            for (pre in listOf("ro.product.", "ro.product.system.", "ro.product.vendor.", "ro.product.odm.", "ro.product.product.",
-                               "ro.product.odm_dlkm.", "ro.product.vendor_dlkm.", "ro.product.system_dlkm.", "ro.product.system_ext.")) {
-                for (k in listOf("brand", "manufacturer", "model", "device", "name")) {
-                    val v = when (k) {
-                        "brand" -> brand
-                        "manufacturer" -> mfr
-                        "model" -> m
-                        else -> code
-                    }
-                    propScript.append("resetprop ").append(pre).append(k).append(" '").append(v).append("' 2>/dev/null\n")
-                }
-            }
-            // 指纹：按源码重新生成 brand/code/code:release/id/incremental:user/release-keys
-            propScript.append("REL=\$(getprop ro.build.version.release); ")
-            propScript.append("BID=\$(getprop ro.build.id); ")
-            propScript.append("INC=\$(getprop ro.build.version.incremental); ")
-            propScript.append("NEWFP=\"").append(brand.lowercase()).append("/").append(code).append("/").append(code)
-                .append(":\$REL/\$BID/\$INC:user/release-keys\"; ")
-            // attestation 属性（游戏/系统校验用）
-            propScript.append("resetprop ro.product.model_for_attestation '").append(realModel).append("' 2>/dev/null\n")
-            propScript.append("resetprop ro.product.brand_for_attestation '").append(brand).append("' 2>/dev/null\n")
-            propScript.append("resetprop ro.product.name_for_attestation '").append(code).append("' 2>/dev/null\n")
-            // SoC 展示属性（K Pad = 天玑 9400+ MT6991，联发科；不动 ro.hardware，驱动依赖）
-            propScript.append("resetprop ro.soc.manufacturer 'Mediatek' 2>/dev/null\n")
-            propScript.append("resetprop ro.soc.model 'MT6991' 2>/dev/null\n")
-            propScript.append("resetprop ro.board.platform 'mt6991' 2>/dev/null\n")
-            // 全部分区指纹都要一致（否则游戏校验伪装失败）
-            for (fp in listOf("ro.build.fingerprint", "ro.system.build.fingerprint", "ro.vendor.build.fingerprint",
-                              "ro.odm.build.fingerprint", "ro.product.build.fingerprint", "ro.bootimage.build.fingerprint",
-                              "ro.odm_dlkm.build.fingerprint", "ro.vendor_dlkm.build.fingerprint", "ro.system_ext.build.fingerprint")) {
-                propScript.append("resetprop ").append(fp).append(" \"\$NEWFP\" 2>/dev/null\n")
-            }
-            // 持久化脚本：post-fs-data（zygote 启动前执行，Build.* 才能生效）
-            val persist = "mkdir -p /data/adb/post-fs-data.d; " +
-                    "cat > /data/adb/post-fs-data.d/xy_spoof.sh <<'XYEOF'\n#!/system/bin/sh\n" +
-                    propScript.toString() +
-                    "XYEOF\nchmod 755 /data/adb/post-fs-data.d/xy_spoof.sh; " +
-                    "rm -f /data/adb/service.d/xy_spoof.sh 2>/dev/null; "
-            val cmd = propScript.toString() + persist
-            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+            val modDir = "/data/adb/modules/xy_spoof"
+            val sysProp = "ro.product.brand=" + spoofBrand + "\n" +
+                    "ro.product.manufacturer=" + spoofMfr + "\n" +
+                    "ro.product.model=" + realModel + "\n"
+            val modProp = "id=xy_spoof\n" +
+                    "name=机型伪装 " + m + "\n" +
+                    "version=1.0\n" +
+                    "versionCode=1\n" +
+                    "author=Xiaoyuer\n" +
+                    "description=仅改 model/brand/manufacturer（内存态，可安全移除）\n"
+            val cmd = "mkdir -p " + modDir + "; " +
+                    "printf '%s\\n' " + shq(modProp) + " > " + modDir + "/module.prop; " +
+                    "printf '%s\\n' " + shq(sysProp) + " > " + modDir + "/system.prop; " +
+                    "chmod 644 " + modDir + "/module.prop " + modDir + "/system.prop; " +
+                    "rm -f /data/adb/post-fs-data.d/xy_spoof.sh /data/adb/service.d/xy_spoof.sh; " +
+                    "true"
+            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd))
             pr.waitFor()
-            writeOpLog(ctx, "改机型 → " + m + " | fingerprint=" + newFp)
-            val fpShow = if (newFp.isNotEmpty()) "\n指纹: " + newFp.take(48) + "..." else ""
-            android.widget.Toast.makeText(ctx, "已伪装: " + m + "（永久生效）" + fpShow, android.widget.Toast.LENGTH_LONG).show()
+            writeOpLog(ctx, "改机型 → " + m + " | model=" + realModel)
+            android.widget.Toast.makeText(ctx, "已设置机型: " + m + "\n重启后生效，可在模块列表停用或点\"恢复原样\"", android.widget.Toast.LENGTH_LONG).show()
         } catch (t: Throwable) {
             android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
         }
@@ -5216,14 +5204,17 @@ internal fun restoreDeviceModel(ctx: android.content.Context) {
         val om = sp.getString("orig_model", "") ?: ""
         val ob = sp.getString("orig_brand", "") ?: ""
         val of = sp.getString("orig_fingerprint", "") ?: ""
-        val cmd = "rm -f /data/adb/service.d/xy_spoof.sh; " +
-                "resetprop ro.product.model '" + om + "' 2>&1; " +
-                "resetprop ro.product.brand '" + ob + "' 2>&1; " +
-                "resetprop ro.build.fingerprint '" + of + "' 2>&1"
-        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+        // 删模块 + 清掉旧版本遗留的持久脚本（老实现写在 post-fs-data.d，必须一起删）
+        val cmd = "rm -rf /data/adb/modules/xy_spoof; " +
+                "rm -f /data/adb/post-fs-data.d/xy_spoof.sh /data/adb/service.d/xy_spoof.sh; " +
+                (if (om.isNotEmpty()) "resetprop ro.product.model " + shq(om) + "; " else "") +
+                (if (ob.isNotEmpty()) "resetprop ro.product.brand " + shq(ob) + "; resetprop ro.product.manufacturer " + shq(ob) + "; " else "") +
+                (if (of.isNotEmpty()) "resetprop ro.build.fingerprint " + shq(of) + "; " else "") +
+                "true"
+        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd))
         pr.waitFor()
-        writeOpLog(ctx, "恢复机型 → " + om + " | " + ob + " | " + of)
-        android.widget.Toast.makeText(ctx, "已恢复原机型（永久撤销）", android.widget.Toast.LENGTH_LONG).show()
+        writeOpLog(ctx, "恢复机型 → " + om + " | " + ob)
+        android.widget.Toast.makeText(ctx, "已移除机型伪装（重启后彻底还原）", android.widget.Toast.LENGTH_LONG).show()
     } catch (t: Throwable) {
         android.widget.Toast.makeText(ctx, "恢复失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
