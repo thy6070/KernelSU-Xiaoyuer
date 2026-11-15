@@ -780,9 +780,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     } catch (t: Throwable) {
                     }
                 }
-                // 提取成功 → 左侧定位高亮
+                // 提取成功 → 按活动区域定位高亮
                 try {
                     val safe = label.replace("/", "_").replace("\"", "_")
+                    FileLocate.side = if (longPressFromRight) "R" else "L"
                     FileLocate.path = "/storage/emulated/0/小鱼儿/" + safe + ".apk"
                     FileLocate.tick += 1
                 } catch (t: Throwable) {}
@@ -3078,14 +3079,15 @@ private fun ProMaxIsland(
                                     ) {
                                         Box(modifier = Modifier.weight(1f)) {
                                             IslandActionButton("data", Color(0xFF3A3A3C)) {
-                                                paneTarget = "/data/"
-                                                switchStep(3)
+                                                // 直接按活动区域跳转（不再点一下）
+                                                if (fromRight) onGoRight("/data/") else onGoLeft("/data/")
+                                                closeIsland()
                                             }
                                         }
                                         Box(modifier = Modifier.weight(1f)) {
                                             IslandActionButton("储存", Color(0xFF0A84FF)) {
-                                                paneTarget = "/storage/emulated/0/"
-                                                switchStep(3)
+                                                if (fromRight) onGoRight("/storage/emulated/0/") else onGoLeft("/storage/emulated/0/")
+                                                closeIsland()
                                             }
                                         }
                                     }
