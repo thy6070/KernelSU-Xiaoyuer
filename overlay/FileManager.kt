@@ -41,6 +41,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -4476,6 +4477,7 @@ private fun BrowserPane(
     modifier: Modifier = Modifier
 ) {
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
+    var multiMode by remember { mutableStateOf(false) }
     var pullDy by remember { mutableStateOf(0f) }
     val refreshRef = androidx.compose.runtime.rememberUpdatedState(onRefresh)
     val pullConn = remember {
@@ -4545,7 +4547,10 @@ private fun BrowserPane(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = parent != path) { onNavigate(parent) }
+                    .clickable(enabled = parent != path) {
+                    if (multiMode) { multiMode = false; onMultiDeselect("") }
+                    else onNavigate(parent)
+                }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -4587,8 +4592,10 @@ private fun BrowserPane(
                 highlight = highlightName,
                 isLast = idx == entries.lastIndex,
                 multiSelected = multiSel.contains(rowPath),
+                multiMode = multiMode,
                 onSwipeSelect = { onMultiSelect(rowPath) },
                 onSwipeDeselect = { onMultiDeselect(rowPath) },
+                onLongPressEnterMulti = { multiMode = true },
                 onClick = {
                     if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
@@ -4607,8 +4614,10 @@ private fun FsRow(
     highlight: String? = null,
     isLast: Boolean = false,
     multiSelected: Boolean = false,
+    multiMode: Boolean = false,
     onSwipeSelect: () -> Unit = {},
     onSwipeDeselect: () -> Unit = {},
+    onLongPressEnterMulti: () -> Unit = {},
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
@@ -4617,13 +4626,14 @@ private fun FsRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = {
-                        // 长按切换多选（选中/取消），不弹原菜单
-                        if (multiSelected) onSwipeDeselect() else onSwipeSelect()
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .pointerInput(fullPath) {
+                    // 长按后拖动：向右 → 选中，向左 → 取消（长按向右多选）
+                    detectDragGesturesAfterLongPress { _, dragAmount ->
+                        if (dragAmount.x > 30f) onSwipeSelect()
+                        else if (dragAmount.x < -30f) onSwipeDeselect()
                     }
-                )
+                }
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
