@@ -1452,38 +1452,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         if (path.endsWith(".so")) {
                             selectedFile = path
                             forceSoPanelTick += 1
-                            return@ModePanel
-                        }
-                        uiScope.launch {
-                            running = true
-                            termText = ""
-                            runMessage = null
-                            showTerminal = true
-                            withContext(Dispatchers.IO) {
-                                try {
-                                    fun q3(s: String) = "'" + s.replace("'", "'\\''") + "'"
-                                    val cmd = "export HOME=/data/local/tmp; export TMPDIR=/data/local/tmp; " +
-                                        "cd " + q3(java.io.File(path).parent ?: "/") + " 2>/dev/null; " +
-                                        "chmod 755 " + q3(path) + " 2>/dev/null; " +
-                                        "sh " + q3(path) + " 2>&1"
-                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
-                                    activeProc = pr
-                                    pr.inputStream.bufferedReader().useLines { ls ->
-                                        ls.forEach { line ->
-                                            withContext(Dispatchers.Main) {
-                                                termText = (termText + line + "\n").takeLast(20000)
-                                            }
-                                        }
-                                    }
-                                    pr.waitFor()
-                                } catch (t: Throwable) {
-                                    withContext(Dispatchers.Main) {
-                                        termText += "执行失败: " + (t.message ?: "") + "\n"
-                                    }
-                                }
-                            }
-                            activeProc = null
-                            running = false
+                        } else {
+                            // 完全复用正常点击 sh 的执行（doActionFile）
+                            selectedFile = path
+                            doActionFile("")
                         }
                     },
                     onDismiss = {
