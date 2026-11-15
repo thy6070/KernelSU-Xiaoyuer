@@ -1145,11 +1145,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                 }
                                             }
                                         }
-                                        // 下载完成：提示手动安装（不自动装/不自动定位，避免闪退）
+                                        // 下载完成：复制到 Download（版本号命名）+ 定位（不自动安装）
+                                        val verName = (updateVer ?: "update") + ".apk"
+                                        val dlPath = "/storage/emulated/0/Download/" + verName
+                                        try {
+                                            ProcessBuilder("su", "-c", "cp -f '" + dst.absolutePath + "' '" + dlPath + "' && chmod 644 '" + dlPath + "'").redirectErrorStream(true).start().waitFor()
+                                        } catch (t: Throwable) {}
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                             updateProgress = -1
                                             updateVer = null
-                                            runMessage = "已下载: " + dst.absolutePath + "（请手动安装）"
+                                            runMessage = "已下载: " + dlPath + "（请手动安装）"
+                                            try {
+                                                FileLocate.path = dlPath
+                                                FileLocate.tick += 1
+                                            } catch (t: Throwable) {}
                                         }
                                     } catch (t: Throwable) {
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
