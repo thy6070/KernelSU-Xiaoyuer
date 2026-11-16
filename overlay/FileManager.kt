@@ -4031,9 +4031,10 @@ private fun ModeButton(
                         pr.waitFor()
                         return o
                     }
-                    val mod = q("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/dev/null | head -n1").trim()
+                    val mod = q("grep -l 'alwaysstrong\\|小鱼儿附属' /data/adb/modules/*/module.prop 2>/dev/null | head -n1").trim()
                     val vs = q("getprop ro.boot.verifiedbootstate 2>/dev/null").trim()
-                    mod.isNotEmpty() || vs == "green"
+                    val lk = q("getprop ro.boot.flash.locked 2>/dev/null").trim()
+                    mod.isNotEmpty() || (vs == "green" && lk == "1")
                 } catch (t: Throwable) {
                     false
                 }
@@ -4276,8 +4277,10 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                         "resetprop --delete ro.boot.veritymode 2>/dev/null; " +
                                         "resetprop --delete ro.secureboot.lockstate 2>/dev/null; " +
                                         "resetprop --delete ro.boot.warranty_bit 2>/dev/null; true")
-                                    su("for m in /data/adb/modules/AlwaysStrong /data/adb/modules/alwaysstrong; do [ -d \"\$m\" ] && touch \"\$m/remove\"; done 2>/dev/null; true")
-                                    "已恢复 BL 状态"
+                                    su("for d in /data/adb/modules/*/; do " +
+                                        "if [ -f \"\${d}module.prop\" ] && grep -qi 'alwaysstrong\\|小鱼儿附属' \"\${d}module.prop\" 2>/dev/null; then rm -rf \"\$d\"; fi; done; " +
+                                        "pkill -9 -f 'alwaysstrong' 2>/dev/null; pkill -9 -f 'keybox' 2>/dev/null; true")
+                                    "已恢复 BL 状态（模块已卸载）"
                                 }
                             } catch (t: Throwable) {
                                 "操作失败"
@@ -6977,14 +6980,15 @@ class FpsOverlayService : Service() {
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do av=\$(cat \$p/scaling_available_governors 2>/dev/null); " +
            "case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null ;; " +
            "*schedutil*) echo schedutil > \$p/scaling_governor 2>/dev/null ;; esac; done", 1L)
-        // 写 AppOpt.json（cpuset 名改系统风格，防检测）
+        // 写 AppOpt.json：复用系统自带的 top-app 组，不再新建自定义 cpuset（自定义组会被检测列举出来）
         try {
             File(filesDir, "AppOpt.json").writeText(
-                "{\n  \"mode\": 0,\n  \"check_interval\": 5,\n  \"cpuset_name\": \"system_bg\",\n  \"config_file\": \"" + conf.absolutePath + "\",\n  \"web_enable\": false\n}"
+                "{\n  \"mode\": 0,\n  \"check_interval\": 5,\n  \"cpuset_name\": \"top-app\",\n  \"config_file\": \"" + conf.absolutePath + "\",\n  \"web_enable\": false\n}"
             )
         } catch (t: Throwable) {}
-        // 启动 AppOpt（eBPF 事件驱动，常驻）
-        sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
+        // 启动 AppOpt（eBPF 事件驱动，常驻）；顺手清掉旧版本留下的自定义 cpuset 组
+        sh("rmdir /dev/cpuset/system_bg /dev/cpuset/AppOpt 2>/dev/null; " +
+           "pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
         bindChannel = "eBPF"; logLine("绑核通道=eBPF(AppOpt) big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
     }
 
