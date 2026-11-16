@@ -6546,7 +6546,7 @@ class FpsOverlayService : Service() {
     private fun stopDaemon() {
         try {
             val d = filesDir.absolutePath
-            sh("D=${d}; [ -f \$D/fps_pid ] && kill -9 \$(cat \$D/fps_pid) 2>/dev/null; rm -f \$D/fps_pid", 3L)
+            sh("D=${d}; [ -f \$D/fps_pid ] && kill -9 \$(cat \$D/fps_pid) 2>/dev/null; pkill -f fpsring.sh 2>/dev/null; rm -f \$D/fps_pid", 3L)
         } catch (t: Throwable) {}
         daemonLayer = null
     }
@@ -6555,6 +6555,24 @@ class FpsOverlayService : Service() {
         if (layer == daemonLayer) return
         stopDaemon()
         val d = filesDir.absolutePath
+        // Android 16 起 --latency 对 BLAST 层返回全 0（128 槽全 0），改用 SurfaceFlinger 的 FPS ring buffer
+        if (android.os.Build.VERSION.SDK_INT >= 36) {
+            try {
+                val s = File(filesDir, "fpsring.sh")
+                s.writeText("#!/system/bin/sh\n" +
+                    "while true; do\n" +
+                    "  V=\$(dumpsys SurfaceFlinger 2>/dev/null | grep -A12 'FPS ring buffer' | grep 'fps=' | sort -k2 | tail -1 | grep -oE 'fps=[0-9]+(\\.[0-9]+)?' | cut -d= -f2)\n" +
+                    "  [ -n \"\$V\" ] && printf '%s\\n' \"\$V\" > " + d + "/fps_raw\n" +
+                    "  sleep 1\n" +
+                    "done\n")
+                s.setExecutable(true)
+                sh("chmod 755 " + s.absolutePath + "; pkill -f fpsring.sh 2>/dev/null; setsid sh " + s.absolutePath + " </dev/null >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
+            } catch (t: Throwable) {}
+            daemonLayer = layer
+            daemonStartedAt = System.currentTimeMillis()
+            logLine("Android 16 → FPS ring buffer 模式")
+            return
+        }
         // 优先 native fpsbinder2（libbinder 直连，零 fork）
         val bin = File(filesDir, "fpsbinder2")
         if (!bin.exists()) {
@@ -6592,6 +6610,11 @@ class FpsOverlayService : Service() {
                 return null
             }
             val text = f.readText()
+            // ring buffer 模式：文件里只有一个纯数字（fps）
+            val single = text.trim()
+            if (single.isNotEmpty() && !single.contains('\n') && Regex("^[0-9]+(\\.[0-9]+)?$").matches(single)) {
+                return single.toDoubleOrNull()
+            }
             val ns = text.lineSequence().firstOrNull()?.trim()?.toLongOrNull() ?: 0L
             if (ns > 0L) panelHz = 1_000_000_000.0 / ns
             parseLatencyText(text)
