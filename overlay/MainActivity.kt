@@ -155,6 +155,8 @@ class MainActivity : ComponentActivity() {
 
         val isManager = Natives.isManager
         if (isManager && Natives.kernelUAPIVersion == Natives.managerUAPIVersion) install()
+        // 首次启动自动安装内置模块（仅未安装时，静默）
+        try { me.weishu.kernelsu.ui.screen.ensureBuiltinKeymint(this) } catch (t: Throwable) {}
 
         if (savedInstanceState == null) intent?.let { intentChannel.trySend(it) }
 
