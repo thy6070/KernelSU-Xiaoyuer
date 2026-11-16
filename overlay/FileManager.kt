@@ -6555,31 +6555,7 @@ class FpsOverlayService : Service() {
         if (layer == daemonLayer) return
         stopDaemon()
         val d = filesDir.absolutePath
-        // 先实测这一层的 --latency 到底有没有帧时间戳；个别 ROM/设备（如某台 K Pad）会全返回 0
-        val probe = sh("dumpsys SurfaceFlinger --latency '" + layer + "' 2>/dev/null | head -6", 2L)
-        val hasFrames = probe.lineSequence().drop(1).any { ln ->
-            val p = ln.trim().split("\t")
-            p.size >= 3 && (p[0] != "0" || p[1] != "0" || p[2] != "0")
-        }
-        if (!hasFrames) {
-            // 该层读不到帧 → 用 SurfaceFlinger 的 FPS ring buffer（全局帧率，每秒一条）
-            logLine("--latency 无数据，改用 FPS ring buffer")
-            try {
-                val s = File(filesDir, "fpsring.sh")
-                s.writeText("#!/system/bin/sh\n" +
-                    "while true; do\n" +
-                    "  V=\$(dumpsys SurfaceFlinger 2>/dev/null | grep -A12 'FPS ring buffer' | grep 'fps=' | sort -k2 | tail -1 | grep -oE 'fps=[0-9]+(\\.[0-9]+)?' | cut -d= -f2)\n" +
-                    "  [ -n \"\$V\" ] && printf '%s\\n' \"\$V\" > " + d + "/fps_raw\n" +
-                    "  sleep 1\n" +
-                    "done\n")
-                s.setExecutable(true)
-                sh("chmod 755 " + s.absolutePath + "; pkill -f fpsring.sh 2>/dev/null; setsid sh " + s.absolutePath + " </dev/null >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
-            } catch (t: Throwable) {}
-            daemonLayer = layer
-            daemonStartedAt = System.currentTimeMillis()
-            logLine("ring buffer 模式（--latency 无帧数据）")
-            return
-        }
+        // native fpsbinder2 内部自带自适应：--latency 有帧就用它，全 0 则切 SurfaceFlinger 的 FPS ring buffer
         // 优先 native fpsbinder2（libbinder 直连，零 fork）
         val bin = File(filesDir, "fpsbinder2")
         if (!bin.exists()) {
