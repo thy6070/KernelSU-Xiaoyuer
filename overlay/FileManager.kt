@@ -1790,7 +1790,7 @@ private fun ProMaxIsland(
             modules = withContext(Dispatchers.IO) {
                 try {
                     val ids = Shell.cmd("ls -1 /data/adb/modules 2>/dev/null").exec().out
-                        .filter { it.isNotBlank() && it != "oh_my_keymint" }  // 不显示认证模块
+                        .filter { it.isNotBlank() && it != "oh_my_keymint" && it != "xy_spoof" }  // 内置功能模块不显示
                     ids.mapNotNull { id ->
                         val prop = Shell.cmd("cat /data/adb/modules/$id/module.prop 2>/dev/null").exec().out
                         if (prop.isEmpty()) null else {
