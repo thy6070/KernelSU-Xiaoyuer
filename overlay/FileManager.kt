@@ -6636,11 +6636,18 @@ class FpsOverlayService : Service() {
             // 不能按 hex 排除（之前错误排除导致选 VRI 层读不到数据）
             // 强约束：只认前台应用自己的层，避免选中壁纸/系统动画层算出假帧率
             if (activePkg.isNotEmpty() && !n.contains(activePkg)) continue
+            // Android 16：RequestedLayerState{<hex> com.pkg/...#id}，--latency 要的是去掉前导 hex 的真层名
+            val stripped = n.replaceFirst(Regex("^[0-9a-fA-F]{4,} "), "")
             var sc = 0
             if (n.contains("SurfaceView")) sc += 100
             // 游戏真正出帧的是带 (BLAST) 后缀的那个 SurfaceView 层
             if (n.contains("(BLAST)")) sc += 60
-            scored.add(n to sc)
+            if (stripped != n) {
+                scored.add(stripped to (sc + 10))   // 真层名优先
+                scored.add(n to sc)
+            } else {
+                scored.add(n to sc)
+            }
         }
         if (scored.isEmpty()) {
             // 兜底：严格规则没匹配到（Android 16/17 层名可能变化）→ 宽松匹配含包名的层
@@ -6653,7 +6660,9 @@ class FpsOverlayService : Service() {
                 if (activePkg.isNotEmpty() && n.contains(activePkg) && n.contains("#") &&
                     !n.contains("ActivityRecord") && !n.contains("InputSink") &&
                     !n.contains("Background for ") && !n.contains("BackgroundFor")) {
-                    loose.add(n)
+                    val stripped = n.replaceFirst(Regex("^[0-9a-fA-F]{4,} "), "")
+                    if (stripped != n && !loose.contains(stripped)) loose.add(stripped)
+                    if (!loose.contains(n)) loose.add(n)
                 }
             }
             if (loose.isNotEmpty()) {
