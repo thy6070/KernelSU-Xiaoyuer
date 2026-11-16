@@ -48,7 +48,31 @@ internal suspend fun prepareWebView(
     withContext(Dispatchers.IO) {
         val repo = ModuleRepositoryImpl()
         val modules = repo.getModules().getOrDefault(emptyList())
-        val moduleInfo = modules.find { info -> info.id == moduleId }
+        // builtin 模块不在 /data/adb/modules 里，模块列表读不到，这里单独兜底构造
+        val moduleInfo = modules.find { info -> info.id == moduleId } ?: run {
+            val dir = java.io.File("/data/adb/ksu/builtin/$moduleId")
+            if (dir.isDirectory && java.io.File(dir, "webroot").isDirectory) {
+                me.weishu.kernelsu.data.model.Module(
+                    id = moduleId,
+                    name = moduleId,
+                    author = "",
+                    version = "",
+                    versionCode = 0,
+                    description = "",
+                    enabled = !java.io.File(dir, "disable").exists(),
+                    update = false,
+                    remove = false,
+                    updateJson = "",
+                    hasWebUi = true,
+                    hasActionScript = false,
+                    metamodule = false,
+                    actionIconPath = null,
+                    webUiIconPath = null,
+                )
+            } else {
+                null
+            }
+        }
 
         if (moduleInfo == null) {
             withContext(Dispatchers.Main) {
