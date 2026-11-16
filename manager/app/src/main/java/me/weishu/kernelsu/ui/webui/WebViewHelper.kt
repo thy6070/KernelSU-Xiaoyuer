@@ -65,7 +65,11 @@ internal suspend fun prepareWebView(
         }
 
         webUIState.moduleName = moduleInfo.name
-        webUIState.modDir = "/data/adb/modules/${moduleId}"
+        webUIState.modDir = if (java.io.File("/data/adb/modules/${moduleId}").exists()) {
+            "/data/adb/modules/${moduleId}"
+        } else {
+            "/data/adb/ksu/builtin/${moduleId}"
+        }
 
         if (SuperUserViewModel.apps.isEmpty()) {
             SuperUserViewModel().fetchAppList()
