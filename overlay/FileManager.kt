@@ -7119,31 +7119,48 @@ class FpsOverlayService : Service() {
     // 自适应调频（闭环）：帧率稳定降频省电，掉帧升频保帧
     private var lastAdaptMs = 0L
     private var lastAdaptLog = 0L
-    private var adaptIdx = 100  // 0-100 频率比例
+    private var adaptIdx = 100
+    private var adaptUpStreak = 0
+    private var adaptDownStreak = 0  // 0-100 频率比例
+    // 自适应调频（Scene 风格）：2 秒周期 + 目标帧率比对 + 每次一档 + 降频迟滞
+    //   fps 低于目标 95%  → 立即升档（保帧率）
+    //   fps 连续 3 次高于目标 → 降一档（省电，不激进）
+    //   其他情况保持，避免来回震荡
     private fun adaptiveFreq(fps: Double) {
         val now = System.currentTimeMillis()
-        if (now - lastAdaptMs < 400L) return  // 2.5Hz 更新
+        if (now - lastAdaptMs < 2000L) return   // 2s 调节周期
         lastAdaptMs = now
-        // 锁帧检测：游戏锁 60/90/120 时，目标=该档（否则按面板）
+        // 目标帧率：游戏锁帧档（60/90/120/144/165）优先，否则用面板刷新率
         val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
         val lockedTier = stdTiers.firstOrNull { kotlin.math.abs(it - fps) <= 2.0 }
         val target = if (lockedTier != null && lockedTier < panelHz - 5) lockedTier else panelHz.coerceAtLeast(60.0)
+        if (target <= 0.0) return
         val ratio = fps / target
-        // 闭环（Scene 风格）：达标保持、掉帧快升、明显超目标才降。
-        // 之前 ratio>=0.92 就降档，导致 60 帧游戏被一路压到 30% 下限再猛升，来回震荡。
-        val step = when {
-            ratio < 0.90 -> 6        // 掉帧：快速升频
-            ratio > 1.08 -> -3       // 超过目标 8% 以上：降频省电
-            else -> 0                // 达标（0.90~1.08）：保持不动
+        if (ratio < 0.95) {
+            adaptUpStreak++
+            adaptDownStreak = 0
+        } else if (ratio > 1.02) {
+            adaptDownStreak++
+            adaptUpStreak = 0
+        } else {
+            adaptUpStreak = 0
+            adaptDownStreak = 0
         }
-        val oldIdx = adaptIdx
-        adaptIdx = (adaptIdx + step).coerceIn(45, 100)
-        val pct = adaptIdx
-        if (step != 0 && now - lastAdaptLog >= 1000L) {
+        var step = 0
+        if (adaptUpStreak >= 1) {          // 掉帧：立即升一档
+            step = 2
+            adaptUpStreak = 0
+        } else if (adaptDownStreak >= 3) { // 连续 3 个周期超目标才降一档
+            step = -1
+            adaptDownStreak = 0
+        }
+        adaptIdx = (adaptIdx + step).coerceIn(50, 100)
+        if (step != 0 && now - lastAdaptLog >= 1500L) {
             lastAdaptLog = now
             logLine("自适应调频: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
                 " 比例=" + String.format("%.2f", ratio) + " 档位=" + adaptIdx + "%")
         }
+        val pct = adaptIdx
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
            "mn=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); mx=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); " +
            "[ -n \"\$mn\" ] && [ -n \"\$mx\" ] && echo \$(( mn + (mx - mn) * " + pct + " / 100 )) > \$p/scaling_max_freq 2>/dev/null; done", 1L)
