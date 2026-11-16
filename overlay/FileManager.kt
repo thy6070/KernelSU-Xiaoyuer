@@ -2476,12 +2476,10 @@ private fun ProMaxIsland(
                                                             "ksud module disable oh_my_keymint 2>/dev/null; " +
                                                             "pkill -9 -f 'keymint-daemon' 2>/dev/null; pkill -9 -f 'injector-daemon' 2>/dev/null; " +
                                                             "pkill -9 -f '/data/adb/modules/oh_my_keymint/daemon' 2>/dev/null; " +
-                                                            "rm -rf /data/adb/modules/oh_my_keymint 2>/dev/null; " +
-                                                            "rm -rf /data/misc/keystore/omk 2>/dev/null; " +
-                                                            "rm -rf /data/adb/omk 2>/dev/null").redirectErrorStream(true).start().waitFor()
+                                                            "true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
-                                                android.widget.Toast.makeText(navCtx, "模块已关闭（服务已停）", android.widget.Toast.LENGTH_SHORT).show()
+                                                android.widget.Toast.makeText(navCtx, "模块已关闭（重启后彻底生效）", android.widget.Toast.LENGTH_SHORT).show()
                                             })
                                     }
                                 }
@@ -5172,6 +5170,26 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
             android.widget.Toast.makeText(ctx, "安装失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
+}
+
+// 首次启动自动安装内置模块（静默，仅当未安装时；装好后走模块列表过滤，不显示）
+internal fun ensureBuiltinKeymint(ctx: android.content.Context) {
+    Thread {
+        try {
+            if (java.io.File("/data/adb/modules/oh_my_keymint/module.prop").exists()) return@Thread
+            val zip = java.io.File(ctx.cacheDir, "ohmykeymint.zip")
+            ctx.assets.open("ohmykeymint.zip").use { i -> zip.outputStream().use { o -> i.copyTo(o) } }
+            val cmd = "mkdir -p /data/adb/modules/oh_my_keymint; " +
+                "unzip -o -q '" + zip.absolutePath.replace("'", "'\\''") + "' -d /data/adb/modules/oh_my_keymint 2>&1; " +
+                "chmod 755 /data/adb/modules/oh_my_keymint/*.sh 2>/dev/null; " +
+                "touch /data/adb/modules/oh_my_keymint/disable; " +
+                "test -s /data/adb/modules/oh_my_keymint/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
+            val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
+            pr.inputStream.bufferedReader().readText()
+            pr.waitFor()
+        } catch (t: Throwable) {
+        }
+    }.start()
 }
 
 // 防设备标记（复刻 Fish 工具箱：备份权限 + 清 ano_tmp + 重置设备 ID + 权限 000）
