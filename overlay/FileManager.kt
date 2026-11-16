@@ -7021,8 +7021,7 @@ class FpsOverlayService : Service() {
             activePkg + "{*Net*}" + "=" + small + "\n" +
             activePkg + "{*net*}" + "=" + small + "\n" +
             activePkg + "{*binder*}" + "=" + small + "\n" +
-            "# 其他 -> 中核\n" +
-            activePkg + "{*}" + "=" + mid + "\n")
+            "# 兜底规则故意不给 {*}：未匹配线程走 base=大核，避免主线程被兜到中核\n")
         // 调速器（骁龙/天玑自适应）：sugov_ext（MTK 平滑）/ schedutil（高通）
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do av=\$(cat \$p/scaling_available_governors 2>/dev/null); " +
            "case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null ;; " +
