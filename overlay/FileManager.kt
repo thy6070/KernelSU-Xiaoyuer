@@ -1035,6 +1035,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Shell.getShell().close()
                     } catch (t: Throwable) {
                     }
+                    // 移动/复制完成后：选中并高亮目标目录里刚过去的那份文件
+                    if (op == "move" || op == "copy") {
+                        val dest = arg.trimEnd('/') + "/" + srcPath.substringAfterLast('/')
+                        selectedFile = dest
+                        if (arg.trimEnd('/') == leftPath.trimEnd('/')) leftHighlight = dest
+                        else if (arg.trimEnd('/') == rightPath.trimEnd('/')) rightHighlight = dest
+                    }
                     refreshTick += 1
                     longPressPath = null
                     if (op == "delete") selectedFile = null   // 删除后清掉选中，否则快捷条还挂着
