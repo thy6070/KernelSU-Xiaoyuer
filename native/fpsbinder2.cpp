@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <string>
 #include <dlfcn.h>
+#include <time.h>
 
 using namespace android;
 
@@ -73,6 +74,38 @@ static double timestatsLayerFps(const std::string &d, const std::string &pkg) {
         pos = leSafe + 1;
     }
     return -1.0;
+}
+
+// 从 --timestats -dump 里取包含该包名的层的 totalFrames（累计帧数）
+static long long timestatsLayerFrames(const std::string &d, const std::string &pkg, bool *found) {
+    *found = false;
+    if (pkg.empty()) return 0;
+    size_t pos = 0;
+    while (pos < d.size()) {
+        size_t ln = d.find("layerName = ", pos);
+        if (ln == std::string::npos) return 0;
+        size_t le = d.find('\n', ln);
+        size_t leSafe = (le == std::string::npos) ? d.size() : le;
+        std::string lname = d.substr(ln + 12, leSafe - (ln + 12));
+        size_t nextLayer = d.find("layerName = ", leSafe + 1);
+        size_t segEnd = (nextLayer == std::string::npos) ? d.size() : nextLayer;
+        if (lname.find(pkg) != std::string::npos && lname.find("SurfaceView") != std::string::npos) {
+            size_t tf = d.find("totalFrames = ", leSafe);
+            if (tf != std::string::npos && tf < segEnd) {
+                long long v = atoll(d.c_str() + tf + 14);
+                *found = true;
+                return v;
+            }
+        }
+        pos = leSafe + 1;
+    }
+    return 0;
+}
+
+static long long nowNs() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long) ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
 static bool dumpTo(android::sp<IBinder> &sf, const Vector<String16> &args, std::string &out) {
@@ -132,6 +165,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "sf ok pkg=%s\n", pkg.c_str());
 
     bool tsMode = false;
+    long long lastFrames = -1;
+    long long lastNs = 0;
 
     while (true) {
         if (!tsMode) {
@@ -166,13 +201,20 @@ int main(int argc, char **argv) {
                 usleep(1000 * 1000);
                 continue;
             }
-            double v = timestatsLayerFps(data, pkg);
-            if (v > 0.0) {
-                char b[32];
-                snprintf(b, sizeof b, "%.2f\n", v);
-                writeOut(outFile, std::string(b));
+            bool found = false;
+            long long frames = timestatsLayerFrames(data, pkg, &found);
+            long long t = nowNs();
+            if (found && lastFrames >= 0 && t > lastNs) {
+                double dt = (t - lastNs) / 1e9;
+                double v = (frames - lastFrames) / dt;
+                if (v >= 0.0 && v < 2000.0) {
+                    char b[32];
+                    snprintf(b, sizeof b, "%.2f\n", v);
+                    writeOut(outFile, std::string(b));
+                }
             }
-            usleep(1000 * 1000);
+            if (found) { lastFrames = frames; lastNs = t; }
+            usleep(900 * 1000);
         }
     }
     return 0;
