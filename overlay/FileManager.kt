@@ -6976,7 +6976,7 @@ class FpsOverlayService : Service() {
             }
             if (fb.exists() && fb.length() > 10000) {
                 fb.setExecutable(true)
-                sh("pkill -x fpsbind 2>/dev/null; chmod 755 " + fb.absolutePath + "; setsid " + fb.absolutePath + " " + big + " " + small + " " + mid + " " + activePkg + " >> " + filesDir.absolutePath + "/fpsbind.log 2>&1 &", 2L)
+                sh("pkill -x fpsbind 2>/dev/null; chmod 755 " + fb.absolutePath + "; setsid " + fb.absolutePath + " " + cpusToMask(big) + " " + cpusToMask(small) + " " + cpusToMask(mid) + " " + activePkg + " >> " + filesDir.absolutePath + "/fpsbind.log 2>&1 &", 2L)
                 bindChannel = "netlink"; logLine("绑核通道=netlink(fpsbind) big=" + big + " mid=" + mid + " small=" + small)
             }
             return
