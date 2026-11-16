@@ -2324,7 +2324,9 @@ private fun ProMaxIsland(
                                         // 用 su 检测（App 无权限直接读 /data/adb）
                                         val pr = ProcessBuilder(suBin(), "--mount-master", "-c",
                                             "M=/data/adb/modules/oh_my_keymint; " +
-                                            "[ -s \$M/module.prop ] && [ ! -e \$M/disable ] && echo ON || echo OFF")
+                                            "[ -s \$M/module.prop ] && [ ! -e \$M/disable ] && " +
+                                            "ps -A -o ARGS 2>/dev/null | grep -qE '[k]eymint-daemon|[i]njector-daemon|oh_my_keymint/[d]aemon' " +
+                                            "&& echo ON || echo OFF")
                                             .redirectErrorStream(true).start()
                                         val o = pr.inputStream.bufferedReader().readText()
                                         pr.waitFor()
