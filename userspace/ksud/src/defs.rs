@@ -28,6 +28,8 @@ mod android {
     pub const DAEMON_LINK_PATH: &str = concatcp!(BINARY_DIR, "ksud");
 
     pub const MODULE_DIR: &str = concatcp!(ADB_DIR, "modules/");
+    // 内置模块目录：随管理器分发、不进模块列表、由 ksud 直接加载
+    pub const BUILTIN_DIR: &str = concatcp!(WORKING_DIR, "builtin/");
     pub const MODULE_UPDATE_DIR: &str = concatcp!(ADB_DIR, "modules_update/");
     pub const METAMODULE_DIR: &str = concatcp!(ADB_DIR, "metamodule/");
     // Replaced module dirs are parked here until the next boot
