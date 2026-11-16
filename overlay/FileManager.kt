@@ -7128,11 +7128,16 @@ class FpsOverlayService : Service() {
         val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
         val lockedTier = stdTiers.firstOrNull { kotlin.math.abs(it - fps) <= 2.0 }
         val target = if (lockedTier != null && lockedTier < panelHz - 5) lockedTier else panelHz.coerceAtLeast(60.0)
-        val ratio = (fps / target).coerceIn(0.3, 1.0)
-        // 闭环：帧率偏高 → 降档；偏低 → 升档（每次一步，防抖）
-        val step = if (ratio >= 0.92) -4 else if (ratio < 0.75) 8 else 0
+        val ratio = fps / target
+        // 闭环（Scene 风格）：达标保持、掉帧快升、明显超目标才降。
+        // 之前 ratio>=0.92 就降档，导致 60 帧游戏被一路压到 30% 下限再猛升，来回震荡。
+        val step = when {
+            ratio < 0.90 -> 6        // 掉帧：快速升频
+            ratio > 1.08 -> -3       // 超过目标 8% 以上：降频省电
+            else -> 0                // 达标（0.90~1.08）：保持不动
+        }
         val oldIdx = adaptIdx
-        adaptIdx = (adaptIdx + step).coerceIn(30, 100)
+        adaptIdx = (adaptIdx + step).coerceIn(45, 100)
         val pct = adaptIdx
         if (step != 0 && now - lastAdaptLog >= 1000L) {
             lastAdaptLog = now
