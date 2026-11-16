@@ -2458,8 +2458,9 @@ private fun ProMaxIsland(
                                                         if (!installed) installOhMyKeymint(navCtx)
                                                         // KSU 原版命令：ksud module enable + 启动 service
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "ksud module enable oh_my_keymint 2>/dev/null; " +
                                                             "M=/data/adb/modules/oh_my_keymint; " +
+                                                            "rm -f \$M/disable; " +
+                                                            "ksud module enable oh_my_keymint 2>/dev/null; " +
                                                             "setsid sh \$M/service.sh >/dev/null 2>&1 &").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
@@ -2473,6 +2474,7 @@ private fun ProMaxIsland(
                                                 Thread {
                                                     try {
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                            "M=/data/adb/modules/oh_my_keymint; touch \$M/disable; " +
                                                             "ksud module disable oh_my_keymint 2>/dev/null; " +
                                                             "pkill -9 -f 'keymint-daemon' 2>/dev/null; pkill -9 -f 'injector-daemon' 2>/dev/null; " +
                                                             "pkill -9 -f '/data/adb/modules/oh_my_keymint/daemon' 2>/dev/null; " +
