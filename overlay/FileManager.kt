@@ -2549,6 +2549,37 @@ private fun ProMaxIsland(
                                             color = if (fpsShow) Color(0xFF5A5A5E) else Color.White)
                                     }
                                 }
+                                // 目标帧率：90/120/144/165 循环，0=自动
+                                var fpsTarget by remember {
+                                    mutableStateOf(
+                                        try { navCtx.getSharedPreferences("settings", 0).getInt("fps_target", 0) } catch (t: Throwable) { 0 }
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            val next = when (fpsTarget) {
+                                                0 -> 90; 90 -> 120; 120 -> 144; 144 -> 165; else -> 0
+                                            }
+                                            fpsTarget = next
+                                            navCtx.getSharedPreferences("settings", 0).edit().putInt("fps_target", next).apply()
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "目标帧率\nFPS+ 按此档位调节频率（自动=按游戏/面板）",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = if (fpsTarget == 0) "自动" else fpsTarget.toString(),
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF0A84FF)
+                                    )
+                                }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
@@ -7130,13 +7161,21 @@ class FpsOverlayService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastAdaptMs < 2000L) return   // 2s 调节周期
         lastAdaptMs = now
-        // 目标帧率：游戏锁帧档（60/90/120/144/165）优先，否则用面板刷新率
-        val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
-        val lockedTier = stdTiers.firstOrNull { kotlin.math.abs(it - fps) <= 2.0 }
-        val target = if (lockedTier != null && lockedTier < panelHz - 5) lockedTier else panelHz.coerceAtLeast(60.0)
+        // 目标帧率：手动档（90/120/144/165）优先；0=自动（游戏锁帧档，否则面板刷新率）
+        val manualTarget = try {
+            getSharedPreferences("settings", 0).getInt("fps_target", 0)
+        } catch (t: Throwable) { 0 }
+        val target = if (manualTarget > 0) {
+            manualTarget.toDouble()
+        } else {
+            val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
+            val lockedTier = stdTiers.firstOrNull { kotlin.math.abs(it - fps) <= 2.0 }
+            if (lockedTier != null && lockedTier < panelHz - 5) lockedTier else panelHz.coerceAtLeast(60.0)
+        }
         if (target <= 0.0) return
         val ratio = fps / target
-        if (ratio < 0.95) {
+        // 没到目标就调：如目标 90、实际 87 → 立即升频（不留 5% 死区）
+        if (ratio < 0.99) {
             adaptUpStreak++
             adaptDownStreak = 0
         } else if (ratio > 1.02) {
