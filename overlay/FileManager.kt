@@ -7171,8 +7171,8 @@ class FpsOverlayService : Service() {
             return
         }
         if (panelHz <= 0.0) return
-        // 64 帧以下：不触发；若已在 boost 则强制退出（60 帧游戏不补帧）
-        if (fps < 64.0) {
+        // 66 帧以下：不触发；若已在 boost 则强制退出（60 帧游戏波动不补帧）
+        if (fps < 66.0) {
             fpsPlusLow = 0
             if (fpsPlusBoosted) {
                 fpsPlusBoosted = false
