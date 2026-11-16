@@ -2324,9 +2324,7 @@ private fun ProMaxIsland(
                                         // 用 su 检测（App 无权限直接读 /data/adb）
                                         val pr = ProcessBuilder(suBin(), "--mount-master", "-c",
                                             "M=/data/adb/modules/oh_my_keymint; " +
-                                            "[ -s \$M/module.prop ] && [ ! -e \$M/disable ] && " +
-                                            "ps -A -o ARGS 2>/dev/null | grep -qE '[k]eymint-daemon|[i]njector-daemon|oh_my_keymint/[d]aemon' " +
-                                            "&& echo ON || echo OFF")
+                                            "[ -s \$M/module.prop ] && [ ! -e \$M/disable ] && echo ON || echo OFF")
                                             .redirectErrorStream(true).start()
                                         val o = pr.inputStream.bufferedReader().readText()
                                         pr.waitFor()
@@ -2462,11 +2460,10 @@ private fun ProMaxIsland(
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
                                                             "M=/data/adb/modules/oh_my_keymint; " +
                                                             "rm -f \$M/disable; " +
-                                                            "ksud module enable oh_my_keymint 2>/dev/null; " +
-                                                            "setsid sh \$M/service.sh >/dev/null 2>&1 &").redirectErrorStream(true).start().waitFor()
+                                                            "ksud module enable oh_my_keymint 2>/dev/null; true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
-                                                android.widget.Toast.makeText(navCtx, "模块已启用（服务已启动）", android.widget.Toast.LENGTH_SHORT).show()
+                                                android.widget.Toast.makeText(navCtx, "已启用（重启后生效）", android.widget.Toast.LENGTH_SHORT).show()
                                             })
                                         Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
                                         Text(text = "关", fontSize = 12.sp,
@@ -2477,13 +2474,10 @@ private fun ProMaxIsland(
                                                     try {
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
                                                             "M=/data/adb/modules/oh_my_keymint; touch \$M/disable; " +
-                                                            "ksud module disable oh_my_keymint 2>/dev/null; " +
-                                                            "pkill -9 -f 'keymint-daemon' 2>/dev/null; pkill -9 -f 'injector-daemon' 2>/dev/null; " +
-                                                            "pkill -9 -f '/data/adb/modules/oh_my_keymint/daemon' 2>/dev/null; " +
-                                                            "true").redirectErrorStream(true).start().waitFor()
+                                                            "ksud module disable oh_my_keymint 2>/dev/null; true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
-                                                android.widget.Toast.makeText(navCtx, "模块已关闭（重启后彻底生效）", android.widget.Toast.LENGTH_SHORT).show()
+                                                android.widget.Toast.makeText(navCtx, "已停用（重启后生效）", android.widget.Toast.LENGTH_SHORT).show()
                                             })
                                     }
                                 }
