@@ -6963,31 +6963,24 @@ class FpsOverlayService : Service() {
             groups.add(m to parts[1].replace(" ", ","))
         }
         if (groups.size < 2) return
-        // 自适应芯片结构（按 max_freq 升序）：small=最低组；mid=倒数第二组；big=最高两组并集
-        //  4+3+1 → small 0-3 / mid 4-6 / big 4-7
-        //  4+4   → small 0-3 / mid 0-3 / big 4-7
-        //  4+2+2 → small 0-3 / mid 4-5 / big 4-7
-        //  单组   → 全部同一组
-        val small: String
-        val mid: String
-        val big: String
-        when {
-            groups.size >= 3 -> {
-                small = groups[0].second
-                mid = groups[groups.size - 2].second
-                big = (groups[groups.size - 1].second + "," + groups[groups.size - 2].second)
-                    .split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(",")
-            }
-            groups.size == 2 -> {
-                small = groups[0].second
-                mid = groups[0].second
-                big = groups[1].second
-            }
-            else -> {
-                small = groups[0].second
-                mid = groups[0].second
-                big = groups[0].second
-            }
+        // 自适应芯片结构（任意组数，按 max_freq 升序）：
+        //   big  = 最高两组的并集（保证大核至少两档，避免只绑单核）
+        //   mid  = 中间所有组（4 组以上时）；3 组取中间那组；2 组及以下取最低组
+        //   small= 最低组
+        val small = groups[0].second
+        val bigFrom = if (groups.size >= 2) groups.size - 2 else 0
+        fun mergeGroups(from: Int, toExclusive: Int): String =
+            groups.subList(from, toExclusive)
+                .flatMap { it.second.split(",") }
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .joinToString(",")
+        val big = mergeGroups(bigFrom, groups.size)
+        val mid = when {
+            groups.size >= 4 -> mergeGroups(1, groups.size - 2)
+            groups.size == 3 -> groups[1].second
+            else -> groups[0].second
         }
         // 双通道：eBPF 优先（AppOpt），不支持则走 netlink（fpsbind）
         val hasEbpf = sh("ls /sys/fs/bpf >/dev/null 2>&1 && ls /sys/kernel/btf/vmlinux >/dev/null 2>&1 && echo yes", 1L).trim() == "yes"
