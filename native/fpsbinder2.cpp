@@ -2,10 +2,10 @@
 // 链接符号运行时由设备 libbinder.so 解析（CI 里用 --unresolved-symbols=ignore-all）。
 // 用法：fpsbinder2 <layer> [interval_ms] [output_file]
 //
-// 自适应两种数据源：
-//   1) 默认走 SurfaceFlinger --latency <layer>（121 行：刷新周期 + 128 帧槽）
-//   2) 若该层 --latency 全为 0（部分 ROM/设备 BLAST 层不吐时间戳），
-//      自动切到 SurfaceFlinger 的 FPS ring buffer（每秒一条全局 fps），写纯数字输出。
+// 数据源自适应（同一进程内完成）：
+//   1) 首选 SurfaceFlinger --latency <layer>：逐帧 present 时间戳（121 行），最准
+//   2) 若该层 --latency 全为 0（部分 ROM 不记录 BLAST 层时间戳），
+//      切到 --timestats 的【分层】统计，取该游戏层的 averageFPS（仍是游戏层，不是全局屏幕帧率）
 #include <binder/ProcessState.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
@@ -23,7 +23,7 @@
 
 using namespace android;
 
-// --latency 输出里是否真有帧时间戳（第 2 行起，出现非 "0\t0\t0" 的行）
+// --latency 输出里是否真有帧时间戳（第 2 行起出现非 "0\t0\t0"）
 static bool latencyHasFrames(const std::string &d) {
     size_t i = d.find('\n');
     if (i == std::string::npos) return false;
@@ -42,32 +42,37 @@ static bool latencyHasFrames(const std::string &d) {
     return false;
 }
 
-// 从完整 SurfaceFlinger dump 里取 "FPS ring buffer:" 之后时间最新的一条 fps
-static double ringFps(const std::string &d) {
-    size_t p = d.find("FPS ring buffer:");
-    if (p == std::string::npos) return -1.0;
-    size_t lim = p + 3000;
-    if (lim > d.size()) lim = d.size();
-    double best = -1.0;
-    std::string bestT;
-    size_t i = p;
-    while (i < lim) {
-        size_t e = d.find('\n', i);
-        if (e == std::string::npos) e = lim;
-        std::string line = d.substr(i, e - i);
-        size_t fp = line.find("fps=");
-        if (fp != std::string::npos) {
-            size_t close = line.find(')');
-            std::string t = (close != std::string::npos) ? line.substr(close + 1, 16) : "";
-            double v = atof(line.c_str() + fp + 4);
-            if (v > 0.0 && (best < 0.0 || t > bestT)) {
-                best = v;
-                bestT = t;
+// 从层名里提取包名：..."com.tencent.tmgp.pubgmhd/..." → com.tencent.tmgp.pubgmhd
+static std::string pkgOf(const std::string &layer) {
+    size_t p = layer.find("com.");
+    if (p == std::string::npos) return "";
+    size_t e = layer.find('/', p);
+    if (e == std::string::npos) e = layer.find(']', p);
+    if (e == std::string::npos) e = layer.size();
+    return layer.substr(p, e - p);
+}
+
+// 从 --timestats -dump 里取包含该包名的层的 averageFPS（游戏层，不是全局）
+static double timestatsLayerFps(const std::string &d, const std::string &pkg) {
+    if (pkg.empty()) return -1.0;
+    size_t pos = 0;
+    while (pos < d.size()) {
+        size_t ln = d.find("layerName = ", pos);
+        if (ln == std::string::npos) return -1.0;
+        size_t le = d.find('\n', ln);
+        size_t leSafe = (le == std::string::npos) ? d.size() : le;
+        std::string lname = d.substr(ln + 12, leSafe - (ln + 12));
+        size_t nextLayer = d.find("layerName = ", leSafe + 1);
+        size_t segEnd = (nextLayer == std::string::npos) ? d.size() : nextLayer;
+        if (lname.find(pkg) != std::string::npos) {
+            size_t fp = d.find("averageFPS = ", leSafe);
+            if (fp != std::string::npos && fp < segEnd) {
+                return atof(d.c_str() + fp + 13);
             }
         }
-        i = e + 1;
+        pos = leSafe + 1;
     }
-    return best;
+    return -1.0;
 }
 
 static bool dumpTo(android::sp<IBinder> &sf, const Vector<String16> &args, std::string &out) {
@@ -108,6 +113,8 @@ int main(int argc, char **argv) {
     }
     int intervalMs = argc > 2 ? atoi(argv[2]) : 80;
     const char *outFile = argc > 3 ? argv[3] : nullptr;
+    std::string layer = argv[1];
+    std::string pkg = pkgOf(layer);
 
     dlopen("libbinder.so", RTLD_NOW | RTLD_GLOBAL);
     dlopen("libutils.so", RTLD_NOW | RTLD_GLOBAL);
@@ -122,13 +129,13 @@ int main(int argc, char **argv) {
         fprintf(stderr, "SurfaceFlinger not found\n");
         return 1;
     }
-    fprintf(stderr, "sf ok\n");
+    fprintf(stderr, "sf ok pkg=%s\n", pkg.c_str());
 
-    bool ringMode = false;
+    bool tsMode = false;
 
     while (true) {
-        std::string data;
-        if (!ringMode) {
+        if (!tsMode) {
+            std::string data;
             Vector<String16> args;
             args.add(String16("--latency"));
             args.add(String16(argv[1]));
@@ -137,21 +144,29 @@ int main(int argc, char **argv) {
                 continue;
             }
             if (!latencyHasFrames(data)) {
-                // 该层 --latency 全 0：切 ring buffer 模式
-                ringMode = true;
-                fprintf(stderr, "latency all zero -> ring buffer mode\n");
-                usleep(200 * 1000);
+                // 该层 --latency 全 0：切 timestats 按层统计（同一个游戏层）
+                Vector<String16> en;
+                en.add(String16("--timestats"));
+                en.add(String16("-enable"));
+                std::string tmp;
+                dumpTo(sf, en, tmp);
+                tsMode = true;
+                fprintf(stderr, "latency all zero -> timestats per-layer mode\n");
+                usleep(500 * 1000);
                 continue;
             }
             writeOut(outFile, data);
             usleep(intervalMs * 1000);
         } else {
-            Vector<String16> empty;
-            if (!dumpTo(sf, empty, data)) {
+            Vector<String16> args;
+            args.add(String16("--timestats"));
+            args.add(String16("-dump"));
+            std::string data;
+            if (!dumpTo(sf, args, data)) {
                 usleep(1000 * 1000);
                 continue;
             }
-            double v = ringFps(data);
+            double v = timestatsLayerFps(data, pkg);
             if (v > 0.0) {
                 char b[32];
                 snprintf(b, sizeof b, "%.2f\n", v);
