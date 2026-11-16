@@ -6877,7 +6877,10 @@ class FpsOverlayService : Service() {
                 } else {
                     zeroCount = 0
                 }
-                showFps(fpsRaw, reading = true)
+                // 只显示游戏帧率：包名命中游戏，或当前出帧层是 SurfaceView；
+                // 桌面、系统设置、普通 App 一律显示 --
+                val isGameFront = isGamePkg(activePkg) || (layerName?.contains("SurfaceView") == true)
+                if (isGameFront) showFps(fpsRaw, reading = true) else showFps(0.0, reading = false)
                 // FPS+ 开启 + 游戏 → 常驻 fpsbind（掉帧重绑）
                 if (!fpsBindStarted && isGamePkg(activePkg)) {
                     val fpOn = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
