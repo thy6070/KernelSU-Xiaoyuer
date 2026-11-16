@@ -6963,9 +6963,32 @@ class FpsOverlayService : Service() {
             groups.add(m to parts[1].replace(" ", ","))
         }
         if (groups.size < 2) return
-        val small = groups[0].second
-        val mid = if (groups.size >= 3) groups[1].second else groups[0].second
-        val big = groups.last().second
+        // 自适应芯片结构（按 max_freq 升序）：small=最低组；mid=倒数第二组；big=最高两组并集
+        //  4+3+1 → small 0-3 / mid 4-6 / big 4-7
+        //  4+4   → small 0-3 / mid 0-3 / big 4-7
+        //  4+2+2 → small 0-3 / mid 4-5 / big 4-7
+        //  单组   → 全部同一组
+        val small: String
+        val mid: String
+        val big: String
+        when {
+            groups.size >= 3 -> {
+                small = groups[0].second
+                mid = groups[groups.size - 2].second
+                big = (groups[groups.size - 1].second + "," + groups[groups.size - 2].second)
+                    .split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(",")
+            }
+            groups.size == 2 -> {
+                small = groups[0].second
+                mid = groups[0].second
+                big = groups[1].second
+            }
+            else -> {
+                small = groups[0].second
+                mid = groups[0].second
+                big = groups[0].second
+            }
+        }
         // 双通道：eBPF 优先（AppOpt），不支持则走 netlink（fpsbind）
         val hasEbpf = sh("ls /sys/fs/bpf >/dev/null 2>&1 && ls /sys/kernel/btf/vmlinux >/dev/null 2>&1 && echo yes", 1L).trim() == "yes"
         if (!hasEbpf) {
@@ -7019,7 +7042,24 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {}
         // 启动 AppOpt（eBPF 事件驱动，常驻）
         sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
-        bindChannel = "eBPF"; logLine("绑核通道=eBPF(AppOpt) big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
+        bindChannel = "eBPF"; logLine("绑核通道=eBPF big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
+        // 绑核结果校验：把主线程和渲染类线程实际落在哪几颗核写进日志（3 秒后读，给守护进程时间生效）
+        Thread {
+            try {
+                Thread.sleep(3000)
+                val pid = sh("pidof " + activePkg + " 2>/dev/null | tr ' ' '\\n' | head -1", 1L).trim()
+                if (pid.isEmpty()) return@Thread
+                val r = sh("P=" + pid + "; " +
+                    "echo -n 'main:'; grep -m1 Cpus_allowed_list /proc/\$P/status 2>/dev/null | awk '{print \$2}'; " +
+                    "for t in /proc/\$P/task/*; do C=\$(cat \$t/comm 2>/dev/null); " +
+                    "case \"\$C\" in *Render*|*render*|*GL*|*Unity*|*main*|*SurfaceView*) " +
+                    "echo -n \"\$C:\"; grep -m1 Cpus_allowed_list \$t/status 2>/dev/null | awk '{print \$2}';; " +
+                    "esac; done | head -10", 3L)
+                val summary = r.lines().filter { it.contains(":") && it.contains("-") }
+                    .joinToString(" | ") { it.replace("Cpus_allowed_list:", "").trim() }
+                if (summary.isNotEmpty()) logLine("绑核结果: " + summary)
+            } catch (t: Throwable) {}
+        }.start()
     }
 
     // "4-7" → "f0"
