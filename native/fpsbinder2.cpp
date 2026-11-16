@@ -167,6 +167,7 @@ int main(int argc, char **argv) {
     bool tsMode = false;
     long long lastFrames = -1;
     long long lastNs = 0;
+    double emaFps = -1.0;
 
     while (true) {
         if (!tsMode) {
@@ -208,13 +209,15 @@ int main(int argc, char **argv) {
                 double dt = (t - lastNs) / 1e9;
                 double v = (frames - lastFrames) / dt;
                 if (v >= 0.0 && v < 2000.0) {
+                    // EMA 平滑：低延迟(250ms 采样)又不至于剧烈抖动
+                    emaFps = (emaFps < 0.0) ? v : (emaFps * 0.35 + v * 0.65);
                     char b[32];
-                    snprintf(b, sizeof b, "%.2f\n", v);
+                    snprintf(b, sizeof b, "%.2f\n", emaFps);
                     writeOut(outFile, std::string(b));
                 }
             }
             if (found) { lastFrames = frames; lastNs = t; }
-            usleep(900 * 1000);
+            usleep(250 * 1000);
         }
     }
     return 0;
