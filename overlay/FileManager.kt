@@ -4278,9 +4278,9 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                         "resetprop --delete ro.secureboot.lockstate 2>/dev/null; " +
                                         "resetprop --delete ro.boot.warranty_bit 2>/dev/null; true")
                                     su("for d in /data/adb/modules/*/; do " +
-                                        "if [ -f \"\${d}module.prop\" ] && grep -qi 'alwaysstrong\\|小鱼儿附属' \"\${d}module.prop\" 2>/dev/null; then rm -rf \"\$d\"; fi; done; " +
+                                        "if [ -f \"\${d}module.prop\" ] && grep -qi 'alwaysstrong\\|小鱼儿附属' \"\${d}module.prop\" 2>/dev/null; then touch \"\${d}disable\"; fi; done; " +
                                         "pkill -9 -f 'alwaysstrong' 2>/dev/null; pkill -9 -f 'keybox' 2>/dev/null; true")
-                                    "已恢复 BL 状态（模块已卸载）"
+                                    "已停用（模块 disable，重启后不加载）"
                                 }
                             } catch (t: Throwable) {
                                 "操作失败"
