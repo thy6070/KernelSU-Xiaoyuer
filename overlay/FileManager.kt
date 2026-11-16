@@ -6555,7 +6555,6 @@ class FpsOverlayService : Service() {
         if (layer == daemonLayer) return
         stopDaemon()
         val d = filesDir.absolutePath
-        // native fpsbinder2 内部自带自适应：--latency 有帧就用它，全 0 则切 SurfaceFlinger 的 FPS ring buffer
         // 优先 native fpsbinder2（libbinder 直连，零 fork）
         val bin = File(filesDir, "fpsbinder2")
         if (!bin.exists()) {
@@ -6593,11 +6592,6 @@ class FpsOverlayService : Service() {
                 return null
             }
             val text = f.readText()
-            // ring buffer 模式：文件里只有一个纯数字（fps）
-            val single = text.trim()
-            if (single.isNotEmpty() && !single.contains('\n') && Regex("^[0-9]+(\\.[0-9]+)?$").matches(single)) {
-                return single.toDoubleOrNull()
-            }
             val ns = text.lineSequence().firstOrNull()?.trim()?.toLongOrNull() ?: 0L
             if (ns > 0L) panelHz = 1_000_000_000.0 / ns
             parseLatencyText(text)
@@ -6642,18 +6636,11 @@ class FpsOverlayService : Service() {
             // 不能按 hex 排除（之前错误排除导致选 VRI 层读不到数据）
             // 强约束：只认前台应用自己的层，避免选中壁纸/系统动画层算出假帧率
             if (activePkg.isNotEmpty() && !n.contains(activePkg)) continue
-            // Android 16：RequestedLayerState{<hex> com.pkg/...#id}，--latency 要的是去掉前导 hex 的真层名
-            val stripped = n.replaceFirst(Regex("^[0-9a-fA-F]{4,} "), "")
             var sc = 0
             if (n.contains("SurfaceView")) sc += 100
             // 游戏真正出帧的是带 (BLAST) 后缀的那个 SurfaceView 层
             if (n.contains("(BLAST)")) sc += 60
-            if (stripped != n) {
-                scored.add(n to sc)          // 原名在前（老设备靠它）
-                scored.add(stripped to sc)   // 去前缀名同分在后（Android 16 靠它）
-            } else {
-                scored.add(n to sc)
-            }
+            scored.add(n to sc)
         }
         if (scored.isEmpty()) {
             // 兜底：严格规则没匹配到（Android 16/17 层名可能变化）→ 宽松匹配含包名的层
@@ -6666,9 +6653,7 @@ class FpsOverlayService : Service() {
                 if (activePkg.isNotEmpty() && n.contains(activePkg) && n.contains("#") &&
                     !n.contains("ActivityRecord") && !n.contains("InputSink") &&
                     !n.contains("Background for ") && !n.contains("BackgroundFor")) {
-                    val stripped = n.replaceFirst(Regex("^[0-9a-fA-F]{4,} "), "")
-                    if (stripped != n && !loose.contains(stripped)) loose.add(stripped)
-                    if (!loose.contains(n)) loose.add(n)
+                    loose.add(n)
                 }
             }
             if (loose.isNotEmpty()) {
@@ -6686,15 +6671,7 @@ class FpsOverlayService : Service() {
         candidates = scored.map { it.first }
         candIdx = 0
         failCount = 0
-        // 层名格式各版本不同（带/不带 hex 前缀），直接探测哪个名字真能读到帧
-        var chosen = candidates.firstOrNull()
-        for (c in candidates.take(6)) {
-            if (latestFrameAge(sh("dumpsys SurfaceFlinger --latency '" + c + "' 2>/dev/null", 2L)) < 800_000_000L) {
-                chosen = c
-                break
-            }
-        }
-        layerName = chosen
+        layerName = candidates.firstOrNull()
     }
 
     // 主动探测其它候选层，找出真正在出帧的那一层（只在当前层疑似静止时用）
@@ -6877,10 +6854,7 @@ class FpsOverlayService : Service() {
                 } else {
                     zeroCount = 0
                 }
-                // 只显示游戏帧率：包名命中游戏，或当前出帧层是 SurfaceView；
-                // 桌面、系统设置、普通 App 一律显示 --
-                val isGameFront = isGamePkg(activePkg) || (layerName?.contains("SurfaceView") == true)
-                if (isGameFront) showFps(fpsRaw, reading = true) else showFps(0.0, reading = false)
+                showFps(fpsRaw, reading = true)
                 // FPS+ 开启 + 游戏 → 常驻 fpsbind（掉帧重绑）
                 if (!fpsBindStarted && isGamePkg(activePkg)) {
                     val fpOn = try { getSharedPreferences("settings", 0).getBoolean("fps_plus", false) } catch (t: Throwable) { false }
