@@ -180,6 +180,12 @@ int main(int argc, char **argv) {
                 continue;
             }
             if (!latencyHasFrames(data)) {
+                // 只有游戏/视频的 SurfaceView 层才允许切 timestats；
+                // 桌面、状态栏、系统动画层读不到帧就是没有帧率，不能显示
+                if (layer.find("SurfaceView") == std::string::npos) {
+                    usleep(intervalMs * 1000);
+                    continue;
+                }
                 // 该层 --latency 全 0：切 timestats 按层统计（同一个游戏层）
                 Vector<String16> en;
                 en.add(String16("--timestats"));
