@@ -6555,8 +6555,15 @@ class FpsOverlayService : Service() {
         if (layer == daemonLayer) return
         stopDaemon()
         val d = filesDir.absolutePath
-        // Android 16 起 --latency 对 BLAST 层返回全 0（128 槽全 0），改用 SurfaceFlinger 的 FPS ring buffer
-        if (android.os.Build.VERSION.SDK_INT >= 36) {
+        // 先实测这一层的 --latency 到底有没有帧时间戳；个别 ROM/设备（如某台 K Pad）会全返回 0
+        val probe = sh("dumpsys SurfaceFlinger --latency '" + layer + "' 2>/dev/null | head -6", 2L)
+        val hasFrames = probe.lineSequence().drop(1).any { ln ->
+            val p = ln.trim().split("\t")
+            p.size >= 3 && (p[0] != "0" || p[1] != "0" || p[2] != "0")
+        }
+        if (!hasFrames) {
+            // 该层读不到帧 → 用 SurfaceFlinger 的 FPS ring buffer（全局帧率，每秒一条）
+            logLine("--latency 无数据，改用 FPS ring buffer")
             try {
                 val s = File(filesDir, "fpsring.sh")
                 s.writeText("#!/system/bin/sh\n" +
@@ -6570,7 +6577,7 @@ class FpsOverlayService : Service() {
             } catch (t: Throwable) {}
             daemonLayer = layer
             daemonStartedAt = System.currentTimeMillis()
-            logLine("Android 16 → FPS ring buffer 模式")
+            logLine("ring buffer 模式（--latency 无帧数据）")
             return
         }
         // 优先 native fpsbinder2（libbinder 直连，零 fork）
