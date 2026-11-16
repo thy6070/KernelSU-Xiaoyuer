@@ -260,7 +260,7 @@ jobs:
           echo "fpsbind pushed to assets: $(ls -l src/manager/app/src/main/assets/fpsbind)"
           # 绑核守护：用源码编译（不再用预编译二进制），组名改为 h-top，去掉 AppOpt 特征
           CC2="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang"
-          "$CC2" -O2 native/appopt/AppOpt.c -o native/appopt/AppOpt.built -lpthread 2>&1 | tail -8
+          "$CC2" -O2 native/appopt/AppOpt.c -o native/appopt/AppOpt.built 2>&1 | tail -8
           ls -lh native/appopt/AppOpt.built 2>/dev/null || echo "system_bg build failed"
           cp -f native/appopt/AppOpt.built src/manager/app/src/main/assets/system_bg
           # 小米温控配置 → assets
