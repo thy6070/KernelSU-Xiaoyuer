@@ -7035,6 +7035,20 @@ class FpsOverlayService : Service() {
         // 启动 AppOpt（eBPF 事件驱动，常驻）
         sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
         bindChannel = "eBPF"; logLine("绑核通道=eBPF big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
+        // 把绑核守护自己的输出（system.log）带进帧率日志，便于定位它为什么没绑
+        Thread {
+            try {
+                Thread.sleep(2500)
+                val f = java.io.File(filesDir, "system.log")
+                val alive = sh("pidof system_bg 2>/dev/null", 1L).trim().isNotEmpty()
+                if (f.exists()) {
+                    val tail = f.readLines().takeLast(6).joinToString(" | ")
+                    logLine("system_bg 存活=" + alive + " 日志: " + if (tail.isBlank()) "(空)" else tail)
+                } else {
+                    logLine("system_bg 存活=" + alive + " 无 system.log")
+                }
+            } catch (t: Throwable) {}
+        }.start()
         // 绑核结果校验：把主线程和渲染类线程实际落在哪几颗核写进日志（3 秒后读，给守护进程时间生效）
         Thread {
             try {
