@@ -5119,26 +5119,22 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                 "ROG" -> "ASUS" to "ASUS"
                 else -> brand to brand
             }
-            val modDir = "/data/adb/modules/xy_spoof"
-            val sysProp = "ro.product.brand=" + spoofBrand + "\n" +
-                    "ro.product.manufacturer=" + spoofMfr + "\n" +
-                    "ro.product.model=" + realModel + "\n"
-            val modProp = "id=xy_spoof\n" +
-                    "name=机型伪装 " + m + "\n" +
-                    "version=1.0\n" +
-                    "versionCode=1\n" +
-                    "author=Xiaoyuer\n" +
-                    "description=仅改 model/brand/manufacturer（内存态，可安全移除）\n"
-            val cmd = "mkdir -p " + modDir + "; " +
-                    "printf '%s\\n' " + shq(modProp) + " > " + modDir + "/module.prop; " +
-                    "printf '%s\\n' " + shq(sysProp) + " > " + modDir + "/system.prop; " +
-                    "chmod 644 " + modDir + "/module.prop " + modDir + "/system.prop; " +
-                    "rm -f /data/adb/post-fs-data.d/xy_spoof.sh /data/adb/service.d/xy_spoof.sh; " +
-                    "true"
+            // 两层生效：post-fs-data.d 脚本保证重启后保持；当前会话直接 resetprop 立即生效
+            val script = "#!/system/bin/sh\n" +
+                    "resetprop ro.product.brand " + spoofBrand + "\n" +
+                    "resetprop ro.product.manufacturer " + spoofMfr + "\n" +
+                    "resetprop ro.product.model " + realModel + "\n"
+            val cmd = "mkdir -p /data/adb/post-fs-data.d; " +
+                    "printf '%s\\n' " + shq(script) + " > /data/adb/post-fs-data.d/xy_spoof.sh; " +
+                    "chmod 755 /data/adb/post-fs-data.d/xy_spoof.sh; " +
+                    "rm -rf /data/adb/modules/xy_spoof; " +
+                    "resetprop ro.product.brand " + shq(spoofBrand) + "; " +
+                    "resetprop ro.product.manufacturer " + shq(spoofMfr) + "; " +
+                    "resetprop ro.product.model " + shq(realModel) + "; true"
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", cmd))
             pr.waitFor()
             writeOpLog(ctx, "改机型 → " + m + " | model=" + realModel)
-            android.widget.Toast.makeText(ctx, "已设置机型: " + m + "\n重启后生效，可在模块列表停用或点\"恢复原样\"", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(ctx, "已生效: " + m + "\n重启后仍保持；已在运行的 App 需重启才读到新机型", android.widget.Toast.LENGTH_LONG).show()
         } catch (t: Throwable) {
             android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
         }
