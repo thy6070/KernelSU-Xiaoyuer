@@ -6622,6 +6622,14 @@ class FpsOverlayService : Service() {
             val m = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(actOut)
             if (m != null) activePkg = m.groupValues[1]
         }
+        // 不在游戏里就不采集：停掉采集进程，不选层（桌面/设置/普通 App 一律不显示帧率）
+        if (!isGamePkg(activePkg)) {
+            if (layerName != null) {
+                layerName = null
+                stopDaemon()
+            }
+            return
+        }
         val scored = ArrayList<Pair<String, Int>>()
         for (l in out.lines()) {
             val i = l.indexOf('{')
