@@ -80,6 +80,7 @@ static double timestatsLayerFps(const std::string &d, const std::string &pkg) {
 static long long timestatsLayerFrames(const std::string &d, const std::string &pkg, bool *found) {
     *found = false;
     if (pkg.empty()) return 0;
+    long long best = -1;
     size_t pos = 0;
     while (pos < d.size()) {
         size_t ln = d.find("layerName = ", pos);
@@ -93,12 +94,13 @@ static long long timestatsLayerFrames(const std::string &d, const std::string &p
             size_t tf = d.find("totalFrames = ", leSafe);
             if (tf != std::string::npos && tf < segEnd) {
                 long long v = atoll(d.c_str() + tf + 14);
-                *found = true;
-                return v;
+                // 同一包可能有多个 SurfaceView（视频/光标/小窗），取累计帧数最大的主渲染层
+                if (v > best) best = v;
             }
         }
         pos = leSafe + 1;
     }
+    if (best >= 0) { *found = true; return best; }
     return 0;
 }
 
