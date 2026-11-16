@@ -6643,8 +6643,8 @@ class FpsOverlayService : Service() {
             // 游戏真正出帧的是带 (BLAST) 后缀的那个 SurfaceView 层
             if (n.contains("(BLAST)")) sc += 60
             if (stripped != n) {
-                scored.add(stripped to (sc + 10))   // 真层名优先
-                scored.add(n to sc)
+                scored.add(n to sc)          // 原名在前（老设备靠它）
+                scored.add(stripped to sc)   // 去前缀名同分在后（Android 16 靠它）
             } else {
                 scored.add(n to sc)
             }
@@ -6680,7 +6680,15 @@ class FpsOverlayService : Service() {
         candidates = scored.map { it.first }
         candIdx = 0
         failCount = 0
-        layerName = candidates.firstOrNull()
+        // 层名格式各版本不同（带/不带 hex 前缀），直接探测哪个名字真能读到帧
+        var chosen = candidates.firstOrNull()
+        for (c in candidates.take(6)) {
+            if (latestFrameAge(sh("dumpsys SurfaceFlinger --latency '" + c + "' 2>/dev/null", 2L)) < 800_000_000L) {
+                chosen = c
+                break
+            }
+        }
+        layerName = chosen
     }
 
     // 主动探测其它候选层，找出真正在出帧的那一层（只在当前层疑似静止时用）
