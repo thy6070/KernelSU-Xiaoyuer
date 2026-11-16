@@ -207,17 +207,21 @@ int main(int argc, char **argv) {
             long long t = nowNs();
             if (found && lastFrames >= 0 && t > lastNs) {
                 double dt = (t - lastNs) / 1e9;
-                double v = (frames - lastFrames) / dt;
-                if (v >= 0.0 && v < 2000.0) {
-                    // EMA 平滑：低延迟(250ms 采样)又不至于剧烈抖动
-                    emaFps = (emaFps < 0.0) ? v : (emaFps * 0.35 + v * 0.65);
-                    char b[32];
-                    snprintf(b, sizeof b, "%.2f\n", emaFps);
-                    writeOut(outFile, std::string(b));
+                long long d = frames - lastFrames;
+                // 异常保护：计数器回绕/重置、或时间太短时跳过
+                if (d >= 0 && dt > 0.05) {
+                    double v = d / dt;
+                    if (v >= 0.0 && v < 2000.0) {
+                        // EMA：新值权重更高，响应更快；首次直接采用
+                        emaFps = (emaFps < 0.0) ? v : (emaFps * 0.30 + v * 0.70);
+                        char b[32];
+                        snprintf(b, sizeof b, "%.2f\n", emaFps);
+                        writeOut(outFile, std::string(b));
+                    }
                 }
             }
             if (found) { lastFrames = frames; lastNs = t; }
-            usleep(250 * 1000);
+            usleep(200 * 1000);
         }
     }
     return 0;
