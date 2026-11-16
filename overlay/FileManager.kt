@@ -6976,7 +6976,7 @@ class FpsOverlayService : Service() {
             }
             if (fb.exists() && fb.length() > 10000) {
                 fb.setExecutable(true)
-                sh("pkill -x fpsbind 2>/dev/null; chmod 755 " + fb.absolutePath + "; setsid " + fb.absolutePath + " " + cpusToMask(big) + " " + cpusToMask(small) + " " + cpusToMask(mid) + " " + activePkg + " >> " + filesDir.absolutePath + "/fpsbind.log 2>&1 &", 2L)
+                sh("pkill -x fpsbind 2>/dev/null; chmod 755 " + fb.absolutePath + "; setsid " + fb.absolutePath + " " + big + " " + small + " " + mid + " " + activePkg + " >> " + filesDir.absolutePath + "/fpsbind.log 2>&1 &", 2L)
                 bindChannel = "netlink"; logLine("绑核通道=netlink(fpsbind) big=" + big + " mid=" + mid + " small=" + small)
             }
             return
@@ -7011,15 +7011,14 @@ class FpsOverlayService : Service() {
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do av=\$(cat \$p/scaling_available_governors 2>/dev/null); " +
            "case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null ;; " +
            "*schedutil*) echo schedutil > \$p/scaling_governor 2>/dev/null ;; esac; done", 1L)
-        // 写 AppOpt.json：仍是自建独立 cpuset，只把名字换成厂商风格（h-top），避免 AppOpt/system_bg 被特征匹配
+        // 写 AppOpt.json（cpuset 名改系统风格，防检测）
         try {
             File(filesDir, "AppOpt.json").writeText(
                 "{\n  \"mode\": 0,\n  \"check_interval\": 5,\n  \"cpuset_name\": \"h-top\",\n  \"config_file\": \"" + conf.absolutePath + "\",\n  \"web_enable\": false\n}"
             )
         } catch (t: Throwable) {}
-        // 启动 AppOpt（eBPF 事件驱动，常驻）；先杀旧进程再删旧组（组里还有进程时 rmdir 必失败）
-        sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; rmdir /dev/cpuset/system_bg /dev/cpuset/AppOpt 2>/dev/null; " +
-           "chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
+        // 启动 AppOpt（eBPF 事件驱动，常驻）
+        sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
         bindChannel = "eBPF"; logLine("绑核通道=eBPF(AppOpt) big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
     }
 
