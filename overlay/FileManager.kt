@@ -6569,7 +6569,7 @@ class FpsOverlayService : Service() {
     private fun stopDaemon() {
         try {
             val d = filesDir.absolutePath
-            sh("D=${d}; [ -f \$D/fps_pid ] && kill -9 \$(cat \$D/fps_pid) 2>/dev/null; pkill -f fpsring.sh 2>/dev/null; rm -f \$D/fps_pid", 3L)
+            sh("D=${d}; [ -f \$D/fps_pid ] && kill -9 \$(cat \$D/fps_pid) 2>/dev/null; pkill -f fpsring.sh 2>/dev/null; rm -f \$D/fps_pid \$D/fps_raw", 3L)
         } catch (t: Throwable) {}
         daemonLayer = null
     }
@@ -6653,6 +6653,14 @@ class FpsOverlayService : Service() {
             }
             return
         }
+        // 规则：只在游戏里采集。非游戏前台立即停采集并清掉 fps_raw，
+        // 否则退出游戏后悬浮窗会一直停在上一层/上一局的帧率。
+        if (!isGamePkg(activePkg)) {
+            layerName = null
+            stopDaemon()
+            try { java.io.File(filesDir, "fps_raw").delete() } catch (t: Throwable) {}
+            return
+        }
         val scored = ArrayList<Pair<String, Int>>()
         for (l in out.lines()) {
             val i = l.indexOf('{')
@@ -6696,6 +6704,9 @@ class FpsOverlayService : Service() {
             }
             candidates = emptyList()
             layerName = null
+            // 选不到层：停采集并清掉旧值，避免用上一层/上一局残留的帧率继续触发 FPS+
+            stopDaemon()
+            try { java.io.File(filesDir, "fps_raw").delete() } catch (t: Throwable) {}
             return
         }
         scored.sortByDescending { it.second }
