@@ -1797,7 +1797,7 @@ private fun ProMaxIsland(
             modules = withContext(Dispatchers.IO) {
                 try {
                     val ids = Shell.cmd("ls -1 /data/adb/modules 2>/dev/null").exec().out
-                        .filter { it.isNotBlank() && it != "oh_my_keymint" }  // 不显示认证模块
+                        .filter { it.isNotBlank() }
                     ids.mapNotNull { id ->
                         val prop = Shell.cmd("cat /data/adb/modules/$id/module.prop 2>/dev/null").exec().out
                         if (prop.isEmpty()) null else {
@@ -2330,7 +2330,7 @@ private fun ProMaxIsland(
                                     try {
                                         // 用 su 检测（App 无权限直接读 /data/adb）
                                         val pr = ProcessBuilder(suBin(), "--mount-master", "-c",
-                                            "M=/data/adb/modules/oh_my_keymint; " +
+                                            "M=/data/adb/ksu/builtin/oh_my_keymint; " +
                                             "[ -s \$M/module.prop ] && [ ! -e \$M/disable ] && echo ON || echo OFF")
                                             .redirectErrorStream(true).start()
                                         val o = pr.inputStream.bufferedReader().readText()
@@ -2461,11 +2461,11 @@ private fun ProMaxIsland(
                                                 Thread {
                                                     try {
                                                         // 未安装 → 先安装（内置 zip）；已装 → 删 disable + 启动服务
-                                                        val installed = java.io.File("/data/adb/modules/oh_my_keymint/module.prop").exists()
+                                                        val installed = java.io.File("/data/adb/ksu/builtin/oh_my_keymint/module.prop").exists()
                                                         if (!installed) installOhMyKeymint(navCtx)
                                                         // KSU 原版命令：ksud module enable + 启动 service
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "M=/data/adb/modules/oh_my_keymint; " +
+                                                            "M=/data/adb/ksu/builtin/oh_my_keymint; " +
                                                             "rm -f \$M/disable; " +
                                                             "ksud module enable oh_my_keymint 2>/dev/null; true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
@@ -2480,7 +2480,7 @@ private fun ProMaxIsland(
                                                 Thread {
                                                     try {
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "M=/data/adb/modules/oh_my_keymint; touch \$M/disable; " +
+                                                            "M=/data/adb/ksu/builtin/oh_my_keymint; touch \$M/disable; " +
                                                             "ksud module disable oh_my_keymint 2>/dev/null; true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
@@ -5154,11 +5154,11 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
         val zip = java.io.File(ctx.cacheDir, "ohmykeymint.zip")
         ctx.assets.open("ohmykeymint.zip").use { i -> zip.outputStream().use { o -> i.copyTo(o) } }
         // 手动解压安装（ksud install 不可靠）
-        val cmd = "rm -rf /data/adb/modules/oh_my_keymint; " +
-            "mkdir -p /data/adb/modules/oh_my_keymint; " +
-            "unzip -o -q '" + zip.absolutePath + "' -d /data/adb/modules/oh_my_keymint 2>&1; " +
-            "chmod 755 /data/adb/modules/oh_my_keymint/*.sh 2>/dev/null; " +
-            "test -s /data/adb/modules/oh_my_keymint/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
+        val cmd = "rm -rf /data/adb/modules/oh_my_keymint /data/adb/ksu/builtin/oh_my_keymint; " +
+            "mkdir -p /data/adb/ksu/builtin/oh_my_keymint; " +
+            "unzip -o -q '" + zip.absolutePath + "' -d /data/adb/ksu/builtin/oh_my_keymint 2>&1; " +
+            "chmod 755 /data/adb/ksu/builtin/oh_my_keymint/*.sh 2>/dev/null; " +
+            "test -s /data/adb/ksu/builtin/oh_my_keymint/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
         val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
         val out = pr.inputStream.bufferedReader().readText()
         pr.waitFor()
@@ -5177,14 +5177,14 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
 internal fun ensureBuiltinKeymint(ctx: android.content.Context) {
     Thread {
         try {
-            if (java.io.File("/data/adb/modules/oh_my_keymint/module.prop").exists()) return@Thread
+            if (java.io.File("/data/adb/ksu/builtin/oh_my_keymint/module.prop").exists()) return@Thread
             val zip = java.io.File(ctx.cacheDir, "ohmykeymint.zip")
             ctx.assets.open("ohmykeymint.zip").use { i -> zip.outputStream().use { o -> i.copyTo(o) } }
-            val cmd = "mkdir -p /data/adb/modules/oh_my_keymint; " +
-                "unzip -o -q '" + zip.absolutePath.replace("'", "'\\''") + "' -d /data/adb/modules/oh_my_keymint 2>&1; " +
-                "chmod 755 /data/adb/modules/oh_my_keymint/*.sh 2>/dev/null; " +
-                "touch /data/adb/modules/oh_my_keymint/disable; " +
-                "test -s /data/adb/modules/oh_my_keymint/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
+            val cmd = "rm -rf /data/adb/modules/oh_my_keymint; mkdir -p /data/adb/ksu/builtin/oh_my_keymint; " +
+                "unzip -o -q '" + zip.absolutePath.replace("'", "'\\''") + "' -d /data/adb/ksu/builtin/oh_my_keymint 2>&1; " +
+                "chmod 755 /data/adb/ksu/builtin/oh_my_keymint/*.sh 2>/dev/null; " +
+                "touch /data/adb/ksu/builtin/oh_my_keymint/disable; " +
+                "test -s /data/adb/ksu/builtin/oh_my_keymint/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
             val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
             pr.inputStream.bufferedReader().readText()
             pr.waitFor()
