@@ -6,6 +6,11 @@ on:
 permissions:
   contents: write
 
+# 同一分支只保留最新一次构建：新构建开始自动取消旧构建
+concurrency:
+  group: jd32713ui-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
