@@ -6980,15 +6980,15 @@ class FpsOverlayService : Service() {
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do av=\$(cat \$p/scaling_available_governors 2>/dev/null); " +
            "case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null ;; " +
            "*schedutil*) echo schedutil > \$p/scaling_governor 2>/dev/null ;; esac; done", 1L)
-        // 写 AppOpt.json：复用系统自带的 top-app 组，不再新建自定义 cpuset（自定义组会被检测列举出来）
+        // 写 AppOpt.json：仍是自建独立 cpuset，只把名字换成厂商风格（h-top），避免 AppOpt/system_bg 被特征匹配
         try {
             File(filesDir, "AppOpt.json").writeText(
-                "{\n  \"mode\": 0,\n  \"check_interval\": 5,\n  \"cpuset_name\": \"top-app\",\n  \"config_file\": \"" + conf.absolutePath + "\",\n  \"web_enable\": false\n}"
+                "{\n  \"mode\": 0,\n  \"check_interval\": 5,\n  \"cpuset_name\": \"h-top\",\n  \"config_file\": \"" + conf.absolutePath + "\",\n  \"web_enable\": false\n}"
             )
         } catch (t: Throwable) {}
-        // 启动 AppOpt（eBPF 事件驱动，常驻）；顺手清掉旧版本留下的自定义 cpuset 组
-        sh("rmdir /dev/cpuset/system_bg /dev/cpuset/AppOpt 2>/dev/null; " +
-           "pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
+        // 启动 AppOpt（eBPF 事件驱动，常驻）；先杀旧进程再删旧组（组里还有进程时 rmdir 必失败）
+        sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; rmdir /dev/cpuset/system_bg /dev/cpuset/AppOpt 2>/dev/null; " +
+           "chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
         bindChannel = "eBPF"; logLine("绑核通道=eBPF(AppOpt) big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
     }
 
@@ -7069,7 +7069,7 @@ class FpsOverlayService : Service() {
             if (fpsBindStarted) {
                 fpsBindStarted = false
                 bindChannel = "无"
-                sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null", 1L)
+                sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null", 1L)
                 logLine("退出游戏，停止绑核")
             }
             if (fpsPlusBoosted) {
@@ -7077,7 +7077,7 @@ class FpsOverlayService : Service() {
                 fpsPlusHigh = 0
                 bindChannel = "无"
                 logLine("退出游戏，停止 FPS+（恢复频率+停 AppOpt）")
-                sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
+                sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
                    "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
                    "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
             }
@@ -7092,7 +7092,7 @@ class FpsOverlayService : Service() {
                 fpsPlusHigh = 0
                 bindChannel = "无"
                 logLine("低帧(<64)停止 boost: fps=" + String.format("%.1f", fps))
-                sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
+                sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
                    "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
             }
             return
