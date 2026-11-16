@@ -1203,26 +1203,44 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     LaunchedEffect(Unit) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val conn = (java.net.URL("https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases/latest").openConnection() as java.net.HttpURLConnection)
+                // 拉全部 release，按版本号数值取最大（不依赖 GitHub 的 latest 标记，避免发布顺序错乱推荐旧版）
+                val conn = (java.net.URL("https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases?per_page=30").openConnection() as java.net.HttpURLConnection)
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
                 conn.setRequestProperty("User-Agent", "dsh")
                 conn.connectTimeout = 8000
                 conn.readTimeout = 8000
                 val body = conn.inputStream.bufferedReader().readText()
-                val tag = body.substringAfter("\"tag_name\":\"").substringBefore("\"")
-                // 只取 .apk 的 asset id（用 api.github.com asset API 下载，国内可达）
-                val assetId = Regex("\"id\":(\\d+),\"node_id\"?:\"?").findAll(body).toList()
-                    .map { it.groupValues[1] }
-                    .firstOrNull { id ->
-                        // 该 id 后面 200 字符内出现 .apk 名称
-                        val idx = body.indexOf("\"id\":" + id)
-                        idx >= 0 && body.substring(idx, (idx + 300).coerceAtMost(body.length)).contains(".apk")
-                    } ?: ""
-                val url = if (assetId.isNotEmpty()) "https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases/assets/" + assetId else ""
                 val localVer = try { com.tencent.THY.BuildConfig.VERSION_NAME } catch (t: Throwable) { "" }
-                if (tag.isNotEmpty() && url.isNotEmpty() && tag != localVer) {
-                    updateVer = tag
-                    updateUrl = url
+                val localNum = localVer.removePrefix("1.0.").toIntOrNull() ?: 0
+                var bestNum = -1
+                var bestTag = ""
+                var bestUrl = ""
+                try {
+                    val arr = org.json.JSONArray(body)
+                    for (i in 0 until arr.length()) {
+                        val rel = arr.getJSONObject(i)
+                        val tag = rel.optString("tag_name")
+                        val num = tag.removePrefix("1.0.").toIntOrNull() ?: continue
+                        if (num <= bestNum || num <= localNum) continue
+                        val assets = rel.optJSONArray("assets") ?: continue
+                        var apkUrl = ""
+                        for (j in 0 until assets.length()) {
+                            val a = assets.getJSONObject(j)
+                            if (a.optString("name").endsWith(".apk")) {
+                                apkUrl = "https://api.github.com/repos/thy6070/KernelSU-Xiaoyuer/releases/assets/" + a.optLong("id")
+                                break
+                            }
+                        }
+                        if (apkUrl.isNotEmpty()) {
+                            bestNum = num
+                            bestTag = tag
+                            bestUrl = apkUrl
+                        }
+                    }
+                } catch (t: Throwable) {}
+                if (bestTag.isNotEmpty() && bestNum > localNum) {
+                    updateVer = bestTag
+                    updateUrl = bestUrl
                 }
             } catch (t: Throwable) {}
         }
@@ -2466,8 +2484,7 @@ private fun ProMaxIsland(
                                                         // KSU 原版命令：ksud module enable + 启动 service
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
                                                             "M=/data/adb/ksu/builtin/oh_my_keymint; " +
-                                                            "rm -f \$M/disable; " +
-                                                            "ksud module enable oh_my_keymint 2>/dev/null; true").redirectErrorStream(true).start().waitFor()
+                                                            "rm -f \$M/disable; true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
                                                 android.widget.Toast.makeText(navCtx, "已启用（重启后生效）", android.widget.Toast.LENGTH_SHORT).show()
@@ -2480,8 +2497,7 @@ private fun ProMaxIsland(
                                                 Thread {
                                                     try {
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "M=/data/adb/ksu/builtin/oh_my_keymint; touch \$M/disable; " +
-                                                            "ksud module disable oh_my_keymint 2>/dev/null; true").redirectErrorStream(true).start().waitFor()
+                                                            "M=/data/adb/ksu/builtin/oh_my_keymint; touch \$M/disable; true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
                                                 android.widget.Toast.makeText(navCtx, "已停用（重启后生效）", android.widget.Toast.LENGTH_SHORT).show()
