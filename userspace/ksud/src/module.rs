@@ -133,28 +133,33 @@ pub fn foreach_module(
     module_type: ModuleType,
     mut f: impl FnMut(&Path) -> Result<()>,
 ) -> Result<()> {
-    let modules_dir = Path::new(match module_type {
-        ModuleType::Updated => MODULE_UPDATE_DIR,
-        _ => defs::MODULE_DIR,
-    });
-    let dir = std::fs::read_dir(modules_dir)?;
-    for entry in dir.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            warn!("{} is not a directory, skip", path.display());
-            continue;
-        }
+    let dirs: Vec<&str> = match module_type {
+        ModuleType::Updated => vec![MODULE_UPDATE_DIR],
+        _ => vec![defs::MODULE_DIR, defs::BUILTIN_DIR],
+    };
+    for d in dirs {
+        let dir = match std::fs::read_dir(d) {
+            Ok(dir) => dir,
+            Err(_) => continue,
+        };
+        for entry in dir.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                warn!("{} is not a directory, skip", path.display());
+                continue;
+            }
 
-        if module_type == Active && path.join(defs::DISABLE_FILE_NAME).exists() {
-            info!("{} is disabled, skip", path.display());
-            continue;
-        }
-        if module_type == Active && path.join(defs::REMOVE_FILE_NAME).exists() {
-            warn!("{} is removed, skip", path.display());
-            continue;
-        }
+            if module_type == Active && path.join(defs::DISABLE_FILE_NAME).exists() {
+                info!("{} is disabled, skip", path.display());
+                continue;
+            }
+            if module_type == Active && path.join(defs::REMOVE_FILE_NAME).exists() {
+                warn!("{} is removed, skip", path.display());
+                continue;
+            }
 
-        f(&path)?;
+            f(&path)?;
+        }
     }
 
     Ok(())
@@ -282,18 +287,23 @@ pub fn exec_script_with<T: AsRef<Path>>(
 ) -> Result<()> {
     info!("exec {}", path.as_ref().display());
 
-    let is_module_script = path.as_ref().starts_with(defs::MODULE_DIR);
-    // Extract module_id from path if it matches /data/adb/modules/{id}/...
-    let module_id = if is_module_script {
+    // modules 与 builtin 都算模块脚本，用于提取 module_id 并注入 KSU_MODULE
+    let base_dir = if path.as_ref().starts_with(defs::MODULE_DIR) {
+        Some(defs::MODULE_DIR)
+    } else if path.as_ref().starts_with(defs::BUILTIN_DIR) {
+        Some(defs::BUILTIN_DIR)
+    } else {
+        None
+    };
+    let is_module_script = base_dir.is_some();
+    let module_id = base_dir.and_then(|base| {
         path.as_ref()
-            .strip_prefix(defs::MODULE_DIR)
+            .strip_prefix(base)
             .ok()
             .and_then(|p| p.components().next())
             .and_then(|c| c.as_os_str().to_str())
             .map(ToString::to_string)
-    } else {
-        None
-    };
+    });
 
     // Validate and log module_id extraction
     let validated_module_id = module_id
