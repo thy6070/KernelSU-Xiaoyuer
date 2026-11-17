@@ -156,7 +156,7 @@ class MainActivity : ComponentActivity() {
         val isManager = Natives.isManager
         if (isManager && Natives.kernelUAPIVersion == Natives.managerUAPIVersion) install()
         // 首次启动自动安装内置模块（仅未安装时，静默）
-        try { me.weishu.kernelsu.ui.screen.ensureBuiltinKeymint(this) } catch (t: Throwable) {}
+        // 不再进软件就装模块：改为点"伪装BL 开"时检测不到才安装
 
         if (savedInstanceState == null) intent?.let { intentChannel.trySend(it) }
 
