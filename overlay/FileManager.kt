@@ -2480,8 +2480,14 @@ private fun ProMaxIsland(
                                                 omkOn = true
                                                 Thread {
                                                     try {
-                                                        // 未安装 → 先安装（内置 zip）；已装 → 删 disable + 启动服务
-                                                        val installed = java.io.File("/data/adb/ksu/builtin/oh_my_keymint/module.prop").exists()
+                                                        // 用 su 检测（App 非 root，File.exists 读不到 /data/adb 恒 false，会导致每次点开都重装并 touch disable）
+                                                        val installed = try {
+                                                            val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                                                                "[ -f /data/adb/ksu/builtin/oh_my_keymint/module.prop ] && echo 1 || echo 0"))
+                                                            val o = p.inputStream.bufferedReader().readText().trim()
+                                                            p.waitFor()
+                                                            o == "1"
+                                                        } catch (t: Throwable) { true }
                                                         if (!installed) installOhMyKeymint(navCtx)
                                                         // KSU 原版命令：ksud module enable + 启动 service
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
@@ -5197,7 +5203,14 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
 internal fun ensureBuiltinKeymint(ctx: android.content.Context) {
     Thread {
         try {
-            if (java.io.File("/data/adb/ksu/builtin/oh_my_keymint/module.prop").exists()) return@Thread
+            val exists = try {
+                val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
+                    "[ -f /data/adb/ksu/builtin/oh_my_keymint/module.prop ] && echo 1 || echo 0"))
+                val o = p.inputStream.bufferedReader().readText().trim()
+                p.waitFor()
+                o == "1"
+            } catch (t: Throwable) { true }
+            if (exists) return@Thread
             val zip = java.io.File(ctx.cacheDir, "ohmykeymint.zip")
             ctx.assets.open("ohmykeymint.zip").use { i -> zip.outputStream().use { o -> i.copyTo(o) } }
             val cmd = "rm -rf /data/adb/modules/oh_my_keymint; mkdir -p /data/adb/ksu/builtin/oh_my_keymint; " +
