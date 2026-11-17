@@ -7252,10 +7252,17 @@ class FpsOverlayService : Service() {
             return
         }
         if (panelHz <= 0.0) return
-        // 66 帧以下：不触发 boost（60 帧游戏不补帧）。
-        // 注意：这里不能停绑核/降频，否则会和调频的"掉帧拉满"互相打架
+        // 66 帧以下：不触发 boost；若之前触发过，这里要退出（否则 61 帧还挂着 fpsPlus=true）
+        // 只恢复频率，不停绑核（绑核游戏期间一直保持）
         if (fps < 66.0) {
             fpsPlusLow = 0
+            if (fpsPlusBoosted) {
+                fpsPlusBoosted = false
+                fpsPlusHigh = 0
+                logLine("低帧退出 boost: fps=" + String.format("%.1f", fps))
+                sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mn > \$p/scaling_min_freq 2>/dev/null; echo \$mx > \$p/scaling_max_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig; " +
+                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
+            }
             return
         }
         // 固定档位：90/120/144/165。在档位（±3）不触发；掉到档位外立即触发
