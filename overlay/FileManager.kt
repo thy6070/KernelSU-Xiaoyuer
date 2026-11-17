@@ -6420,6 +6420,7 @@ class FpsOverlayService : Service() {
     private var fpsBindStarted = false
     private var bindChannel = "无"
     private var lastBindCheckMs = 0L
+    private var lastCpuSampleMs = 0L
     private var fpsFrozen = false
     private var lastProbe = 0L
     private var idleCount = 0
@@ -6920,6 +6921,17 @@ class FpsOverlayService : Service() {
                         logLine("FPS+ 开启，fpsbind 常驻监听")
                     }
                 }
+                // CPU 状态采样（每 5 秒）：各簇当前频率 + 最高温度，用于判断是否过热降频
+                try {
+                    val nowC = System.currentTimeMillis()
+                    if (nowC - lastCpuSampleMs > 5000L && isGamePkg(activePkg)) {
+                        lastCpuSampleMs = nowC
+                        val cur = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo -n \$(cat \$p/scaling_cur_freq 2>/dev/null)/; done", 3L).trim()
+                        val tmax = sh("cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | sort -n | tail -1", 3L).trim()
+                        val mx = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo -n \$(cat \$p/scaling_max_freq 2>/dev/null)/; done", 3L).trim()
+                        logLine("CPU cur=" + cur + " max=" + mx + " 温度=" + tmax)
+                    }
+                } catch (t: Throwable) {}
                 // 绑核守护存活自愈：每 10 秒查一次 system_bg，没了就重新拉起
                 try {
                     val nowB = System.currentTimeMillis()
@@ -7213,7 +7225,7 @@ class FpsOverlayService : Service() {
                     " 档位=" + adaptIdx + "%")
             }
         } else {
-            adaptIdx = (adaptIdx - 2).coerceAtLeast(50)
+            adaptIdx = (adaptIdx - 1).coerceAtLeast(75)
         }
         val pct = adaptIdx
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
@@ -7267,7 +7279,7 @@ class FpsOverlayService : Service() {
         }
         // 固定档位：90/120/144/165。在档位（±3）不触发；掉到档位外立即触发
         val tiers = listOf(90.0, 120.0, 144.0, 165.0)
-        val onTier = tiers.any { kotlin.math.abs(it - fps) <= 4.0 }
+        val onTier = tiers.any { kotlin.math.abs(it - fps) <= 10.0 }
         if (onTier) {
             fpsPlusLow = 0
             fpsPlusHigh++
