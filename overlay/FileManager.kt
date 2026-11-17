@@ -6921,15 +6921,14 @@ class FpsOverlayService : Service() {
                         logLine("FPS+ 开启，fpsbind 常驻监听")
                     }
                 }
-                // CPU 状态采样（每 5 秒）：各簇当前频率 + 最高温度，用于判断是否过热降频
+                // CPU 频率采样（每 5 秒）：各簇当前频率 / 上限频率
                 try {
                     val nowC = System.currentTimeMillis()
                     if (nowC - lastCpuSampleMs > 5000L && isGamePkg(activePkg)) {
                         lastCpuSampleMs = nowC
                         val cur = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo -n \$(cat \$p/scaling_cur_freq 2>/dev/null)/; done", 3L).trim()
-                        val tmax = sh("cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | sort -n | tail -1", 3L).trim()
                         val mx = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo -n \$(cat \$p/scaling_max_freq 2>/dev/null)/; done", 3L).trim()
-                        logLine("CPU cur=" + cur + " max=" + mx + " 温度=" + tmax)
+                        logLine("CPU频率 cur=" + cur + " max=" + mx)
                     }
                 } catch (t: Throwable) {}
                 // 绑核守护存活自愈：每 10 秒查一次 system_bg，没了就重新拉起
