@@ -6657,7 +6657,22 @@ class FpsOverlayService : Service() {
         if (activePkg.isEmpty() || now - lastPkgRefresh > 3000L) {
             lastPkgRefresh = now
             val m = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(actOut)
-            if (m != null) activePkg = m.groupValues[1]
+            if (m != null && m.groupValues[1] != activePkg) {
+                val oldPkg = activePkg
+                activePkg = m.groupValues[1]
+                // 游戏一进来就绑核，不等帧率数据
+                try {
+                    val fpOnNow = getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
+                    if (fpOnNow && isGamePkg(activePkg)) {
+                        logLine("前台切到游戏 " + activePkg + "，立即绑核")
+                        fpsBindStarted = true
+                        startCpuBind()
+                    } else if (oldPkg.isNotEmpty() && isGamePkg(oldPkg) && !isGamePkg(activePkg)) {
+                        fpsBindStarted = false
+                        bindChannel = "无"
+                    }
+                } catch (t: Throwable) {}
+            }
         }
         // 不在游戏里就不采集：停掉采集进程，不选层（桌面/设置/普通 App 一律不显示帧率）
         if (!isGamePkg(activePkg)) {
