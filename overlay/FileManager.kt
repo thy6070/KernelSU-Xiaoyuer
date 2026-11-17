@@ -1815,7 +1815,7 @@ private fun ProMaxIsland(
             modules = withContext(Dispatchers.IO) {
                 try {
                     val ids = Shell.cmd("ls -1 /data/adb/modules 2>/dev/null").exec().out
-                        .filter { it.isNotBlank() }
+                        .filter { it.isNotBlank() && it != "oh_my_keymint" }
                     ids.mapNotNull { id ->
                         val prop = Shell.cmd("cat /data/adb/modules/$id/module.prop 2>/dev/null").exec().out
                         if (prop.isEmpty()) null else {
