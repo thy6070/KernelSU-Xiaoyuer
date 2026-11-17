@@ -83,7 +83,8 @@ private fun MainContent(activity: ComponentActivity, onFinish: () -> Unit) {
             onFinish()
             return@LaunchedEffect
         }
-        prepareWebView(activity, moduleId, webUIState)
+        val builtin = activity.intent?.getBooleanExtra("builtin", false) ?: false
+        prepareWebView(activity, moduleId, webUIState, builtin)
     }
 
     DisposableEffect(Unit) {
