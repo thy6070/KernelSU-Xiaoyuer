@@ -47,8 +47,8 @@ internal suspend fun prepareWebView(
     builtin: Boolean = false,
 ) {
     withContext(Dispatchers.IO) {
-        // builtin 模块直达：builtin 目录只放 oh_my_keymint，直接构造，完全跳过模块列表扫描
-        val moduleInfo: me.weishu.kernelsu.data.model.Module? = if (moduleId == "oh_my_keymint") {
+        // builtin 直达：只有调用方显式打上 builtin 标记时才跳过模块列表（正常模块列表 WebUI 不受任何影响）
+        val moduleInfo: me.weishu.kernelsu.data.model.Module? = if (builtin) {
             me.weishu.kernelsu.data.model.Module(
                 id = moduleId,
                 name = "OhMyKeymint",
@@ -87,10 +87,10 @@ internal suspend fun prepareWebView(
         }
 
         webUIState.moduleName = moduleInfo.name
-        webUIState.modDir = if (moduleId == "oh_my_keymint") {
-            "/data/adb/ksu/builtin/oh_my_keymint"
+        webUIState.modDir = if (builtin) {
+            "/data/adb/ksu/builtin/$moduleId"
         } else {
-            "/data/adb/modules/${moduleId}"
+            "/data/adb/modules/$moduleId"
         }
 
         if (SuperUserViewModel.apps.isEmpty()) {
