@@ -7059,6 +7059,21 @@ class FpsOverlayService : Service() {
         // 启动 AppOpt（eBPF 事件驱动，常驻）
         sh("pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; chmod 755 " + bin.absolutePath + " " + ebpf.absolutePath + "; cd " + filesDir.absolutePath + "; setsid " + bin.absolutePath + " -c " + conf.absolutePath + " -s 5 </dev/null >> " + filesDir.absolutePath + "/system.log 2>&1 &", 3L)
         bindChannel = "eBPF"; logLine("绑核通道=eBPF big=" + big + " mid=" + mid + " small=" + small + " pkg=" + activePkg)
+        // RT 优先级（学 AsoulOpt）：只给渲染/主循环线程设 SCHED_FIFO 90，音频/网络/binder 一律不碰
+        Thread {
+            try {
+                Thread.sleep(1500)
+                val pid0 = sh("pidof " + activePkg + " 2>/dev/null | tr ' ' '\\n' | head -1", 1L).trim()
+                if (pid0.isEmpty()) return@Thread
+                sh("P=" + pid0 + "; for t in /proc/\$P/task/*; do " +
+                   "T=\${t##*/}; C=\$(cat \$t/comm 2>/dev/null); " +
+                   "case \"\$C\" in " +
+                   "*RenderThread*|*UnityMain*|*UnityGfx*|*SCERender*|*SHPD*|*Mainloop*|*DummyMain*|*Main*|*Rendering*) " +
+                   "chrt -f 90 \$T >/dev/null 2>&1 ;; " +
+                   "esac; done", 4L)
+                logLine("RT 优先级已设置(SCHED_FIFO 90): 渲染/主循环线程")
+            } catch (t: Throwable) {}
+        }.start()
         // 把绑核守护自己的输出（system.log）带进帧率日志，便于定位它为什么没绑
         Thread {
             try {
@@ -7201,6 +7216,8 @@ class FpsOverlayService : Service() {
                 bindChannel = "无"
                 logLine("退出游戏，停止 FPS+（恢复频率+停 AppOpt）")
                 sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
+                   "P=\$(pidof " + activePkg + " 2>/dev/null | tr ' ' '\\n' | head -1); " +
+                   "[ -n \"\$P\" ] && for t in /proc/\$P/task/*; do chrt -o \${t##*/} 2>/dev/null; done; " +
                    "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
                    "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
             }
