@@ -7178,13 +7178,13 @@ class FpsOverlayService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastAdaptMs < 2000L) return   // 2s 调节周期
         lastAdaptMs = now
-        // 目标帧率：取离实测帧率最近的档位（差 ≤5 就算锁在该档），否则用面板刷新率
-        // 游戏锁 60 时实际波动不会超过 5 帧；原来 ±2 太窄，62 会被判成非锁帧 → 目标 120 → 频率拉满
+        // 档位判定：帧率不会卡在两个档位中间，超过"档位+5"就一定是更高档
+        //   ≤65 → 60 档，≤95 → 90 档，≤125 → 120 档，≤149 → 144 档，≤170 → 165 档
+        //   例：64 → 60 档；66 → 90 档（不是 60，也不是"保持"）
         val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
-        val nearestTier = stdTiers.minByOrNull { kotlin.math.abs(it - fps) }
-        val target = if (nearestTier != null &&
-            kotlin.math.abs(nearestTier - fps) <= 5.0 && nearestTier < panelHz - 5) {
-            nearestTier
+        val tierHit = stdTiers.firstOrNull { fps <= it + 5.0 }
+        val target = if (tierHit != null && tierHit < panelHz - 5) {
+            tierHit
         } else {
             panelHz.coerceAtLeast(60.0)
         }
