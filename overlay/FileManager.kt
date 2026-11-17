@@ -7189,16 +7189,24 @@ class FpsOverlayService : Service() {
             panelHz.coerceAtLeast(60.0)
         }
         if (target <= 0.0) return
-        // 两段式调频（不做实时细调）：
-        //   掉帧（低于目标-5）→ 直接拉满 100%
-        //   正常（达标）      → 每周期缓慢降 2%（下限 50%），降到再次掉帧为止
+        // 三段式调频：
+        //   fps < 目标-8     → 直接拉满 100%（严重掉帧）
+        //   目标-8 ≤ fps < 目标 → 逐步升 3%/周期（往目标推，不打满）
+        //   fps ≥ 目标        → 缓慢降 2%/周期（省电，下限 50%）
         val diff = fps - target
-        if (diff < -5.0) {
+        if (diff < -8.0) {
             adaptIdx = 100
             if (now - lastAdaptLog >= 1500L) {
                 lastAdaptLog = now
                 logLine("掉帧触发: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
                     " 差=" + String.format("%.1f", diff) + " → 直接拉满")
+            }
+        } else if (diff < 0.0) {
+            adaptIdx = (adaptIdx + 3).coerceAtMost(100)
+            if (now - lastAdaptLog >= 1500L) {
+                lastAdaptLog = now
+                logLine("未达标: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
+                    " 档位=" + adaptIdx + "%")
             }
         } else {
             adaptIdx = (adaptIdx - 2).coerceAtLeast(50)
