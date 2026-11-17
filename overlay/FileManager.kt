@@ -7189,31 +7189,19 @@ class FpsOverlayService : Service() {
             panelHz.coerceAtLeast(60.0)
         }
         if (target <= 0.0) return
-        // 目标±5 帧死区：低于目标-5 升档，高于目标+5 降档，区间内保持
+        // 两段式调频（不做实时细调）：
+        //   掉帧（低于目标-5）→ 直接拉满 100%
+        //   正常（达标）      → 每周期缓慢降 2%（下限 50%），降到再次掉帧为止
         val diff = fps - target
         if (diff < -5.0) {
-            adaptUpStreak++
-            adaptDownStreak = 0
-        } else if (diff > 5.0) {
-            adaptDownStreak++
-            adaptUpStreak = 0
+            adaptIdx = 100
+            if (now - lastAdaptLog >= 1500L) {
+                lastAdaptLog = now
+                logLine("掉帧触发: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
+                    " 差=" + String.format("%.1f", diff) + " → 直接拉满")
+            }
         } else {
-            adaptUpStreak = 0
-            adaptDownStreak = 0
-        }
-        var step = 0
-        if (adaptUpStreak >= 1) {          // 低于目标 5 帧以上：立即升档
-            step = 3
-            adaptUpStreak = 0
-        } else if (adaptDownStreak >= 2) { // 高于目标 5 帧以上，连续 2 次才降档
-            step = -1
-            adaptDownStreak = 0
-        }
-        adaptIdx = (adaptIdx + step).coerceIn(50, 100)
-        if (step != 0 && now - lastAdaptLog >= 1500L) {
-            lastAdaptLog = now
-            logLine("自适应调频: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
-                " 差=" + String.format("%.1f", diff) + " 档位=" + adaptIdx + "%")
+            adaptIdx = (adaptIdx - 2).coerceAtLeast(50)
         }
         val pct = adaptIdx
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
