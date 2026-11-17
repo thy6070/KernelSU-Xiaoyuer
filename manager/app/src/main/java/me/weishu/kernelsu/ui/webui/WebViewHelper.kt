@@ -51,10 +51,11 @@ internal suspend fun prepareWebView(
         // builtin 模块不在 /data/adb/modules 里，模块列表读不到，这里单独兜底构造
         // 非 root 进程读 /data/adb 恒 false，必须用 su 探测 builtin
         fun suExists(path: String): Boolean = try {
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "[ -d $path ] && echo 1 || echo 0"))
-            val o = p.inputStream.bufferedReader().readText().trim()
-            p.waitFor()
-            o == "1"
+            createRootShell(false).use { sh ->
+                val out = ArrayList<String>()
+                sh.newJob("[ -d '$path' ] && echo 1 || echo 0").to(out).exec()
+                out.firstOrNull()?.trim() == "1"
+            }
         } catch (t: Throwable) { false }
         val moduleInfo = modules.find { info -> info.id == moduleId } ?: run {
             if (suExists("/data/adb/ksu/builtin/$moduleId/webroot")) {
