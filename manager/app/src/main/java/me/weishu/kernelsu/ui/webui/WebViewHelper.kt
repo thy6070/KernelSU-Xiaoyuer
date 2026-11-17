@@ -47,40 +47,29 @@ internal suspend fun prepareWebView(
     builtin: Boolean = false,
 ) {
     withContext(Dispatchers.IO) {
-        val repo = ModuleRepositoryImpl()
-        val modules = repo.getModules().getOrDefault(emptyList())
-        // builtin 模块不在 /data/adb/modules 里，模块列表读不到，这里单独兜底构造
-        // 非 root 进程读 /data/adb 恒 false，必须用 su 探测 builtin
-        fun suExists(path: String): Boolean = try {
-            createRootShell(false).use { sh ->
-                val out = ArrayList<String>()
-                sh.newJob("[ -d '$path' ] && echo 1 || echo 0").to(out).exec()
-                out.firstOrNull()?.trim() == "1"
-            }
-        } catch (t: Throwable) { false }
-        val moduleInfo = modules.find { info -> info.id == moduleId } ?: run {
-            // builtin 直通：内置模块直接放行，不再依赖模块列表/文件探测（extra 丢失时按 id 特判兜底）
-            if (builtin || moduleId == "oh_my_keymint" || suExists("/data/adb/ksu/builtin/$moduleId/webroot")) {
-                me.weishu.kernelsu.data.model.Module(
-                    id = moduleId,
-                    name = moduleId,
-                    author = "",
-                    version = "",
-                    versionCode = 0,
-                    description = "",
-                    enabled = if (builtin || moduleId == "oh_my_keymint") true else !suExists("/data/adb/ksu/builtin/$moduleId/disable"),
-                    update = false,
-                    remove = false,
-                    updateJson = "",
-                    hasWebUi = true,
-                    hasActionScript = false,
-                    metamodule = false,
-                    actionIconPath = null,
-                    webUiIconPath = null,
-                )
-            } else {
-                null
-            }
+        // builtin 模块直达：builtin 目录只放 oh_my_keymint，直接构造，完全跳过模块列表扫描
+        val moduleInfo: me.weishu.kernelsu.data.model.Module? = if (moduleId == "oh_my_keymint") {
+            me.weishu.kernelsu.data.model.Module(
+                id = moduleId,
+                name = "OhMyKeymint",
+                author = "",
+                version = "",
+                versionCode = 0,
+                description = "",
+                enabled = true,
+                update = false,
+                remove = false,
+                updateJson = "",
+                hasWebUi = true,
+                hasActionScript = false,
+                metamodule = false,
+                actionIconPath = null,
+                webUiIconPath = null,
+            )
+        } else {
+            val repo = ModuleRepositoryImpl()
+            val modules = repo.getModules().getOrDefault(emptyList())
+            modules.find { info -> info.id == moduleId }
         }
 
         if (moduleInfo == null) {
@@ -98,13 +87,10 @@ internal suspend fun prepareWebView(
         }
 
         webUIState.moduleName = moduleInfo.name
-        // 按模块来源决定路径：模块列表里找到的 → modules；builtin 直通的 → builtin
-        // 不能用 File.exists/su 探测，非 root 进程读不到，会把普通模块误判成 builtin
-        val fromModulesList = modules.any { it.id == moduleId }
-        webUIState.modDir = if (fromModulesList) {
-            "/data/adb/modules/${moduleId}"
+        webUIState.modDir = if (moduleId == "oh_my_keymint") {
+            "/data/adb/ksu/builtin/oh_my_keymint"
         } else {
-            "/data/adb/ksu/builtin/${moduleId}"
+            "/data/adb/modules/${moduleId}"
         }
 
         if (SuperUserViewModel.apps.isEmpty()) {
