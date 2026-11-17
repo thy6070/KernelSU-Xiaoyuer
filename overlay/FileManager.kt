@@ -7252,17 +7252,10 @@ class FpsOverlayService : Service() {
             return
         }
         if (panelHz <= 0.0) return
-        // 66 帧以下：不触发；若已在 boost 则强制退出（60 帧游戏波动不补帧）
+        // 66 帧以下：不触发 boost（60 帧游戏不补帧）。
+        // 注意：这里不能停绑核/降频，否则会和调频的"掉帧拉满"互相打架
         if (fps < 66.0) {
             fpsPlusLow = 0
-            if (fpsPlusBoosted) {
-                fpsPlusBoosted = false
-                fpsPlusHigh = 0
-                bindChannel = "无"
-                logLine("低帧(<64)停止 boost: fps=" + String.format("%.1f", fps))
-                sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
-                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
-            }
             return
         }
         // 固定档位：90/120/144/165。在档位（±3）不触发；掉到档位外立即触发
