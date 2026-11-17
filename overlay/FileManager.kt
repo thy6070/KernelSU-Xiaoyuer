@@ -4963,7 +4963,10 @@ private fun loadApkIcon(ctx: Context, path: String): ImageBitmap? {
                     drawable.draw(canvas)
                     b
                 }
-                bmp.asImageBitmap()
+                val resultBmp = bmp.asImageBitmap()
+                // 探测用的临时 APK 用完即删，避免缓存越积越大
+                if (usedPath != path) { try { java.io.File(usedPath).delete() } catch (t: Throwable) {} }
+                resultBmp
             } catch (t: Throwable) {
                 null
             }
@@ -5194,6 +5197,7 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
         val out = pr.inputStream.bufferedReader().readText()
         pr.waitFor()
         val ok = out.contains("INSTALL_OK")
+        try { zip.delete() } catch (t: Throwable) {}
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             android.widget.Toast.makeText(ctx, if (ok) "已安装 OhMyKeymint（重启生效）" else "安装失败", android.widget.Toast.LENGTH_LONG).show()
         }
