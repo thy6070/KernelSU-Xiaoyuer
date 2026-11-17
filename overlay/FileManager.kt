@@ -7188,19 +7188,15 @@ class FpsOverlayService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastAdaptMs < 2000L) return   // 2s 调节周期
         lastAdaptMs = now
-        // 目标档：进游戏后只锁一次，之后不随瞬时波动改（否则锁 60 的游戏波动到 66 会被判成 90 档，一路升频）
+        // 实时感知：每周期按当前帧率重新归档（不锁定，切帧率/加载界面都能跟上）
+        //   fps ≤ 65 → 60 档，≤ 95 → 90 档，≤ 125 → 120 档，≤ 149 → 144 档，≤ 170 → 165 档
         val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
-        if (lockedTarget <= 0.0) {
-            // 向下归档：取"不超过 fps+5"的最大档位（66 归 60，87 归 90），避免首次采样偏高就被锁到更高档
-            val tierHit = stdTiers.lastOrNull { it <= fps + 5.0 }
-            lockedTarget = if (tierHit != null && tierHit < panelHz - 5) {
-                tierHit
-            } else {
-                panelHz.coerceAtLeast(60.0)
-            }
-            logLine("锁定目标档位=" + String.format("%.0f", lockedTarget) + "（实测 fps=" + String.format("%.1f", fps) + "）")
+        val tierHit = stdTiers.firstOrNull { fps <= it + 5.0 }
+        val target = if (tierHit != null && tierHit < panelHz - 5) {
+            tierHit
+        } else {
+            panelHz.coerceAtLeast(60.0)
         }
-        val target = lockedTarget
         if (target <= 0.0) return
         // 三段式调频（快升慢降）：
         //   fps < 目标-8     → 直接拉满 100%（严重掉帧）
