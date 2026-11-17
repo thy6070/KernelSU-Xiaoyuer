@@ -7186,7 +7186,7 @@ class FpsOverlayService : Service() {
     //   其他情况保持，避免来回震荡
     private fun adaptiveFreq(fps: Double) {
         val now = System.currentTimeMillis()
-        if (now - lastAdaptMs < 2000L) return   // 2s 调节周期
+        if (now - lastAdaptMs < 1000L) return   // 1s 调节周期
         lastAdaptMs = now
         // 实时感知：每周期按当前帧率重新归档（不锁定，切帧率/加载界面都能跟上）
         //   fps ≤ 65 → 60 档，≤ 95 → 90 档，≤ 125 → 120 档，≤ 149 → 144 档，≤ 170 → 165 档
@@ -7198,23 +7198,23 @@ class FpsOverlayService : Service() {
             panelHz.coerceAtLeast(60.0)
         }
         if (target <= 0.0) return
-        // 三段式调频（快升慢降）：
-        //   fps < 目标-8     → 直接拉满 100%（严重掉帧）
-        //   目标-8 ≤ fps < 目标 → 快速升 8%/周期（往目标推，不打满）
-        //   fps ≥ 目标        → 缓慢降 2%/周期（省电，下限 50%）
+        // 三段式（快升慢降）：
+        //   fps < 目标-8     → 拉满 100%（严重掉帧保底）
+        //   目标-8 ≤ fps < 目标 → 每周期 +8%（往上拉，不打满）
+        //   fps ≥ 目标        → 每周期 -2%（缓慢降，省电）
         val diff = fps - target
         if (diff < -8.0) {
             adaptIdx = 100
             if (now - lastAdaptLog >= 1500L) {
                 lastAdaptLog = now
-                logLine("掉帧触发: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
-                    " 差=" + String.format("%.1f", diff) + " → 直接拉满")
+                logLine("严重掉帧拉满: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
+                    " 差=" + String.format("%.1f", diff))
             }
         } else if (diff < 0.0) {
             adaptIdx = (adaptIdx + 8).coerceAtMost(100)
             if (now - lastAdaptLog >= 1500L) {
                 lastAdaptLog = now
-                logLine("未达标: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
+                logLine("未达标上拉: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
                     " 档位=" + adaptIdx + "%")
             }
         } else {
