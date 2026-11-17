@@ -6421,6 +6421,7 @@ class FpsOverlayService : Service() {
     private var bindChannel = "无"
     private var lastBindCheckMs = 0L
     private var lastCpuSampleMs = 0L
+    private var adaptDownTick = 0
     private var fpsFrozen = false
     private var lastProbe = 0L
     private var idleCount = 0
@@ -7224,7 +7225,12 @@ class FpsOverlayService : Service() {
                     " 档位=" + adaptIdx + "%")
             }
         } else {
-            adaptIdx = (adaptIdx - 1).coerceAtLeast(75)
+            // 降频更慢：每 2 个周期（2 秒）才降 1%
+            adaptDownTick++
+            if (adaptDownTick >= 2) {
+                adaptDownTick = 0
+                adaptIdx = (adaptIdx - 1).coerceAtLeast(75)
+            }
         }
         val pct = adaptIdx
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
