@@ -6558,7 +6558,7 @@ class FpsOverlayService : Service() {
     }
 
     // 执行一条 root 命令（带超时；每次独立进程，避免常驻 shell 卡死后无法恢复）
-    private fun sh(cmd: String, timeoutSec: Long = 2L): String {
+    private fun sh(cmd: String, timeoutSec: Long = 6L): String {
         return try {
             val pb = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
             pb.redirectErrorStream(true)
@@ -6994,7 +6994,8 @@ class FpsOverlayService : Service() {
     private var fpsBindPkg = ""
     // 线程亲和：fpsbind（proc connector，毫秒级）+ shell 循环兜底
     private fun startCpuBind() {
-        if (!isGamePkg(activePkg)) return
+        logLine("startCpuBind 进入 pkg=" + activePkg)
+        if (!isGamePkg(activePkg)) { logLine("绑核：非游戏包，跳过"); return }
         // 自适应分核：cpufreq 按 max_freq 分三级（任何设备）
         val policies = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); c=\$(cat \$p/affected_cpus 2>/dev/null); [ -n \"\$m\" ] && echo \"\$m \$c\"; done | sort -n", 2L)
         val groups = ArrayList<Pair<Long, String>>()
@@ -7004,7 +7005,7 @@ class FpsOverlayService : Service() {
             val m = parts[0].toLongOrNull() ?: continue
             groups.add(m to parts[1].replace(" ", ","))
         }
-        if (groups.size < 2) return
+        if (groups.size < 2) { logLine("绑核：cpufreq 分组失败(读到" + groups.size + "组)"); return }
         // 自适应芯片结构（任意组数，按 max_freq 升序）：
         //   big  = 最高两组的并集（保证大核至少两档，避免只绑单核）
         //   mid  = 中间所有组（4 组以上时）；3 组取中间那组；2 组及以下取最低组
@@ -7025,7 +7026,8 @@ class FpsOverlayService : Service() {
             else -> groups[0].second
         }
         // 双通道：eBPF 优先（AppOpt），不支持则走 netlink（fpsbind）
-        val hasEbpf = sh("ls /sys/fs/bpf >/dev/null 2>&1 && ls /sys/kernel/btf/vmlinux >/dev/null 2>&1 && echo yes", 1L).trim() == "yes"
+        val hasEbpf = sh("ls /sys/fs/bpf >/dev/null 2>&1 && ls /sys/kernel/btf/vmlinux >/dev/null 2>&1 && echo yes", 6L).trim() == "yes"
+        logLine("绑核：hasEbpf=" + hasEbpf)
         if (!hasEbpf) {
             // netlink 通道（fpsbind）
             val fb = File(filesDir, "fpsbind")
