@@ -95,7 +95,8 @@ internal suspend fun prepareWebView(
         }
 
         webUIState.moduleName = moduleInfo.name
-        webUIState.modDir = if (java.io.File("/data/adb/modules/${moduleId}").exists()) {
+        // 同样用 su 判断（非 root 进程 File.exists 恒 false，会把 modules 模块误判成 builtin）
+        webUIState.modDir = if (suExists("/data/adb/modules/${moduleId}")) {
             "/data/adb/modules/${moduleId}"
         } else {
             "/data/adb/ksu/builtin/${moduleId}"
