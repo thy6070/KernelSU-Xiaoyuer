@@ -2417,7 +2417,7 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            logLine("点击: 软重启代替重启 " + if (softReboot) "关" else "开")
+                                            writeFpsLog(navCtx, "点击: 软重启代替重启 " + if (softReboot) "关" else "开")
                                             softReboot = !softReboot
                                             navCtx.getSharedPreferences("settings", 0).edit()
                                                 .putBoolean("soft_reboot", softReboot).apply()
@@ -2443,7 +2443,7 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            logLine("点击: 伪装BL 行 → 打开WebUI(builtin=oh_my_keymint)")
+                                            writeFpsLog(navCtx, "点击: 伪装BL 行 → 打开WebUI(builtin=oh_my_keymint)")
                                             // 打开 OhMyKeymint 的 WebUI（模块 id = oh_my_keymint）
                                             navScope.launch {
                                                 try {
@@ -2478,7 +2478,7 @@ private fun ProMaxIsland(
                                         Text(text = "开", fontSize = 12.sp,
                                             color = if (omkOn) Color.White else Color(0xFF5A5A5E),
                                             modifier = Modifier.clickable {
-                                                logLine("点击: 伪装BL 开")
+                                                writeFpsLog(navCtx, "点击: 伪装BL 开")
                                                 omkOn = true
                                                 Thread {
                                                     try {
@@ -2503,7 +2503,7 @@ private fun ProMaxIsland(
                                         Text(text = "关", fontSize = 12.sp,
                                             color = if (omkOn) Color(0xFF5A5A5E) else Color.White,
                                             modifier = Modifier.clickable {
-                                                logLine("点击: 伪装BL 关")
+                                                writeFpsLog(navCtx, "点击: 伪装BL 关")
                                                 omkOn = false
                                                 Thread {
                                                     try {
@@ -2519,7 +2519,7 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            logLine("点击: 显示帧率 " + if (fpsShow) "关" else "开")
+                                            writeFpsLog(navCtx, "点击: 显示帧率 " + if (fpsShow) "关" else "开")
                                             fpsShow = !fpsShow
                                             navCtx.getSharedPreferences("settings", 0).edit()
                                                 .putBoolean("fps_show", fpsShow).apply()
@@ -2565,7 +2565,7 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            logLine("点击: 改机型")
+                                            writeFpsLog(navCtx, "点击: 改机型")
                                             changeDeviceModel(navCtx)
                                         }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -2583,7 +2583,7 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            logLine("点击: 游戏清缓存")
+                                            writeFpsLog(navCtx, "点击: 游戏清缓存")
                                             gameCleanCache(navCtx)
                                         }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -2601,7 +2601,7 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            logLine("点击: selinux_hide " + if (selinuxHide) "关" else "开")
+                                            writeFpsLog(navCtx, "点击: selinux_hide " + if (selinuxHide) "关" else "开")
                                             selinuxHide = !selinuxHide
                                             setFeature("selinux_hide", selinuxHide)
                                         }
@@ -2626,7 +2626,7 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            logLine("点击: kernel_umount " + if (kernelUmount) "关" else "开")
+                                            writeFpsLog(navCtx, "点击: kernel_umount " + if (kernelUmount) "关" else "开")
                                             kernelUmount = !kernelUmount
                                             setFeature("kernel_umount", kernelUmount)
                                         }
@@ -5576,6 +5576,18 @@ var uiPickerTitle by androidx.compose.runtime.mutableStateOf<String?>(null)
 var uiPicker by androidx.compose.runtime.mutableStateOf<List<String>?>(null)
 var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null)
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
+
+// 顶层写帧率日志（供 Composable/设置面板调用；FpsOverlayService 的 logLine 是服务私有方法）
+internal fun writeFpsLog(ctx: android.content.Context, msg: String) {
+    try {
+        val f = java.io.File(ctx.filesDir, "帧率日志.txt")
+        if (f.length() > 512 * 1024) f.writeText("")
+        f.appendText(
+            java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
+                .format(java.util.Date()) + " " + msg + "\n"
+        )
+    } catch (t: Throwable) {}
+}
 
 internal fun suBin(): String {
     // Never probe at length here: the first su call may block on the grant dialog.
