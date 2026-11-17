@@ -7049,23 +7049,32 @@ class FpsOverlayService : Service() {
             if (!ebpf.exists() || ebpf.length() < 3000) assets.open("AppOpt-ebpf").use { i -> ebpf.outputStream().use { i.copyTo(it) } }
         } catch (t: Throwable) { logLine("AppOpt 提取失败: " + t); return }
         bin.setExecutable(true); ebpf.setReadable(true)
-        // 生成自适应 applist.conf（实际核号，不写死）
+        // 生成自适应 applist.conf（精细绑核）：
+        //   AppOpt 的多条匹配规则会取【并集】，所以不能写 {*} 兜底，否则所有线程都会带上兜底核
+        //   base = mid（未匹配线程：GC/IO/网络杂项 → 中核）
+        //   主线程：comm 是包名截断，用包名尾段匹配 → 大核
+        //   渲染/音频按线程名区分
+        val pkgTail = activePkg.substringAfterLast(".").ifBlank { activePkg }
         val conf = File(filesDir, "applist.conf")
         conf.writeText("# 自适应分核: big=" + big + " mid=" + mid + " small=" + small + "\n" +
-            "# 渲染/主线程 -> 大核\n" +
-            activePkg + "=" + big + "\n" +
+            activePkg + "=" + mid + "\n" +
+            activePkg + "{*" + pkgTail + "*}" + "=" + big + "\n" +
             activePkg + "{*Render*}" + "=" + big + "\n" +
+            activePkg + "{*render*}" + "=" + big + "\n" +
             activePkg + "{*GL*}" + "=" + big + "\n" +
             activePkg + "{*gfx*}" + "=" + big + "\n" +
+            activePkg + "{*Gfx*}" + "=" + big + "\n" +
             activePkg + "{*Unity*}" + "=" + big + "\n" +
+            activePkg + "{*unity*}" + "=" + big + "\n" +
             activePkg + "{*main*}" + "=" + big + "\n" +
-            "# 音频/网络/IO -> 小核\n" +
+            activePkg + "{*Main*}" + "=" + big + "\n" +
+            activePkg + "{*Script*}" + "=" + mid + "\n" +
             activePkg + "{*Audio*}" + "=" + small + "\n" +
             activePkg + "{*audio*}" + "=" + small + "\n" +
             activePkg + "{*Net*}" + "=" + small + "\n" +
             activePkg + "{*net*}" + "=" + small + "\n" +
             activePkg + "{*binder*}" + "=" + small + "\n" +
-            "# 兜底规则故意不给 {*}：未匹配线程走 base=大核，避免主线程被兜到中核\n")
+            activePkg + "{*Binder*}" + "=" + small + "\n")
         // 调速器（骁龙/天玑自适应）：sugov_ext（MTK 平滑）/ schedutil（高通）
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do av=\$(cat \$p/scaling_available_governors 2>/dev/null); " +
            "case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null ;; " +
@@ -7083,7 +7092,7 @@ class FpsOverlayService : Service() {
         Thread {
             try {
                 Thread.sleep(1500)
-                val pid0 = sh("pidof " + activePkg + " 2>/dev/null | tr ' ' '\\n' | head -1", 1L).trim()
+                val pid0 = sh("pidof " + activePkg + " 2>/dev/null | tr ' ' '\\n' | head -1", 6L).trim()
                 if (pid0.isEmpty()) return@Thread
                 sh("P=" + pid0 + "; for t in /proc/\$P/task/*; do " +
                    "T=\${t##*/}; C=\$(cat \$t/comm 2>/dev/null); " +
@@ -7099,7 +7108,7 @@ class FpsOverlayService : Service() {
             try {
                 Thread.sleep(2500)
                 val f = java.io.File(filesDir, "system.log")
-                val alive = sh("pidof system_bg 2>/dev/null", 1L).trim().isNotEmpty()
+                val alive = sh("pidof system_bg 2>/dev/null", 6L).trim().isNotEmpty()
                 if (f.exists()) {
                     val tail = f.readLines().takeLast(6).joinToString(" | ")
                     logLine("system_bg 存活=" + alive + " 日志: " + if (tail.isBlank()) "(空)" else tail)
