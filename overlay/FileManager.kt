@@ -3870,6 +3870,7 @@ private fun ModeButton(
         if (clickTick == 0) return@LaunchedEffect
         if (title == "FPS+") {
             val enabling = on
+            writeFpsLog(ctx3, "点击: FPS+ " + if (enabling) "开" else "关")
             ctx3.getSharedPreferences("settings", 0).edit().putBoolean("fps_plus", enabling).apply()
             latencyMsg = if (enabling) "已开启（按实时帧率调节）" else "已关闭"
             return@LaunchedEffect
