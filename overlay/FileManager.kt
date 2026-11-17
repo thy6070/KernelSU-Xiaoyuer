@@ -2455,6 +2455,7 @@ private fun ProMaxIsland(
                                                         setData(android.net.Uri.parse("ksu://webui?id=oh_my_keymint&token=$token"))
                                                         putExtra("id", "oh_my_keymint")
                                                         putExtra("name", "OhMyKeymint")
+                                                        putExtra("builtin", true)
                                                     }
                                                     navCtx.startActivity(it)
                                                 } catch (t: Throwable) {
