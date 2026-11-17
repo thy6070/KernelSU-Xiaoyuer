@@ -155,15 +155,6 @@ class MainActivity : ComponentActivity() {
 
         val isManager = Natives.isManager
         if (isManager && Natives.kernelUAPIVersion == Natives.managerUAPIVersion) install()
-        // Android 13+ 通知权限：帧率悬浮窗的前台通知需要它，不申请会一直不显示
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 33) {
-                val perm = "android.permission.POST_NOTIFICATIONS"
-                if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                    requestPermissions(arrayOf(perm), 1001)
-                }
-            }
-        } catch (t: Throwable) {}
         // 首次启动自动安装内置模块（仅未安装时，静默）
         try { me.weishu.kernelsu.ui.screen.ensureBuiltinKeymint(this) } catch (t: Throwable) {}
 
