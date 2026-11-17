@@ -2417,7 +2417,6 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            writeFpsLog(navCtx, "点击: 软重启代替重启 " + if (softReboot) "关" else "开")
                                             softReboot = !softReboot
                                             navCtx.getSharedPreferences("settings", 0).edit()
                                                 .putBoolean("soft_reboot", softReboot).apply()
@@ -2564,10 +2563,7 @@ private fun ProMaxIsland(
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            writeFpsLog(navCtx, "点击: 改机型")
-                                            changeDeviceModel(navCtx)
-                                        }
+                                        .clickable { changeDeviceModel(navCtx) }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -2582,10 +2578,7 @@ private fun ProMaxIsland(
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            writeFpsLog(navCtx, "点击: 游戏清缓存")
-                                            gameCleanCache(navCtx)
-                                        }
+                                        .clickable { gameCleanCache(navCtx) }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -2601,7 +2594,6 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            writeFpsLog(navCtx, "点击: selinux_hide " + if (selinuxHide) "关" else "开")
                                             selinuxHide = !selinuxHide
                                             setFeature("selinux_hide", selinuxHide)
                                         }
@@ -2626,7 +2618,6 @@ private fun ProMaxIsland(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            writeFpsLog(navCtx, "点击: kernel_umount " + if (kernelUmount) "关" else "开")
                                             kernelUmount = !kernelUmount
                                             setFeature("kernel_umount", kernelUmount)
                                         }
