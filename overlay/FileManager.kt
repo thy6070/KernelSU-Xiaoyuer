@@ -2484,7 +2484,7 @@ private fun ProMaxIsland(
                                                         // 用 su 检测（App 非 root，File.exists 读不到 /data/adb 恒 false，会导致每次点开都重装并 touch disable）
                                                         val installed = try {
                                                             val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
-                                                                "[ -f /data/adb/ksu/builtin/oh_my_keymint/module.prop ] && echo 1 || echo 0"))
+                                                                "[ -f /data/adb/modules/oh_my_keymint/module.prop ] && echo 1 || echo 0"))
                                                             val o = p.inputStream.bufferedReader().readText().trim()
                                                             p.waitFor()
                                                             o == "1"
@@ -2492,8 +2492,7 @@ private fun ProMaxIsland(
                                                         if (!installed) installOhMyKeymint(navCtx)
                                                         // KSU 原版命令：ksud module enable + 启动 service
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "M=/data/adb/ksu/builtin/oh_my_keymint; " +
-                                                            "rm -f \$M/disable; true").redirectErrorStream(true).start().waitFor()
+                                                            "/data/adb/ksud module enable oh_my_keymint 2>&1; true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
                                                 android.widget.Toast.makeText(navCtx, "已启用（重启后生效）", android.widget.Toast.LENGTH_SHORT).show()
@@ -2507,7 +2506,9 @@ private fun ProMaxIsland(
                                                 Thread {
                                                     try {
                                                         ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                            "M=/data/adb/ksu/builtin/oh_my_keymint; touch \$M/disable; true").redirectErrorStream(true).start().waitFor()
+                                                            "/data/adb/ksud module disable oh_my_keymint 2>&1; " +
+                                                            "pkill -9 -x keymint 2>/dev/null; " +
+                                                            "pkill -9 -f '/data/adb/modules/oh_my_keymint/daemon' 2>/dev/null; true").redirectErrorStream(true).start().waitFor()
                                                     } catch (t: Throwable) {}
                                                 }.start()
                                                 android.widget.Toast.makeText(navCtx, "已停用（重启后生效）", android.widget.Toast.LENGTH_SHORT).show()
@@ -5182,11 +5183,13 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
         val zip = java.io.File(ctx.cacheDir, "ohmykeymint.zip")
         ctx.assets.open("ohmykeymint.zip").use { i -> zip.outputStream().use { o -> i.copyTo(o) } }
         // 手动解压安装（ksud install 不可靠）
+        val M = "/data/adb/modules/oh_my_keymint"
         val cmd = "rm -rf /data/adb/modules/oh_my_keymint /data/adb/ksu/builtin/oh_my_keymint; " +
-            "mkdir -p /data/adb/ksu/builtin/oh_my_keymint; " +
-            "unzip -o -q '" + zip.absolutePath + "' -d /data/adb/ksu/builtin/oh_my_keymint 2>&1; " +
-            "chmod 755 /data/adb/ksu/builtin/oh_my_keymint/*.sh 2>/dev/null; " +
-            "test -s /data/adb/ksu/builtin/oh_my_keymint/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
+            "mkdir -p " + M + "; " +
+            "unzip -o -q '" + zip.absolutePath + "' -d " + M + " 2>&1; " +
+            "chmod 755 " + M + "/*.sh 2>/dev/null; " +
+            "[ -f " + M + "/sepolicy.rule ] && /data/adb/ksud sepolicy apply " + M + "/sepolicy.rule >/dev/null 2>&1; " +
+            "test -s " + M + "/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
         val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
         val out = pr.inputStream.bufferedReader().readText()
         pr.waitFor()
@@ -5201,32 +5204,7 @@ internal fun installOhMyKeymint(ctx: android.content.Context) {
     }
 }
 
-// 首次启动自动安装内置模块（静默，仅当未安装时；装好后走模块列表过滤，不显示）
-internal fun ensureBuiltinKeymint(ctx: android.content.Context) {
-    Thread {
-        try {
-            val exists = try {
-                val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c",
-                    "[ -f /data/adb/ksu/builtin/oh_my_keymint/module.prop ] && echo 1 || echo 0"))
-                val o = p.inputStream.bufferedReader().readText().trim()
-                p.waitFor()
-                o == "1"
-            } catch (t: Throwable) { true }
-            if (exists) return@Thread
-            val zip = java.io.File(ctx.cacheDir, "ohmykeymint.zip")
-            ctx.assets.open("ohmykeymint.zip").use { i -> zip.outputStream().use { o -> i.copyTo(o) } }
-            val cmd = "rm -rf /data/adb/modules/oh_my_keymint; mkdir -p /data/adb/ksu/builtin/oh_my_keymint; " +
-                "unzip -o -q '" + zip.absolutePath.replace("'", "'\\''") + "' -d /data/adb/ksu/builtin/oh_my_keymint 2>&1; " +
-                "chmod 755 /data/adb/ksu/builtin/oh_my_keymint/*.sh 2>/dev/null; " +
-                "touch /data/adb/ksu/builtin/oh_my_keymint/disable; " +
-                "test -s /data/adb/ksu/builtin/oh_my_keymint/module.prop && echo INSTALL_OK || echo INSTALL_FAIL"
-            val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
-            pr.inputStream.bufferedReader().readText()
-            pr.waitFor()
-        } catch (t: Throwable) {
-        }
-    }.start()
-}
+// 模块安装已改为：点"伪装BL 开"时检测不到才安装（见开关逻辑）
 
 // 防设备标记（复刻 Fish 工具箱：备份权限 + 清 ano_tmp + 重置设备 ID + 权限 000）
 internal fun doAntiDetect(ctx: android.content.Context) {
