@@ -44,6 +44,7 @@ internal suspend fun prepareWebView(
     activity: Activity,
     moduleId: String,
     webUIState: WebUIState,
+    builtin: Boolean = false,
 ) {
     withContext(Dispatchers.IO) {
         val repo = ModuleRepositoryImpl()
@@ -58,7 +59,8 @@ internal suspend fun prepareWebView(
             }
         } catch (t: Throwable) { false }
         val moduleInfo = modules.find { info -> info.id == moduleId } ?: run {
-            if (suExists("/data/adb/ksu/builtin/$moduleId/webroot")) {
+            // builtin 直通：调用方明确标记了这是内置模块，不再依赖模块列表/文件探测
+            if (builtin || suExists("/data/adb/ksu/builtin/$moduleId/webroot")) {
                 me.weishu.kernelsu.data.model.Module(
                     id = moduleId,
                     name = moduleId,
@@ -66,7 +68,7 @@ internal suspend fun prepareWebView(
                     version = "",
                     versionCode = 0,
                     description = "",
-                    enabled = !suExists("/data/adb/ksu/builtin/$moduleId/disable"),
+                    enabled = if (builtin) true else !suExists("/data/adb/ksu/builtin/$moduleId/disable"),
                     update = false,
                     remove = false,
                     updateJson = "",
@@ -97,7 +99,7 @@ internal suspend fun prepareWebView(
 
         webUIState.moduleName = moduleInfo.name
         // 同样用 su 判断（非 root 进程 File.exists 恒 false，会把 modules 模块误判成 builtin）
-        webUIState.modDir = if (suExists("/data/adb/modules/${moduleId}")) {
+        webUIState.modDir = if (!builtin && suExists("/data/adb/modules/${moduleId}")) {
             "/data/adb/modules/${moduleId}"
         } else {
             "/data/adb/ksu/builtin/${moduleId}"
