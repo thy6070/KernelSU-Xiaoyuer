@@ -49,9 +49,15 @@ internal suspend fun prepareWebView(
         val repo = ModuleRepositoryImpl()
         val modules = repo.getModules().getOrDefault(emptyList())
         // builtin 模块不在 /data/adb/modules 里，模块列表读不到，这里单独兜底构造
+        // 非 root 进程读 /data/adb 恒 false，必须用 su 探测 builtin
+        fun suExists(path: String): Boolean = try {
+            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "[ -d $path ] && echo 1 || echo 0"))
+            val o = p.inputStream.bufferedReader().readText().trim()
+            p.waitFor()
+            o == "1"
+        } catch (t: Throwable) { false }
         val moduleInfo = modules.find { info -> info.id == moduleId } ?: run {
-            val dir = java.io.File("/data/adb/ksu/builtin/$moduleId")
-            if (dir.isDirectory && java.io.File(dir, "webroot").isDirectory) {
+            if (suExists("/data/adb/ksu/builtin/$moduleId/webroot")) {
                 me.weishu.kernelsu.data.model.Module(
                     id = moduleId,
                     name = moduleId,
@@ -59,7 +65,7 @@ internal suspend fun prepareWebView(
                     version = "",
                     versionCode = 0,
                     description = "",
-                    enabled = !java.io.File(dir, "disable").exists(),
+                    enabled = !suExists("/data/adb/ksu/builtin/$moduleId/disable"),
                     update = false,
                     remove = false,
                     updateJson = "",
