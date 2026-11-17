@@ -2348,7 +2348,7 @@ private fun ProMaxIsland(
                                     try {
                                         // 用 su 检测（App 无权限直接读 /data/adb）
                                         val pr = ProcessBuilder(suBin(), "--mount-master", "-c",
-                                            "M=/data/adb/ksu/builtin/oh_my_keymint; " +
+                                            "M=/data/adb/modules/oh_my_keymint; " +
                                             "[ -s \$M/module.prop ] && [ ! -e \$M/disable ] && echo ON || echo OFF")
                                             .redirectErrorStream(true).start()
                                         val o = pr.inputStream.bufferedReader().readText()
