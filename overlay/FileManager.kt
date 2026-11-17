@@ -7168,6 +7168,7 @@ class FpsOverlayService : Service() {
     private var lastAdaptMs = 0L
     private var lastAdaptLog = 0L
     private var adaptIdx = 100
+    private var lockedTarget = 0.0   // 进游戏锁定的目标档位，退出游戏清零
     private var adaptUpStreak = 0
     private var adaptDownStreak = 0  // 0-100 频率比例
     // 自适应调频（Scene 风格）：2 秒周期 + 目标帧率比对 + 每次一档 + 降频迟滞
@@ -7178,16 +7179,19 @@ class FpsOverlayService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastAdaptMs < 2000L) return   // 2s 调节周期
         lastAdaptMs = now
-        // 档位判定：帧率不会卡在两个档位中间，超过"档位+5"就一定是更高档
-        //   ≤65 → 60 档，≤95 → 90 档，≤125 → 120 档，≤149 → 144 档，≤170 → 165 档
-        //   例：64 → 60 档；66 → 90 档（不是 60，也不是"保持"）
+        // 目标档：进游戏后只锁一次，之后不随瞬时波动改（否则锁 60 的游戏波动到 66 会被判成 90 档，一路升频）
         val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
-        val tierHit = stdTiers.firstOrNull { fps <= it + 5.0 }
-        val target = if (tierHit != null && tierHit < panelHz - 5) {
-            tierHit
-        } else {
-            panelHz.coerceAtLeast(60.0)
+        if (lockedTarget <= 0.0) {
+            // 向下归档：取"不超过 fps+5"的最大档位（66 归 60，87 归 90），避免首次采样偏高就被锁到更高档
+            val tierHit = stdTiers.lastOrNull { it <= fps + 5.0 }
+            lockedTarget = if (tierHit != null && tierHit < panelHz - 5) {
+                tierHit
+            } else {
+                panelHz.coerceAtLeast(60.0)
+            }
+            logLine("锁定目标档位=" + String.format("%.0f", lockedTarget) + "（实测 fps=" + String.format("%.1f", fps) + "）")
         }
+        val target = lockedTarget
         if (target <= 0.0) return
         // 三段式调频（快升慢降）：
         //   fps < 目标-8     → 直接拉满 100%（严重掉帧）
@@ -7229,6 +7233,7 @@ class FpsOverlayService : Service() {
             if (fpsBindStarted) {
                 fpsBindStarted = false
                 bindChannel = "无"
+                lockedTarget = 0.0
                 sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null", 1L)
                 logLine("退出游戏，停止绑核")
             }
@@ -7236,6 +7241,7 @@ class FpsOverlayService : Service() {
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
                 bindChannel = "无"
+                lockedTarget = 0.0
                 logLine("退出游戏，停止 FPS+（恢复频率+停 AppOpt）")
                 sh("pkill -x h-top 2>/dev/null; pkill -x system_bg 2>/dev/null; pkill -x AppOpt 2>/dev/null; pkill -x fpsbind 2>/dev/null; " +
                    "P=\$(pidof " + activePkg + " 2>/dev/null | tr ' ' '\\n' | head -1); " +
