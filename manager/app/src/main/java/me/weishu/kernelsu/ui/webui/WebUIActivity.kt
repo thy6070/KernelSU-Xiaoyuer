@@ -83,7 +83,9 @@ private fun MainContent(activity: ComponentActivity, onFinish: () -> Unit) {
             onFinish()
             return@LaunchedEffect
         }
-        val builtin = activity.intent?.getBooleanExtra("builtin", false) ?: false
+        // 不再依赖 extra：extra 在部分启动路径会丢，按 id 直接判定（只有 oh_my_keymint 走 builtin 直达）
+        val builtin = (activity.intent?.getBooleanExtra("builtin", false) ?: false) ||
+            moduleId == "oh_my_keymint"
         prepareWebView(activity, moduleId, webUIState, builtin)
     }
 
