@@ -2472,11 +2472,9 @@ private fun ProMaxIsland(
                                         modifier = Modifier.weight(1f)
                                     )
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(text = "开", fontSize = 13.sp,
+                                        Text(text = "开", fontSize = 12.sp,
                                             color = if (omkOn) Color.White else Color(0xFF5A5A5E),
-                                            modifier = Modifier
-                                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                                                .clickable {
+                                            modifier = Modifier.clickable {
                                                 omkOn = true
                                                 Thread {
                                                     try {
@@ -2498,11 +2496,9 @@ private fun ProMaxIsland(
                                                 android.widget.Toast.makeText(navCtx, "已启用（重启后生效）", android.widget.Toast.LENGTH_SHORT).show()
                                             })
                                         Text(text = " | ", fontSize = 12.sp, color = Color(0xFF5A5A5E))
-                                        Text(text = "关", fontSize = 13.sp,
+                                        Text(text = "关", fontSize = 12.sp,
                                             color = if (omkOn) Color(0xFF5A5A5E) else Color.White,
-                                            modifier = Modifier
-                                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                                                .clickable {
+                                            modifier = Modifier.clickable {
                                                 omkOn = false
                                                 Thread {
                                                     try {
