@@ -6415,6 +6415,7 @@ class FpsOverlayService : Service() {
     private var zeroCount = 0
     private var fpsBindStarted = false
     private var bindChannel = "无"
+    private var lastBindCheckMs = 0L
     private var fpsFrozen = false
     private var lastProbe = 0L
     private var idleCount = 0
@@ -6915,6 +6916,18 @@ class FpsOverlayService : Service() {
                         logLine("FPS+ 开启，fpsbind 常驻监听")
                     }
                 }
+                // 绑核守护存活自愈：每 10 秒查一次 system_bg，没了就重新拉起
+                try {
+                    val nowB = System.currentTimeMillis()
+                    if (nowB - lastBindCheckMs > 10000L && isGamePkg(activePkg)) {
+                        lastBindCheckMs = nowB
+                        val fpOnB = getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
+                        if (fpOnB && fpsBindStarted && sh("pidof system_bg 2>/dev/null", 3L).trim().isEmpty()) {
+                            logLine("system_bg 已退出，重新拉起绑核")
+                            fpsBindStarted = false
+                        }
+                    }
+                } catch (t: Throwable) {}
                 maybeFpsPlusBoost(fpsRaw)
                 // 自适应调频（FPS+ 开启 + 游戏 + 未 boost 时）
                 try {
