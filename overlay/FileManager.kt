@@ -7252,9 +7252,9 @@ class FpsOverlayService : Service() {
             return
         }
         if (panelHz <= 0.0) return
-        // 66 帧以下：不触发 boost（60 帧游戏不补帧）。
+        // 86 帧以下：不触发 boost（60 档游戏实际会波动到 67~75，用 66 拦不住会一直触发）
         // 注意：这里不能停绑核/降频，否则会和调频的"掉帧拉满"互相打架
-        if (fps < 66.0) {
+        if (fps < 86.0) {
             fpsPlusLow = 0
             return
         }
