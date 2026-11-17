@@ -7178,10 +7178,16 @@ class FpsOverlayService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastAdaptMs < 2000L) return   // 2s 调节周期
         lastAdaptMs = now
-        // 目标帧率：游戏锁帧档（60/90/120/144/165）优先，否则面板刷新率
+        // 目标帧率：取离实测帧率最近的档位（差 ≤10 就算锁在该档），否则用面板刷新率
+        // 原来 ±2 太窄：游戏锁 60 但渲染 62 时会被判成"非锁帧"，目标变 120 → 比例 0.52 → 频率拉满
         val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
-        val lockedTier = stdTiers.firstOrNull { kotlin.math.abs(it - fps) <= 2.0 }
-        val target = if (lockedTier != null && lockedTier < panelHz - 5) lockedTier else panelHz.coerceAtLeast(60.0)
+        val nearestTier = stdTiers.minByOrNull { kotlin.math.abs(it - fps) }
+        val target = if (nearestTier != null &&
+            kotlin.math.abs(nearestTier - fps) <= 10.0 && nearestTier < panelHz - 5) {
+            nearestTier
+        } else {
+            panelHz.coerceAtLeast(60.0)
+        }
         if (target <= 0.0) return
         val ratio = fps / target
         // 没到目标就调：如目标 90、实际 87 → 立即升频（不留 5% 死区）
