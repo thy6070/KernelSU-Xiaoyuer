@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
                 std::string tmp;
                 dumpTo(sf, en, tmp);
                 tsMode = true;
-                fprintf(stderr, "latency all zero -> timestats per-layer mode\n");
+                fprintf(stderr, "latency all zero -> timestats per-layer mode (layer=%s pkg=%s)\n", argv[1], pkg.c_str());
                 usleep(500 * 1000);
                 continue;
             }
@@ -212,6 +212,14 @@ int main(int argc, char **argv) {
             }
             bool found = false;
             long long frames = timestatsLayerFrames(data, pkg, &found);
+            static int missCount = 0;
+            static bool firstFound = false;
+            if (!found) {
+                if (missCount++ % 10 == 0) fprintf(stderr, "timestats: layer not found for pkg=%s (try %d)\n", pkg.c_str(), missCount);
+            } else if (!firstFound) {
+                firstFound = true;
+                fprintf(stderr, "timestats: matched pkg=%s totalFrames=%lld\n", pkg.c_str(), frames);
+            }
             long long t = nowNs();
             if (found && lastFrames >= 0 && t > lastNs) {
                 double dt = (t - lastNs) / 1e9;
