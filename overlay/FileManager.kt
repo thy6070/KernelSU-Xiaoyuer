@@ -7008,6 +7008,7 @@ class FpsOverlayService : Service() {
     private fun isGamePkg(pkg: String): Boolean {
         if (pkg.isEmpty()) return false
         return pkg.startsWith("com.tencent.tmgp.") || pkg.startsWith("com.tencent.ig") ||
+            pkg.startsWith("com.tencent.rmcn") ||   // 三角洲行动
             pkg.startsWith("com.pubg.") || pkg.startsWith("com.miHoYo.") ||
             pkg.startsWith("com.mihoyo.") || pkg.startsWith("com.netease.") ||
             pkg.startsWith("com.kurogame.") || pkg.startsWith("com.papegames.") ||
