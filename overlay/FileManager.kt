@@ -6421,6 +6421,7 @@ class FpsOverlayService : Service() {
     private var bindChannel = "无"
     private var lastBindCheckMs = 0L
     private var lastCpuSampleMs = 0L
+    private var lastRawDbgMs = 0L
     private var adaptDownTick = 0
     private var fpsFrozen = false
     private var lastProbe = 0L
@@ -6601,10 +6602,24 @@ class FpsOverlayService : Service() {
         }
         if (bin.exists() && bin.length() > 10000) {
             bin.setExecutable(true)
-            sh("chmod 755 " + bin.absolutePath + "; setsid " + bin.absolutePath + " \"" + layer + "\" 16 \"" + d + "/fps_raw\" </dev/null >/dev/null 2>&1 & echo \$! > " + d + "/fps_pid", 3L)
+            // stderr 落 fpsbinder.log，便于诊断层选择/timestats
+            sh("chmod 755 " + bin.absolutePath + "; rm -f " + d + "/fpsbinder.log; setsid " + bin.absolutePath + " \"" + layer + "\" 16 \"" + d + "/fps_raw\" </dev/null >/dev/null 2>>" + d + "/fpsbinder.log & echo \$! > " + d + "/fps_pid", 3L)
             daemonLayer = layer
             daemonStartedAt = System.currentTimeMillis()
             logLine("native fpsbinder2 启动: " + layer)
+            // 3 秒后把 fpsbinder2 自己的诊断日志带进帧率日志（层名/timestats 匹配情况）
+            Thread {
+                try {
+                    Thread.sleep(3000)
+                    val lf = java.io.File(d, "fpsbinder.log")
+                    if (lf.exists()) {
+                        val t = lf.readLines().takeLast(8).joinToString(" | ")
+                        if (t.isNotBlank()) logLine("fpsbinder2 日志: " + t)
+                    } else {
+                        logLine("fpsbinder2 无日志文件")
+                    }
+                } catch (t: Throwable) {}
+            }.start()
             return
         }
         // 无兜底：fpsbinder2 不可用就不采集（显示 --）
@@ -6620,14 +6635,21 @@ class FpsOverlayService : Service() {
     private fun readDaemonFps(): Double? {
         return try {
             val f = File(filesDir, "fps_raw")
-            if (!f.exists() || f.length() == 0L) return null
+            val nowDbg = System.currentTimeMillis()
+            fun dbg(msg: String) {
+                // 限频：同类问题 10 秒最多写一次
+                if (nowDbg - lastRawDbgMs > 10000L) { lastRawDbgMs = nowDbg; logLine(msg) }
+            }
+            if (!f.exists()) { dbg("fps_raw 不存在（采集未启动或已停）"); return null }
+            if (f.length() == 0L) { dbg("fps_raw 为空（采集进程无输出）"); return null }
             val mt = f.lastModified()
-            val now = System.currentTimeMillis()
+            val now = nowDbg
             if (mt != lastRawMtime) {
                 lastRawMtime = mt
                 lastRawChange = now
             } else if (now - lastRawChange > 3000L) {
                 // 3 秒没更新：daemon 可能已死（脚本被删/层失效），交给上层自愈
+                dbg("fps_raw 超过3秒未更新（采集进程可能已退出）")
                 return null
             }
             val text = f.readText()
