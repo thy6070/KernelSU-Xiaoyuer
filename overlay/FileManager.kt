@@ -7217,7 +7217,8 @@ class FpsOverlayService : Service() {
                 logLine("严重掉帧拉满: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
                     " 差=" + String.format("%.1f", diff))
             }
-        } else if (diff < 0.0) {
+        } else if (diff < -1.0) {
+            // 容差 1 帧：119.1 也算 120 档，不拉；118.9 才算未达标
             adaptIdx = (adaptIdx + 8).coerceAtMost(100)
             if (now - lastAdaptLog >= 1500L) {
                 lastAdaptLog = now
