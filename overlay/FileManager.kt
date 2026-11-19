@@ -2186,15 +2186,12 @@ private fun ProMaxIsland(
                 .combinedClickable(
                     onClick = {
                         if (terminalMode) onTermClose()
+                        // let the panels shrink before the pill settles, so closing keeps its animation
                         val hadNav = navMode || navTarget != null
-                        if (!hadNav) {
-                            // 点击胶囊 → 展开导航栏（原来是长按）
-                            openNav(null)
-                        } else {
-                            // 已展开 → 点击收起
-                            navMode = false
-                            expanded = false
-                            onClearLongPress()
+                        navMode = false
+                        expanded = false
+                        onClearLongPress()
+                        if (hadNav) {
                             navClosing = true
                             reopenScope.launch {
                                 kotlinx.coroutines.delay(180)
@@ -2213,6 +2210,7 @@ private fun ProMaxIsland(
                             jumpInput = ""
                         }
                     },
+                    // 长按展开导航栏（点击只做收起/清状态）
                     onLongClick = { openNav(null) }
                 )
         ) {
@@ -4838,7 +4836,7 @@ private fun FsRow(
                         Text(
                             text = sizeText,
                             fontSize = 9.sp,
-                            color = Color(0x99FFFFFF),
+                            color = Color(0x66FFFFFF),
                             fontFamily = FontFamily.Monospace,
                             maxLines = 1
                         )
@@ -5056,15 +5054,17 @@ private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatche
     val fromShell = shellOut.mapNotNull { raw ->
         val line = raw.trim()
         // toybox ls -l: perms links owner group size date time name
-        val m = Regex("^([dl-])[rwxsStT-]{9}\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\S+)\\s+(\\S+)\\s+(.+)$").find(line)
+        val m = Regex("^([dl-])[rwxsStT-]{9}[+@.]?\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\S+)\\s+(\\S+)\\s+(.+)$").find(line)
             ?: return@mapNotNull null
         val isDir = m.groupValues[1] == "d"
         val size = m.groupValues[2].toLongOrNull() ?: 0L
         val date = m.groupValues[3]
         val time = m.groupValues[4]
         val name = m.groupValues[5].removeSuffix("/")
-        val sizeText = if (isDir) "" else formatSizeText(size)
-        FsEntry(name, isDir, sizeText, "$date $time")
+        val sizeText = if (isDir) "文件夹" else formatSizeText(size)
+        // 时间去掉年份：2026-11-19 -> 11-19
+        val dateShort = if (date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) date.substring(5) else date
+        FsEntry(name, isDir, sizeText, "$dateShort $time")
     }
 
     if (fromShell.isNotEmpty()) {
