@@ -5061,7 +5061,8 @@ private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatche
         val date = m.groupValues[3]
         val time = m.groupValues[4]
         val name = m.groupValues[5].removeSuffix("/")
-        val sizeText = if (isDir) "文件夹" else formatSizeText(size)
+        // 文件夹只显示时间，不显示大小（算目录大小要递归扫盘，会卡）
+        val sizeText = if (isDir) "" else formatSizeText(size)
         // 时间去掉年份：2026-11-19 -> 11-19
         val dateShort = if (date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) date.substring(5) else date
         FsEntry(name, isDir, sizeText, "$dateShort $time")
