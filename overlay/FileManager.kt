@@ -18,6 +18,7 @@ import android.view.WindowManager
 import android.app.Service
 import android.app.Activity
 import android.content.Context
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
@@ -3526,11 +3527,29 @@ private fun FileBigButton(label: String, onClick: () -> Unit) {
 
 @Composable
 private fun NavIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    // iOS 风格按压反馈：按下缩到 86%，松手弹簧回弹，同时叠一层白色高光
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val navScale by animateFloatAsState(
+        targetValue = if (pressed) 0.86f else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 900f),
+        label = "navScale"
+    )
+    val navBg by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = tween(140),
+        label = "navBg"
+    )
     Box(
         modifier = Modifier
             .size(44.dp)
+            .graphicsLayer {
+                scaleX = navScale
+                scaleY = navScale
+            }
             .clip(RoundedCornerShape(percent = 50))
-            .clickable { onClick() },
+            .background(Color(0xFFFFFFFF).copy(alpha = 0.14f * navBg))
+            .clickable(interactionSource = interaction, indication = null) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Icon(
