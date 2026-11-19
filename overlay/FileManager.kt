@@ -18,6 +18,14 @@ import android.view.WindowManager
 import android.app.Service
 import android.app.Activity
 import android.content.Context
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -2270,48 +2278,71 @@ private fun ProMaxIsland(
                     extractDone -> "已完成"
                     else -> null
                 }
-                if (statusText != null) {
-                    // 状态文字独占整行并居中，不再被左右元素分摊宽度
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = statusText,
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center,
-                            color = if (extractFailed) Color(0xFFFF3B30) else Color(0xFF0A84FF)
+                // iOS 灵动岛式内容切换：按状态做滑动+淡入+缩放
+                val pillState = when {
+                    statusText != null -> "status"
+                    terminalMode || (running && expanded) -> "term"
+                    sel != null || longPressPath != null -> "sel"
+                    else -> "idle"
+                }
+                androidx.compose.animation.AnimatedContent(
+                    targetState = pillState,
+                    modifier = Modifier.weight(1f),
+                    transitionSpec = {
+                        (
+                            androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) +
+                            androidx.compose.animation.slideInVertically(animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 480f)) { it / 4 } +
+                            androidx.compose.animation.scaleIn(
+                                initialScale = 0.92f,
+                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 480f)
+                            )
+                        ).togetherWith(
+                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(140)) +
+                            androidx.compose.animation.slideOutVertically(animationSpec = androidx.compose.animation.core.tween(140)) { -it / 4 } +
+                            androidx.compose.animation.scaleOut(targetScale = 0.94f, animationSpec = androidx.compose.animation.core.tween(140))
                         )
+                    },
+                    label = "pillContent"
+                ) { st ->
+                    when (st) {
+                        "status" -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = statusText ?: "",
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center,
+                                color = if (extractFailed) Color(0xFFFF3B30) else Color(0xFF0A84FF)
+                            )
+                        }
+                        "term" -> YukiWave(
+                            color = Color(0xFFFFB6C8),
+                            running = running,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        "sel" -> Text(
+                            text = if (longPressPath != null) longPressPath!!.substringAfterLast('/') else selName,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                        else -> Spacer(modifier = Modifier.fillMaxWidth())
                     }
-                } else if (terminalMode || (running && expanded)) {
-                    YukiWave(
-                        color = Color(0xFFFFB6C8),
-                        running = running,
-                        modifier = Modifier.weight(1f)
-                    )
-                } else if (sel != null || longPressPath != null) {
-                    Text(
-                        text = if (longPressPath != null) longPressPath.substringAfterLast('/') else selName,
-                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
-                    Icon(
+                }
+                // 右侧按钮：位置固定，不参与动画
+                when {
+                    sel != null || longPressPath != null -> Icon(
                         imageVector = if (runMessage != null && !runOk) Icons.Outlined.Lock else Icons.Outlined.InsertDriveFile,
                         contentDescription = null,
                         tint = if (runMessage != null && !runOk) Color(0xFFFF3B30) else accent,
                         modifier = Modifier.size(22.dp).clickable { onClearSelection() }
                     )
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
-                    Icon(
-                        imageVector = if (!rootChecked || rootOk) Icons.Outlined.TaskAlt
-                                      else Icons.Outlined.Lock,
+                    pillState == "idle" -> Icon(
+                        imageVector = if (!rootChecked || rootOk) Icons.Outlined.TaskAlt else Icons.Outlined.Lock,
                         contentDescription = if (rootChecked && !rootOk) "root unavailable" else "install",
                         tint = if (rootChecked && !rootOk) Color(0xFFFF3B30) else Color.White,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clickable { onNavigate("install") }
+                        modifier = Modifier.size(22.dp).clickable { onNavigate("install") }
                     )
                 }
             }
