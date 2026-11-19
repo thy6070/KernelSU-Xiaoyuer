@@ -13,9 +13,9 @@ jobs:
       cert_size: ${{ steps.cert.outputs.size }}
       cert_hash: ${{ steps.cert.outputs.hash }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
@@ -35,7 +35,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Fetch official 32713 (full history)
         run: |
@@ -52,12 +52,12 @@ jobs:
           mkdir -p src/manager/app/src/main/res/drawable-nodpi
           cp manager/app/src/main/res/drawable-nodpi/ic_zysu.png src/manager/app/src/main/res/drawable-nodpi/ic_zysu.png
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Build APK
         run: |
@@ -78,13 +78,13 @@ jobs:
           $BT/apksigner verify --print-certs "$APK" | head -6
           cp "$APK" manager-32713.apk
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: manager-32713
           path: manager-32713.apk
 
       - name: Publish APK
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: jd-32713
           name: 极道帝兵 32713
@@ -117,13 +117,13 @@ jobs:
           cp kernelsu.ko /tmp/ksu/android14-6.1_kernelsu_THY.ko
           ls -l /tmp/ksu/android14-6.1_kernelsu_THY.ko
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lkm-32713
           path: /tmp/ksu/android14-6.1_kernelsu_THY.ko
 
       - name: Publish .ko
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: jd-32713
           files: /tmp/ksu/android14-6.1_kernelsu_THY.ko

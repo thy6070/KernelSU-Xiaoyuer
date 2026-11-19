@@ -5,7 +5,7 @@ jobs:
   build2:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: fix/no-autostart
           persist-credentials: false
@@ -63,7 +63,7 @@ jobs:
           "$CXX" -O2 -std=c++17 -fno-rtti -I aosp/libs/binder/include -I aosp/libs/utils/include -I aosp/libs/base/include -I aosp/libs/cutils/include -I aosp/include native/fpsbinder2.cpp -o fpsbinder2 -L native/libs -Wl,--allow-shlib-undefined -lbinder -lutils -lcutils -lbase -lc++_shared -ldl 2>&1 | tail -25
           ls -lh fpsbinder2 2>/dev/null || echo "build failed"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: fpsbinder2
           path: fpsbinder2

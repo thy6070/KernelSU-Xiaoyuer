@@ -13,8 +13,8 @@ jobs:
       cert_size: ${{ steps.cert.outputs.size }}
       cert_hash: ${{ steps.cert.outputs.hash }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
@@ -74,7 +74,7 @@ jobs:
           cargo build --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
           ls -l target/aarch64-linux-android/release/ksud
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ksud-aarch64
           path: |
@@ -85,7 +85,7 @@ jobs:
     needs: [prepare, ksud]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Clone official 32713
         run: |
@@ -109,12 +109,12 @@ jobs:
           echo "spoof ok"
           grep -rIl "me\.weishu\.kernelsu" manager/ | head -5 || true
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Build APK
         run: |
@@ -123,7 +123,7 @@ jobs:
           ./gradlew :app:assembleRelease -x lint
 
       - name: Download ksud
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ksud-aarch64
           path: ksud-out
@@ -196,13 +196,13 @@ jobs:
           print('APK check OK', len(names), 'entries')
           EOF
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: manager-32713-sp
           path: manager-32713-sp.apk
 
       - name: Publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: jd-32713-sp
           name: 极道帝兵 32713 sp
