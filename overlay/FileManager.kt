@@ -2170,6 +2170,15 @@ private fun ProMaxIsland(
         }
 
         // main pill on top
+        // iOS 灵动岛式圆角过渡：收起 34dp / 展开 28dp，spring 回弹
+        val pillRadius by androidx.compose.animation.core.animateDpAsState(
+            targetValue = if (expanded) 28.dp else 34.dp,
+            animationSpec = androidx.compose.animation.core.spring(
+                dampingRatio = 0.72f,
+                stiffness = 520f
+            ),
+            label = "pillRadius"
+        )
         Column(
             modifier = Modifier
                 .zIndex(1f)
@@ -2180,9 +2189,27 @@ private fun ProMaxIsland(
                     translationX = with(density) { sway.dp.toPx() }
                     translationY = with(density) { lift.dp.toPx() }
                 }
-                .clip(RoundedCornerShape(34.dp))
-                .background(Color.Black)
-                .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
+                // iOS 灵动岛质感：柔和阴影 + 竖向渐变 + 渐变描边
+                .shadow(
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(pillRadius),
+                    clip = false,
+                    ambientColor = Color.Black,
+                    spotColor = Color.Black
+                )
+                .clip(RoundedCornerShape(pillRadius))
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(Color(0xFF0B0B0D), Color(0xFF1C1C1E), Color(0xFF0B0B0D))
+                    )
+                )
+                .border(
+                    0.5.dp,
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(Color(0x66FFFFFF), Color(0x1AFFFFFF))
+                    ),
+                    RoundedCornerShape(pillRadius)
+                )
                 .combinedClickable(
                     onClick = {
                         if (terminalMode) onTermClose()
