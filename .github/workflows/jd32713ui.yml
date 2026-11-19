@@ -41,7 +41,7 @@ jobs:
       - name: Clone official 32713
         run: |
           git clone -q https://github.com/tiann/KernelSU.git src
-          cd src && git checkout 5955f6bcb48a0fd8ab5cd7cec91be13bb2f5bdc3
+          cd src && git checkout ff70c90d6
       - name: Setup rust
         run: |
           rustup update stable
@@ -94,7 +94,7 @@ jobs:
       - name: Clone official 32713
         run: |
           git clone -q https://github.com/tiann/KernelSU.git src
-          cd src && git checkout 5955f6bcb48a0fd8ab5cd7cec91be13bb2f5bdc3
+          cd src && git checkout ff70c90d6
           echo "commit count: $(git rev-list --count HEAD)"
 
       - name: Clone old UI repo
