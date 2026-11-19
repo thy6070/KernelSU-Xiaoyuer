@@ -13,8 +13,9 @@ def patch_webview_helper():
         return
     old = 'val moduleInfo = modules.find { info -> info.id == moduleId }'
     if old not in s:
-        print('ERROR: moduleInfo line not found', file=sys.stderr)
-        sys.exit(1)
+        # 新版本 WebViewHelper 可能换了写法；这时跳过 builtin 直达补丁即可（模块已在 modules）
+        print('WebViewHelper: moduleInfo 行未找到，跳过 builtin 直达补丁')
+        return
     new = (
         'val moduleInfo = modules.find { info -> info.id == moduleId } ?: run {\n'
         '            // builtin 直达：oh_my_keymint 不在 modules 列表里\n'
@@ -47,6 +48,37 @@ def patch_manifest():
     else:
         print('Manifest no change')
 
+
+def patch_webview_ua():
+    """部分模块的 WebUI 用 UA 里的 Chrome 版本判断 WebView 是否 >=120。
+    设备 WebView 明明够，但 UA 版本号解析不到 120 时会自己显示"需要 WebView 120+"。
+    这里把 WebView 的 UA 统一成 Chrome 134（只影响页面看到的 UA，不影响渲染）。"""
+    s = io.open(WH, encoding='utf-8').read()
+    if 'userAgentString' in s:
+        print('WebView UA already patched')
+        return
+    old = """            webView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = false
+            }"""
+    new = """            webView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = false
+                // 伪造 UA 的 Chrome 版本，骗过模块 WebUI 的 WebView 版本检查
+                userAgentString =
+                    "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36"
+            }"""
+    if old not in s:
+        print('WARN: settings.apply block not found, skip UA patch')
+        return
+    s = s.replace(old, new, 1)
+    io.open(WH, 'w', encoding='utf-8').write(s)
+    print('WebView UA patched')
+
+
 if __name__ == '__main__':
     patch_webview_helper()
+    patch_webview_ua()
     patch_manifest()
