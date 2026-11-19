@@ -128,6 +128,8 @@ jobs:
       - name: Overlay our config
         run: |
           cp manager/app/build.gradle.kts src/manager/app/build.gradle.kts
+          # 依赖版本表（androidx.webkit 降级用）：之前没复制，改了也不生效
+          cp manager/gradle/libs.versions.toml src/manager/gradle/libs.versions.toml
           cp manager/app/src/main/AndroidManifest.xml src/manager/app/src/main/AndroidManifest.xml
           # 加 PACKAGE_USAGE_STATS（前台检测免 su）
           sed -i 's|</manifest>|<uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
