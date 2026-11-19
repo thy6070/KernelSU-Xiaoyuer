@@ -192,7 +192,7 @@ data class ModItem(val id: String, val name: String, val version: String, val de
 
 data class SuApp(val pkg: String, val label: String, val uid: Int, val allowed: Boolean, val icon: android.graphics.Bitmap? = null)
 
-data class FsEntry(val name: String, val isDir: Boolean)
+data class FsEntry(val name: String, val isDir: Boolean, val sizeText: String = "", val timeText: String = "")
 
 @Composable
 fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}) {
@@ -4768,6 +4768,8 @@ private fun BrowserPane(
                 name = entry.name,
                 isDir = entry.isDir,
                 fullPath = rowPath,
+                sizeText = entry.sizeText,
+                timeText = entry.timeText,
                 selected = selectedPath == rowPath,
                 highlight = highlightName,
                 isLast = idx == entries.lastIndex,
@@ -4790,6 +4792,8 @@ private fun FsRow(
     name: String,
     isDir: Boolean,
     fullPath: String,
+    sizeText: String = "",
+    timeText: String = "",
     selected: Boolean = false,
     highlight: String? = null,
     isLast: Boolean = false,
@@ -4812,7 +4816,8 @@ private fun FsRow(
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
                     else Color.Transparent
                 )
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                // 右侧不留内边距：大小/时间小字正好贴在分割线尽头
+                .padding(start = 14.dp, end = 2.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             RowIcon(isDir = isDir, name = name, fullPath = fullPath)
@@ -4826,6 +4831,30 @@ private fun FsRow(
                 fontFamily = FontFamily.Monospace,
                 color = Color(TEXT_COLOR)
             )
+            if (timeText.isNotEmpty() || sizeText.isNotEmpty()) {
+                Column(horizontalAlignment = Alignment.End) {
+                    // 第一行：大小
+                    if (sizeText.isNotEmpty()) {
+                        Text(
+                            text = sizeText,
+                            fontSize = 9.sp,
+                            color = Color(0x99FFFFFF),
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
+                    // 第二行：时间
+                    if (timeText.isNotEmpty()) {
+                        Text(
+                            text = timeText,
+                            fontSize = 9.sp,
+                            color = Color(0x66FFFFFF),
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
         }
         if (!isLast) {
             Box(
@@ -4869,7 +4898,15 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 // App 无存储权限：先用 root 复制到 cache 再解码
-                val tmp = java.io.File(ctx.cacheDir, "thumb_" + Math.abs(fullPath.hashCode()))
+                // 用 MD5 而不是 hashCode：hashCode 会碰撞，导致缩略图显示成别的文件
+                val key = try {
+                    java.security.MessageDigest.getInstance("MD5")
+                        .digest(fullPath.toByteArray())
+                        .joinToString("") { b -> "%02x".format(b) }
+                } catch (t: Throwable) {
+                    Math.abs(fullPath.hashCode()).toString()
+                }
+                val tmp = java.io.File(ctx.cacheDir, "thumb_$key")
                 if (!tmp.exists() || tmp.length() == 0L) {
                     suNow("cp '" + fullPath.replace("'", "'\\''") + "' '" + tmp.absolutePath + "'")
                 }
@@ -4998,19 +5035,37 @@ internal fun isApk(n: String): Boolean {
     return tail.isNotEmpty() && tail.all { it.isDigit() }
 }
 
+private fun formatSizeText(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return String.format("%.1f KB", kb)
+    val mb = kb / 1024.0
+    if (mb < 1024) return String.format("%.1f MB", mb)
+    val gb = mb / 1024.0
+    return String.format("%.2f GB", gb)
+}
+
 private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatchers.IO) {
     val norm = if (path.endsWith("/")) path else "$path/"
 
     // go straight through su: libsu may be uninitialised and silently yields an empty list
-    val shellOut = suNow("ls -1p \"$norm\" 2>/dev/null")
+    // ls -l 顺便拿到大小和修改时间（显示在行右侧小字）
+    val shellOut = suNow("ls -l \"$norm\" 2>/dev/null")
         .lines().filter { it.isNotBlank() }
 
-    val fromShell = shellOut
-        .filter { it.isNotBlank() }
-        .map { line ->
-            val trimmed = line.trim()
-            FsEntry(trimmed.removeSuffix("/"), trimmed.endsWith("/"))
-        }
+    val fromShell = shellOut.mapNotNull { raw ->
+        val line = raw.trim()
+        // toybox ls -l: perms links owner group size date time name
+        val m = Regex("^([dl-])[rwxsStT-]{9}\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\S+)\\s+(\\S+)\\s+(.+)$").find(line)
+            ?: return@mapNotNull null
+        val isDir = m.groupValues[1] == "d"
+        val size = m.groupValues[2].toLongOrNull() ?: 0L
+        val date = m.groupValues[3]
+        val time = m.groupValues[4]
+        val name = m.groupValues[5].removeSuffix("/")
+        val sizeText = if (isDir) "" else formatSizeText(size)
+        FsEntry(name, isDir, sizeText, "$date $time")
+    }
 
     if (fromShell.isNotEmpty()) {
         fromShell.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
