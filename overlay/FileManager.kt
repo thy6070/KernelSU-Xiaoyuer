@@ -2186,12 +2186,15 @@ private fun ProMaxIsland(
                 .combinedClickable(
                     onClick = {
                         if (terminalMode) onTermClose()
-                        // let the panels shrink before the pill settles, so closing keeps its animation
                         val hadNav = navMode || navTarget != null
-                        navMode = false
-                        expanded = false
-                        onClearLongPress()
-                        if (hadNav) {
+                        if (!hadNav) {
+                            // 点击胶囊 → 展开导航栏（原来是长按）
+                            openNav(null)
+                        } else {
+                            // 已展开 → 点击收起
+                            navMode = false
+                            expanded = false
+                            onClearLongPress()
                             navClosing = true
                             reopenScope.launch {
                                 kotlinx.coroutines.delay(180)
