@@ -4827,6 +4827,17 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    // 沿用旧版保存位置：/sdcard/小鱼儿/小鱼儿密钥（第一行）
+    LaunchedEffect(Unit) {
+        val saved = withContext(Dispatchers.IO) {
+            try {
+                com.topjohnwu.superuser.Shell.cmd(
+                    "head -1 \"/storage/emulated/0/小鱼儿/小鱼儿密钥\" 2>/dev/null"
+                ).exec().out.joinToString("").trim()
+            } catch (t: Throwable) { "" }
+        }
+        if (saved.isNotEmpty() && key.isEmpty()) key = saved
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -4873,6 +4884,13 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
                             if (err == null) {
                                 try {
                                     ctx.getSharedPreferences("yx_mode", 0).edit().putBoolean("card_ok", true).apply()
+                                } catch (t: Throwable) {}
+                                // 保存到旧目录，下次自动带出
+                                try {
+                                    val k = key.trim().replace("'", "'\\''")
+                                    com.topjohnwu.superuser.Shell.cmd(
+                                        "mkdir -p /storage/emulated/0/小鱼儿; echo '" + k + "' > \"/storage/emulated/0/小鱼儿/小鱼儿密钥\""
+                                    ).exec()
                                 } catch (t: Throwable) {}
                                 me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
                                 msg = "激活成功"
