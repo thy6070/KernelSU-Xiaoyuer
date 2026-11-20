@@ -220,6 +220,26 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
 
+    // 卡密底部半屏面板：不可下滑关闭，验证成功才自动收起
+    if (showCardSheet) {
+        val cardSheetState = androidx.compose.material3.rememberModalBottomSheetState(
+            skipPartiallyExpanded = true,
+            confirmValueChange = { it != androidx.compose.material3.SheetValue.Hidden }
+        )
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { /* 忽略手势/返回键关闭 */ },
+            sheetState = cardSheetState,
+            containerColor = Color(0xFF1C1C1E)
+        ) {
+            CardLoginSheet(appCtx) {
+                scope.launch {
+                    try { cardSheetState.hide() } catch (t: Throwable) {}
+                    showCardSheet = false
+                }
+            }
+        }
+    }
+
     var leftPath by remember { mutableStateOf("/storage/emulated/0") }
     var rightPath by remember { mutableStateOf("/data") }
 
@@ -4706,27 +4726,6 @@ private fun BrowserPane(
             scrollPositions[path] = listState.firstVisibleItemIndex
         }
     }
-    if (showCardSheet) {
-        // 不可下滑关闭：只有卡密验证成功才自动收起
-        val cardSheetState = androidx.compose.material3.rememberModalBottomSheetState(
-            skipPartiallyExpanded = true,
-            confirmValueChange = { it != androidx.compose.material3.SheetValue.Hidden }
-        )
-        androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { /* 忽略手势/返回键关闭 */ },
-            sheetState = cardSheetState,
-            containerColor = Color(0xFF1C1C1E)
-        ) {
-            // 验证成功才播放下滑动画收起
-            CardLoginSheet(appCtx) {
-                scope.launch {
-                    try { cardSheetState.hide() } catch (t: Throwable) {}
-                    showCardSheet = false
-                }
-            }
-        }
-    }
-
     LaunchedEffect(highlightName, entries) {
         // 优先按完整路径定位；匹配不到时回退到文件名
         val byPath = entries.indexOfFirst {
