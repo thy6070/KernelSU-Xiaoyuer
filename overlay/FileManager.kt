@@ -4971,7 +4971,7 @@ private fun FsRow(
  * smoothing 越大越接近 iOS 的 continuous corner。
  */
 class SmoothCornerShape(
-    private val cornerRadius: Dp,
+    private val cornerRadius: androidx.compose.ui.unit.Dp,
     private val smoothing: Float = 0.6f
 ) : androidx.compose.ui.graphics.Shape {
     override fun createOutline(
@@ -4981,11 +4981,17 @@ class SmoothCornerShape(
     ): androidx.compose.ui.graphics.Outline {
         val r = with(density) { cornerRadius.toPx() }
             .coerceIn(0f, minOf(size.width, size.height) / 2f)
-        if (r <= 0.5f) return androidx.compose.ui.graphics.Outline.Rectangle(size)
+        if (r <= 0.5f) {
+            return androidx.compose.ui.graphics.Outline.Rectangle(
+                androidx.compose.ui.geometry.Rect(
+                    androidx.compose.ui.geometry.Offset.Zero,
+                    androidx.compose.ui.geometry.Size(size.width, size.height)
+                )
+            )
+        }
         val w = size.width
         val h = size.height
         val s = smoothing.coerceIn(0f, 1f)
-        // 曲率起点：直线段比普通圆角更早结束，多出来的长度交给贝塞尔
         val p = (r * (1f - 0.25f * s)).coerceAtMost(minOf(w, h) / 2f)
         val c = p * 0.5523f
         val path = androidx.compose.ui.graphics.Path()
