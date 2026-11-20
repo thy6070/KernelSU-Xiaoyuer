@@ -194,10 +194,19 @@ data class SuApp(val pkg: String, val label: String, val uid: Int, val allowed: 
 
 data class FsEntry(val name: String, val isDir: Boolean, val sizeText: String = "", val timeText: String = "")
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}) {
     val appCtx = LocalContext.current
     val view = LocalView.current
+    // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
+    var showCardSheet by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val ok = try {
+            appCtx.getSharedPreferences("yx_mode", 0).getBoolean("card_ok", false)
+        } catch (t: Throwable) { false }
+        if (!ok) showCardSheet = true
+    }
 
     DisposableEffect(Unit) {
         val window = (view.context as? Activity)?.window
@@ -4696,6 +4705,15 @@ private fun BrowserPane(
             scrollPositions[path] = listState.firstVisibleItemIndex
         }
     }
+    if (showCardSheet) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showCardSheet = false },
+            containerColor = Color(0xFF1C1C1E)
+        ) {
+            CardLoginSheet(appCtx) { showCardSheet = false }
+        }
+    }
+
     LaunchedEffect(highlightName, entries) {
         // 优先按完整路径定位；匹配不到时回退到文件名
         val byPath = entries.indexOfFirst {
@@ -4782,6 +4800,71 @@ private fun BrowserPane(
                 onLongClick = { onLongPress(rowPath) }
             )
         }
+    }
+}
+
+@Composable
+private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
+    var key by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var msg by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+    ) {
+        Text(text = "卡密登录", fontSize = 17.sp, color = Color.White)
+        Spacer(modifier = Modifier.height(10.dp))
+        androidx.compose.foundation.text.BasicTextField(
+            value = key,
+            onValueChange = { key = it },
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.White),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0x22FFFFFF))
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = msg, fontSize = 12.sp, color = Color(0xFFFF9F0A), modifier = Modifier.weight(1f))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF0A84FF))
+                    .clickable(enabled = !busy) {
+                        if (key.isBlank()) { msg = "请输入卡密"; return@clickable }
+                        busy = true
+                        msg = "验证中…"
+                        scope.launch {
+                            val err = withContext(Dispatchers.IO) {
+                                try { me.weishu.kernelsu.ui.screen.WeiYan.verify(ctx, key.trim()) } catch (t: Throwable) { t.message ?: "验证失败" }
+                            }
+                            busy = false
+                            if (err == null) {
+                                try {
+                                    ctx.getSharedPreferences("yx_mode", 0).edit().putBoolean("card_ok", true).apply()
+                                } catch (t: Throwable) {}
+                                me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
+                                msg = "激活成功"
+                                onDone()
+                            } else {
+                                msg = err
+                            }
+                        }
+                    }
+                    .padding(horizontal = 18.dp, vertical = 9.dp)
+            ) {
+                Text(text = if (busy) "验证中" else "激活", fontSize = 14.sp, color = Color.White)
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
