@@ -232,6 +232,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             contentColor = Color.Black,
             // 去掉 Material3 默认的 640dp 最大宽度限制，平板上才能真正铺满
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            // 完全禁止拖拽手势（面板不能被上下拖动）
+            sheetGesturesEnabled = false,
             // 去掉顶部那个可以往下拉的小把手
             dragHandle = null
         ) {
