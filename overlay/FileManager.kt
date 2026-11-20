@@ -227,7 +227,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { /* 忽略手势/返回键关闭 */ },
             sheetState = cardSheetState,
-            containerColor = Color(0xFF1C1C1E),
+            // iOS 白色主题
+            containerColor = Color(0xFFF2F2F7),
+            contentColor = Color.Black,
+            // 去掉 Material3 默认的 640dp 最大宽度限制，平板上才能真正铺满
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             // 去掉顶部那个可以往下拉的小把手
             dragHandle = null
         ) {
@@ -4826,19 +4830,24 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 4.dp, vertical = 10.dp)
     ) {
-        Text(text = "卡密登录", fontSize = 17.sp, color = Color.White)
+        Text(
+            text = "卡密登录",
+            fontSize = 17.sp,
+            color = Color.Black,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
         Spacer(modifier = Modifier.height(10.dp))
         androidx.compose.foundation.text.BasicTextField(
             value = key,
             onValueChange = { key = it },
             singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.White),
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.Black),
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color(0x22FFFFFF))
+                .clip(SmoothCornerShape(10.dp))
+                .background(Color(0xFFE5E5EA))
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -4847,11 +4856,11 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = msg, fontSize = 12.sp, color = Color(0xFFFF9F0A), modifier = Modifier.weight(1f))
+            Text(text = msg, fontSize = 12.sp, color = Color(0xFFFF3B30), modifier = Modifier.weight(1f))
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF0A84FF))
+                    .clip(SmoothCornerShape(10.dp))
+                    .background(Color(0xFF007AFF))
                     .clickable(enabled = !busy) {
                         if (key.isBlank()) { msg = "请输入卡密"; return@clickable }
                         busy = true
