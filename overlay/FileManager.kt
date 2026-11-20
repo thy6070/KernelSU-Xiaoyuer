@@ -201,6 +201,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val view = LocalView.current
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
     var showCardSheet by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         val ok = try {
             appCtx.getSharedPreferences("yx_mode", 0).getBoolean("card_ok", false)
@@ -4706,11 +4707,23 @@ private fun BrowserPane(
         }
     }
     if (showCardSheet) {
+        // 不可下滑关闭：只有卡密验证成功才自动收起
+        val cardSheetState = androidx.compose.material3.rememberModalBottomSheetState(
+            skipPartiallyExpanded = true,
+            confirmValueChange = { it != androidx.compose.material3.SheetValue.Hidden }
+        )
         androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { showCardSheet = false },
+            onDismissRequest = { /* 忽略手势/返回键关闭 */ },
+            sheetState = cardSheetState,
             containerColor = Color(0xFF1C1C1E)
         ) {
-            CardLoginSheet(appCtx) { showCardSheet = false }
+            // 验证成功才播放下滑动画收起
+            CardLoginSheet(appCtx) {
+                scope.launch {
+                    try { cardSheetState.hide() } catch (t: Throwable) {}
+                    showCardSheet = false
+                }
+            }
         }
     }
 
