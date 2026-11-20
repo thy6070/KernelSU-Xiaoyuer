@@ -203,10 +203,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var showCardSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
-        val ok = try {
-            appCtx.getSharedPreferences("yx_mode", 0).getBoolean("card_ok", false)
-        } catch (t: Throwable) { false }
-        if (!ok) showCardSheet = true
+        // 每次打开都显示卡密验证
+        showCardSheet = true
     }
 
     DisposableEffect(Unit) {
@@ -229,11 +227,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { /* 忽略手势/返回键关闭 */ },
             sheetState = cardSheetState,
-            containerColor = Color(0xFF1C1C1E)
+            containerColor = Color(0xFF1C1C1E),
+            // 去掉顶部那个可以往下拉的小把手
+            dragHandle = null
         ) {
             CardLoginSheet(appCtx) {
                 scope.launch {
+                    // 先播放下滑动画，动画结束再移除，否则会"啪"一下消失
                     try { cardSheetState.hide() } catch (t: Throwable) {}
+                    kotlinx.coroutines.delay(60)
                     showCardSheet = false
                 }
             }
@@ -1149,7 +1151,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFF2C2C2E))
                     .padding(16.dp)
             ) {
@@ -1280,7 +1282,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFF2C2C2E))
                     .padding(20.dp)
             ) {
@@ -1368,7 +1370,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFF2C2C2E))
             ) {
                 Text(
@@ -2167,9 +2169,9 @@ private fun ProMaxIsland(
                     scaleY = ballScale * bump * press
                     alpha = (ballShift * 3f).coerceIn(0f, 1f)
                 }
-                .clip(RoundedCornerShape(21.dp))
+                .clip(SmoothCornerShape(21.dp))
                 .background(Color.Black)
-                .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
+                .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(21.dp))
                 .clickable {
                     if (wingIconExpanded) {
                         // 先关岛内终端 + 清长按/选中 + 收岛，再由全屏终端接管
@@ -2210,9 +2212,9 @@ private fun ProMaxIsland(
                     translationX = with(density) { sway.dp.toPx() }
                     translationY = with(density) { lift.dp.toPx() }
                 }
-                .clip(RoundedCornerShape(34.dp))
+                .clip(SmoothCornerShape(34.dp))
                 .background(Color.Black)
-                .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
+                .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(34.dp))
                 .combinedClickable(
                     onClick = {
                         if (terminalMode) onTermClose()
@@ -2439,7 +2441,7 @@ private fun ProMaxIsland(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp)
-                                    .background(Color(0xFF0E0E10), RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF0E0E10), SmoothCornerShape(12.dp))
                                     .padding(8.dp)
                                     .verticalScroll(rememberScrollState()),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -2677,7 +2679,7 @@ private fun ProMaxIsland(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(180.dp)
-                                    .background(Color(0xFF0E0E10), RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF0E0E10), SmoothCornerShape(12.dp))
                                     .padding(6.dp)
                             ) {
                                 Column(
@@ -2815,7 +2817,7 @@ private fun ProMaxIsland(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(180.dp)
-                                    .background(Color(0xFF0E0E10), RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF0E0E10), SmoothCornerShape(12.dp))
                                     .padding(6.dp)
                             ) {
                                 Column(
@@ -3195,7 +3197,7 @@ private fun ProMaxIsland(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(180.dp)
-                                            .background(Color(0xFF0E0E10), RoundedCornerShape(12.dp))
+                                            .background(Color(0xFF0E0E10), SmoothCornerShape(12.dp))
                                             .padding(6.dp)
                                     ) {
                                         Column(
@@ -3487,8 +3489,8 @@ private fun FileBigButton(label: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .background(Color(0xFF16161A), RoundedCornerShape(26.dp))
-            .border(0.5.dp, Color(0xFF3A3A3C), RoundedCornerShape(26.dp))
+            .background(Color(0xFF16161A), SmoothCornerShape(26.dp))
+            .border(0.5.dp, Color(0xFF3A3A3C), SmoothCornerShape(26.dp))
             .padding(vertical = 15.dp),
         fontSize = 14.sp,
         textAlign = TextAlign.Center,
@@ -4149,7 +4151,7 @@ private fun ModeButton(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
-            .clip(RoundedCornerShape(28.dp))
+            .clip(SmoothCornerShape(28.dp))
             .background(Color(0xE60E0E10))
             .clickable {
                 on = !on
@@ -4824,7 +4826,7 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Text(text = "卡密登录", fontSize = 17.sp, color = Color.White)
         Spacer(modifier = Modifier.height(10.dp))
@@ -4958,6 +4960,46 @@ private fun FsRow(
                     .background(Color(0x33FFFFFF))
             )
         }
+    }
+}
+
+
+/**
+ * iOS 风格连续曲率圆角（squircle）。
+ * 和 RoundedCornerShape 的四分之一圆弧不同：直线到曲线的过渡用贝塞尔曲线拉长，
+ * 曲率变化更平滑，视觉上更"圆润"，不会有硬切线。
+ * smoothing 越大越接近 iOS 的 continuous corner。
+ */
+class SmoothCornerShape(
+    private val cornerRadius: Dp,
+    private val smoothing: Float = 0.6f
+) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density
+    ): androidx.compose.ui.graphics.Outline {
+        val r = with(density) { cornerRadius.toPx() }
+            .coerceIn(0f, minOf(size.width, size.height) / 2f)
+        if (r <= 0.5f) return androidx.compose.ui.graphics.Outline.Rectangle(size)
+        val w = size.width
+        val h = size.height
+        val s = smoothing.coerceIn(0f, 1f)
+        // 曲率起点：直线段比普通圆角更早结束，多出来的长度交给贝塞尔
+        val p = (r * (1f - 0.25f * s)).coerceAtMost(minOf(w, h) / 2f)
+        val c = p * 0.5523f
+        val path = androidx.compose.ui.graphics.Path()
+        path.moveTo(p, 0f)
+        path.lineTo(w - p, 0f)
+        path.cubicTo(w - p + c, 0f, w, p - c, w, p)
+        path.lineTo(w, h - p)
+        path.cubicTo(w, h - p + c, w - p + c, h, w - p, h)
+        path.lineTo(p, h)
+        path.cubicTo(p - c, h, 0f, h - p + c, 0f, h - p)
+        path.lineTo(0f, p)
+        path.cubicTo(0f, p - c, p - c, 0f, p, 0f)
+        path.close()
+        return androidx.compose.ui.graphics.Outline.Generic(path)
     }
 }
 
