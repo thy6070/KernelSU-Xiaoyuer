@@ -1162,7 +1162,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     onValueChange = { searchQ = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1C1C1E), RoundedCornerShape(10.dp))
+                        .background(Color(0xFF1C1C1E), SmoothCornerShape(10.dp))
                         .padding(10.dp),
                     textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
                     singleLine = true
@@ -2212,9 +2212,9 @@ private fun ProMaxIsland(
                     translationX = with(density) { sway.dp.toPx() }
                     translationY = with(density) { lift.dp.toPx() }
                 }
-                .clip(SmoothCornerShape(34.dp))
+                .clip(RoundedCornerShape(34.dp))
                 .background(Color.Black)
-                .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(34.dp))
+                .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
                 .combinedClickable(
                     onClick = {
                         if (terminalMode) onTermClose()
@@ -2448,7 +2448,7 @@ private fun ProMaxIsland(
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
-                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable {
                                             softReboot = !softReboot
                                             navCtx.getSharedPreferences("settings", 0).edit()
@@ -2473,7 +2473,7 @@ private fun ProMaxIsland(
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
-                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable {
                                             writeFpsLog(navCtx, "点击: 伪装BL 行 → 打开WebUI(builtin=oh_my_keymint)")
                                             // 打开 OhMyKeymint 的 WebUI（模块 id = oh_my_keymint）
@@ -2550,7 +2550,7 @@ private fun ProMaxIsland(
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
-                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable {
                                             writeFpsLog(navCtx, "点击: 显示帧率 " + if (fpsShow) "关" else "开")
                                             fpsShow = !fpsShow
@@ -2596,7 +2596,7 @@ private fun ProMaxIsland(
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
-                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable { changeDeviceModel(navCtx) }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -2611,7 +2611,7 @@ private fun ProMaxIsland(
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
-                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable { gameCleanCache(navCtx) }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -2626,7 +2626,7 @@ private fun ProMaxIsland(
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
-                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable {
                                             selinuxHide = !selinuxHide
                                             setFeature("selinux_hide", selinuxHide)
@@ -2650,7 +2650,7 @@ private fun ProMaxIsland(
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
-                                        .background(Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                                        .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable {
                                             kernelUmount = !kernelUmount
                                             setFeature("kernel_umount", kernelUmount)
@@ -2701,7 +2701,7 @@ private fun ProMaxIsland(
                                                         RoundedCornerShape(10.dp)
                                                     )
                                                     .padding(1.dp)
-                                                    .background(Color(0xFF16161A), RoundedCornerShape(10.dp))
+                                                    .background(Color(0xFF16161A), SmoothCornerShape(10.dp))
                                                     .clickable { modSel = if (chosen) -1 else mi }
                                                     .padding(horizontal = 10.dp, vertical = 7.dp)
                                             ) {
@@ -2841,7 +2841,7 @@ private fun ProMaxIsland(
                                                     .padding(bottom = 6.dp)
                                                     .background(ring, RoundedCornerShape(10.dp))
                                                     .padding(1.dp)
-                                                    .background(Color(0xFF16161A), RoundedCornerShape(10.dp))
+                                                    .background(Color(0xFF16161A), SmoothCornerShape(10.dp))
                                                     .clickable { suSel = if (chosen) -1 else si }
                                                     .padding(horizontal = 10.dp, vertical = 8.dp),
                                                 verticalAlignment = Alignment.CenterVertically
@@ -3085,7 +3085,7 @@ private fun ProMaxIsland(
                                         ),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF1C1C1E), SmoothCornerShape(8.dp))
                                             .padding(8.dp)
                                     )
                                     Row(
@@ -3176,7 +3176,7 @@ private fun ProMaxIsland(
                                         onValueChange = { jumpInput = it },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF1C1C1E), SmoothCornerShape(8.dp))
                                             .padding(8.dp),
                                         textStyle = androidx.compose.ui.text.TextStyle(
                                             color = Color.White,
@@ -3213,9 +3213,9 @@ private fun ProMaxIsland(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .padding(bottom = 6.dp)
-                                                            .background(Color(0x33FFFFFF), RoundedCornerShape(10.dp))
+                                                            .background(Color(0x33FFFFFF), SmoothCornerShape(10.dp))
                                                             .padding(1.dp)
-                                                            .background(Color(0xFF16161A), RoundedCornerShape(10.dp))
+                                                            .background(Color(0xFF16161A), SmoothCornerShape(10.dp))
                                                             .clickable {
                                                                 onExtractApp(app.pkg, app.label)
                                                                 jumpStep = 0
@@ -3256,7 +3256,7 @@ private fun ProMaxIsland(
                                         onValueChange = { jumpInput = it },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF1C1C1E), SmoothCornerShape(8.dp))
                                             .padding(8.dp),
                                         textStyle = androidx.compose.ui.text.TextStyle(
                                             color = Color.White,
@@ -3404,7 +3404,7 @@ private fun ProMaxIsland(
                         onValueChange = { soInput = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
+                            .background(Color(0xFF1C1C1E), SmoothCornerShape(8.dp))
                             .padding(8.dp),
                         textStyle = androidx.compose.ui.text.TextStyle(
                             color = Color.White,
@@ -4513,7 +4513,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 12.sp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1C1C1E), SmoothCornerShape(8.dp))
                         .padding(8.dp)
                 )
             },
@@ -4578,7 +4578,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1C1C1E), SmoothCornerShape(8.dp))
                         .padding(8.dp)
                 )
             },
@@ -4625,7 +4625,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1C1C1E), RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1C1C1E), SmoothCornerShape(8.dp))
                         .padding(8.dp)
                 )
             },
