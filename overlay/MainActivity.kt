@@ -162,22 +162,9 @@ class MainActivity : ComponentActivity() {
 
         locateIntent(intent)
         setContent {
-            val gatePrefs = remember { getSharedPreferences("yx_mode", 0) }
-            var gateUnlocked by remember {
-                mutableStateOf(
-                    me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked ||
-                        gatePrefs.getBoolean("card_ok", false)
-                )
-            }
-            var gateOpenSettings by remember { mutableStateOf(false) }
-            if (!gateUnlocked) {
+            // 卡密登录改到文件管理器的底部半屏面板，启动不再拦登录页
+            run {
                 LaunchedEffect(Unit) { contentReady = true }
-                me.weishu.kernelsu.ui.screen.CardLoginScreen(onSuccess = {
-                    me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
-                    gatePrefs.edit().putBoolean("card_ok", true).apply()
-                    gateUnlocked = true
-                })
-            } else {
                 val viewModel = viewModel<MainActivityViewModel>()
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val selectedMainPage by viewModel.selectedMainPage.collectAsStateWithLifecycle()
