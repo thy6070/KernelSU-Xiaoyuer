@@ -1493,7 +1493,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         var pickClosing by remember { mutableStateOf(false) }
         LaunchedEffect(pickClosing) {
             if (pickClosing) {
-                kotlinx.coroutines.delay(200)
+                kotlinx.coroutines.delay(340)
                 uiPicker = null
                 uiPickerIcons = null
                 pickClosing = false
@@ -1510,15 +1510,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 visible = !pickClosing,
                 enter = androidx.compose.animation.slideInVertically(
                     initialOffsetY = { it / 3 },
-                    animationSpec = androidx.compose.animation.core.tween(260)
+                    animationSpec = androidx.compose.animation.core.tween(400)
                 ) + androidx.compose.animation.fadeIn(
-                    animationSpec = androidx.compose.animation.core.tween(200)
+                    animationSpec = androidx.compose.animation.core.tween(320)
                 ),
                 exit = androidx.compose.animation.slideOutVertically(
                     targetOffsetY = { it / 3 },
-                    animationSpec = androidx.compose.animation.core.tween(200)
+                    animationSpec = androidx.compose.animation.core.tween(320)
                 ) + androidx.compose.animation.fadeOut(
-                    animationSpec = androidx.compose.animation.core.tween(160)
+                    animationSpec = androidx.compose.animation.core.tween(240)
                 )
             ) {
             // 外层 Column：卡片和按钮垂直排列（否则会重叠），左右收窄
@@ -1630,7 +1630,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 uiPickerSelected = null
                             }
                         }
-                        .padding(vertical = 12.dp),
+                        // 按钮加高（长一点）
+                        .padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -2343,12 +2344,29 @@ private fun ProMaxIsland(
     val config = LocalConfiguration.current
     val density = androidx.compose.ui.platform.LocalDensity.current
     val pillW = (config.screenWidthDp * 0.36f).dp
-    // 完成态：胶囊像灵动岛那样横向展开，3 秒后收回
-    val pillWAnim by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (doneEvent != null) pillW * 1.45f else pillW,
-        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 420f),
-        label = "pillWAnim"
-    )
+    // 完成态：先缩小（灵动岛收拢），再在收拢后的范围放大
+    val pillScale = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(doneEvent) {
+        if (doneEvent != null) {
+            // 先缩
+            pillScale.animateTo(
+                0.82f,
+                androidx.compose.animation.core.tween(110)
+            )
+            // 再放大展开
+            pillScale.animateTo(
+                1.45f,
+                androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 380f)
+            )
+        } else {
+            // 恢复
+            pillScale.animateTo(
+                1f,
+                androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 400f)
+            )
+        }
+    }
+    val pillWAnim = pillW * pillScale.value
 
     val sel = selectedFile
     val selName = sel?.substringAfterLast('/') ?: ""
@@ -2487,16 +2505,12 @@ private fun ProMaxIsland(
                     onLongClick = { openNav(null) }
                 )
         ) {
-            // 完成态：高度向下延伸（上面加得少、下面加得多），顶部固定
-            val pillRowH by androidx.compose.animation.core.animateDpAsState(
-                // 按截图比例：完成态以变宽为主，高度只微调（更扁长）
-                targetValue = if (doneEvent != null) 44.dp else 42.dp,
-                animationSpec = androidx.compose.animation.core.spring(
-                    dampingRatio = 0.72f,
-                    stiffness = 420f
-                ),
-                label = "pillRowH"
-            )
+            // 高度跟随完成态比例（先缩后展，保持扁长）
+            val pillRowH = when {
+                pillScale.value > 1f -> 42.dp + (2.dp * (pillScale.value - 1f) * 3f)
+                pillScale.value < 1f -> 42.dp * pillScale.value
+                else -> 42.dp
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
