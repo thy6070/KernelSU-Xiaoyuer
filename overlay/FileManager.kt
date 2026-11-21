@@ -2357,7 +2357,15 @@ private fun ProMaxIsland(
                 .background(Color.Black)
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
                 .clickable {
-                    if (wingIconExpanded) {
+                    if (pendingUndo != null) {
+                        // 有撤销事件：展开胶囊（只显示撤回按钮）
+                        reopenScope.launch {
+                            navMode = true
+                            navTarget = null
+                            navClosing = false
+                            expanded = true
+                        }
+                    } else if (wingIconExpanded) {
                         // 先关岛内终端 + 清长按/选中 + 收岛，再由全屏终端接管
                         onTermClose()
                         onClearLongPress()
@@ -2376,37 +2384,20 @@ private fun ProMaxIsland(
                     tint = Color.White,
                     modifier = Modifier.size(26.dp)
                 )
+            } else if (pendingUndo != null) {
+                // 有可撤销操作：只显示撤回图标
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.Undo,
+                    contentDescription = "撤回",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
             } else {
                 Image(
                     painter = painterResource(id = me.weishu.kernelsu.R.mipmap.mod_icon),
                     contentDescription = null,
                     modifier = Modifier.size(34.dp)
                 )
-                if (pendingUndo != null) {
-                    // 有可撤销操作：分岛叠一个撤回角标，点击展开胶囊
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(21.dp))
-                            .background(Color(0xCC000000))
-                            .clickable {
-                                reopenScope.launch {
-                                    navMode = true
-                                    navTarget = null
-                                    navClosing = false
-                                    expanded = true
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.Undo,
-                            contentDescription = "撤回",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
             }
         }
 
@@ -2625,7 +2616,7 @@ private fun ProMaxIsland(
                         }
                     }
                 }
-                if (navTarget == null) Row(
+                if (navTarget == null && pendingUndo == null) Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
