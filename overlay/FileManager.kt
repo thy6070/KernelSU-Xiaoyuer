@@ -1481,7 +1481,29 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                // （无取消按钮，点外部关闭）
+                // 底部按钮：改机型的"恢复原样"（点外部也可关闭）
+                if (pickTitle == "选择机型") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .background(Color(0xFF3A3A3C))
+                    )
+                    Text(
+                        text = "恢复原样",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                uiPickerAction?.invoke("恢复原样")
+                                uiPicker = null
+                                uiPickerIcons = null
+                            }
+                            .padding(vertical = 14.dp),
+                        fontSize = 15.sp,
+                        color = Color(0xFF0A84FF),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -5377,7 +5399,7 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
     )
     uiPickerTitle = "选择机型"
     uiPickerIcons = null
-    uiPicker = listOf("恢复原样") + models
+    uiPicker = models
     uiPickerAction = pick@{ sel ->
         if (sel == "恢复原样") {
             restoreDeviceModel(ctx)
