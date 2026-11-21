@@ -64,7 +64,7 @@ def patch_webui_error_log():
                         java.io.File(activity.filesDir, "webui.log").appendText(
                             System.currentTimeMillis().toString() + " " + url.toString() +
                                 " -> " + (resp?.statusCode?.toString() ?: "null") +
-                                " " + (resp?.mimeType ?: "") + "\n"
+                                " " + (resp?.mimeType ?: "") + "\\n"
                         )
                     } catch (t: Throwable) {}
                     return resp"""
