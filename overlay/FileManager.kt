@@ -55,6 +55,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
@@ -1158,7 +1160,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     // ===== 搜索文件 =====
     if (showSearch) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showSearch = false }) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showSearch = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
+        ) {
+            // 上滑 + 淡入的进入动画
+            androidx.compose.animation.AnimatedVisibility(
+                visible = true,
+                enter = androidx.compose.animation.slideInVertically(
+                    initialOffsetY = { it / 3 },
+                    animationSpec = androidx.compose.animation.core.tween(260)
+                ) + androidx.compose.animation.fadeIn(
+                    animationSpec = androidx.compose.animation.core.tween(200)
+                )
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1226,7 +1244,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     .padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(r.substringAfterLast('/'), fontSize = 13.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    r.substringAfterLast('/'),
+                                    modifier = Modifier.weight(1f),
+                                    fontSize = 13.sp,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    r.substringBeforeLast('/', ""),
+                                    fontSize = 9.sp,
+                                    color = Color(0x66FFFFFF),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 260.dp).padding(start = 8.dp)
+                                )
                             }
                             if (i < searchResults.size - 1) {
                                 Box(modifier = Modifier.fillMaxWidth().padding(start = 10.dp).height(0.5.dp).background(Color(0x33FFFFFF)))
@@ -1234,6 +1267,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
+            }
             }
         }
     }
