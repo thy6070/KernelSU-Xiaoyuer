@@ -1440,13 +1440,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
             ) {
-                Text(
-                    text = pickTitle ?: "选择",
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                    fontSize = 15.sp,
-                    color = Color(0xFF8E8E93),
-                    textAlign = TextAlign.Center
-                )
+                // 改机型不显示标题（直接列表）
+                if (pickTitle != "选择机型") {
+                    Text(
+                        text = pickTitle ?: "选择",
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                        fontSize = 15.sp,
+                        color = Color(0xFF8E8E93),
+                        textAlign = TextAlign.Center
+                    )
+                }
                 androidx.compose.foundation.lazy.LazyColumn(
                     // 一次显示 5 个胶囊按钮（每个约 44dp）
                     modifier = Modifier.heightIn(max = 230.dp)
