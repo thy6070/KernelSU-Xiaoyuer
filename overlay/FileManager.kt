@@ -25,6 +25,7 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import me.weishu.kernelsu.R
 import androidx.compose.animation.core.animateFloatAsState
@@ -2533,24 +2534,28 @@ private fun ProMaxIsland(
                 if (de != null) {
                     // 完成态：中间留白，只显示右侧对勾（苹果灵动岛那样）
                     Spacer(modifier = Modifier.weight(1f))
-                    val checkAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+                    // 对勾：从 0 弹到 1（先置 0，下一帧置 1 触发动画）
+                    var checkOn by remember { mutableStateOf(false) }
                     LaunchedEffect(de) {
-                        checkAnim.snapTo(0f)
-                        checkAnim.animateTo(
-                            1f,
-                            androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 700f)
-                        )
+                        checkOn = false
+                        kotlinx.coroutines.delay(40)
+                        checkOn = true
                     }
+                    val checkScale by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = if (checkOn) 1f else 0f,
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = 0.5f,
+                            stiffness = 700f
+                        ),
+                        label = "checkScale"
+                    )
                     Icon(
                         imageVector = Icons.Outlined.TaskAlt,
                         contentDescription = "完成",
                         tint = Color.White,
                         modifier = Modifier
                             .size(22.dp)
-                            .graphicsLayer {
-                                scaleX = checkAnim.value
-                                scaleY = checkAnim.value
-                            }
+                            .scale(checkScale)
                     )
                 } else if (statusText != null) {
                     // 状态文字独占整行并居中，不再被左右元素分摊宽度
