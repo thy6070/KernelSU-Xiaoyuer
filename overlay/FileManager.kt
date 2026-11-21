@@ -1217,11 +1217,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
-                    modifier = Modifier.fillMaxWidth(),
-                    fontSize = 17.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center
-                )
                 Spacer(Modifier.height(10.dp))
                 var searchFocused by remember { mutableStateOf(false) }
                 Row(
