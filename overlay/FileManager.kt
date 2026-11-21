@@ -997,6 +997,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "delete" -> pendingUndo = UndoOp("delete", paths)
                                     "move" -> pendingUndo = UndoOp("move", paths, listOf(arg))
                                     "copy" -> pendingUndo = UndoOp("copy", paths, listOf(arg))
+                                    else -> pendingUndo = null
                                 }
                             }
                         } catch (t: Throwable) {}
@@ -1044,6 +1045,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "move" -> pendingUndo = UndoOp("move", listOf(srcPath), listOf(arg))
                                     "copy" -> pendingUndo = UndoOp("copy", listOf(srcPath), listOf(arg))
                                     "rename" -> pendingUndo = UndoOp("rename", listOf(srcPath), listOf(dir + "/" + arg))
+                                    // 其他操作：分岛恢复成正常样式
+                                    else -> pendingUndo = null
                                 }
                             }
                             if (op == "share") {
