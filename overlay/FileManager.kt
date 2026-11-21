@@ -1947,7 +1947,7 @@ private fun ProMaxIsland(
     onFileOp: (String, String) -> Unit,
     onOpenTerminal: () -> Unit,
     onPreview: (String) -> Unit,
-    onOpen: () -> Unit,
+    onOpen: () -> Unit = {},
     onRefresh: () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
