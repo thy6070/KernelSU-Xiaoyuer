@@ -208,15 +208,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val view = LocalView.current
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
     var showCardSheet by remember { mutableStateOf(false) }
-    // 撤回完成后（pendingUndo 被清空）刷新列表
-    var lastUndoSeen by remember { mutableStateOf<UndoOp?>(null) }
-    LaunchedEffect(pendingUndo) {
-        val cur = pendingUndo
-        if (cur == null && lastUndoSeen != null) {
-            refreshTick += 1
-        }
-        lastUndoSeen = cur
-    }
     // 启动清理：撤销回收站里超过 1 天的备份（避免占用空间）
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -387,6 +378,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var termText by remember { mutableStateOf("") }
     var selectedFile by remember { mutableStateOf<String?>(null) }
     var refreshTick by remember { mutableStateOf(0) }
+    // 撤回完成后（pendingUndo 被清空）刷新列表
+    var lastUndoSeen by remember { mutableStateOf<UndoOp?>(null) }
+    LaunchedEffect(pendingUndo) {
+        val cur = pendingUndo
+        if (cur == null && lastUndoSeen != null) {
+            refreshTick += 1
+        }
+        lastUndoSeen = cur
+    }
+
     var leftHighlight by remember { mutableStateOf<String?>(null) }
     var rightHighlight by remember { mutableStateOf<String?>(null) }
     var showSearch by remember { mutableStateOf(false) }
