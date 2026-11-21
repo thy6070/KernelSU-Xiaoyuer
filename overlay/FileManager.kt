@@ -1249,22 +1249,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     .padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    r.substringAfterLast('/'),
-                                    modifier = Modifier.weight(1f),
-                                    fontSize = 13.sp,
-                                    color = Color.Black,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    r.substringBeforeLast('/', ""),
-                                    fontSize = 9.sp,
-                                    color = Color(0x88000000),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.widthIn(max = 260.dp).padding(start = 8.dp)
-                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        r.substringAfterLast('/'),
+                                        fontSize = 13.sp,
+                                        color = Color.Black,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        r.substringBeforeLast('/', ""),
+                                        fontSize = 9.sp,
+                                        color = Color(0x88000000),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                             if (i < searchResults.size - 1) {
                                 Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(0.5.dp).background(Color(0x22000000)))
