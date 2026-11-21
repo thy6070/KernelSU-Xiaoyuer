@@ -51,11 +51,12 @@ def patch_manifest():
 
 
 def patch_webui_error_log():
-    """给 WebUI 的请求拦截加诊断日志：写到 App files/webui.log。
-    用来排查 oh_my_keymint 的 ERR_INVALID_RESPONSE（SuFilePathHandler 返回空响应）。"""
+    """WebUI 请求拦截：写诊断日志 + SuFilePathHandler 读不到时用 SuFile(root) 兜底。
+    oh_my_keymint 在部分设备上 SuFilePathHandler 返回 statusCode=0（空响应），
+    原因是它用 Java 的 getCanonicalPath 判断路径，/data/adb 下解析失败。"""
     s = io.open(WH, encoding='utf-8').read()
-    if 'webui.log' in s:
-        print('WebUI error log already patched')
+    if 'webui.log' in s and 'SuFileInputStream.open' in s:
+        print('WebUI intercept already patched')
         return
     old = "                    return webViewAssetLoader.shouldInterceptRequest(url)"
     new = """                    val resp = webViewAssetLoader.shouldInterceptRequest(url)
@@ -64,17 +65,42 @@ def patch_webui_error_log():
                         java.io.File(activity.filesDir, "webui.log").appendText(
                             System.currentTimeMillis().toString() + " " + url.toString() +
                                 " -> " + (resp?.statusCode?.toString() ?: "null") +
-                                " " + (resp?.mimeType ?: "") + "\\n"
+                                " " + (resp?.mimeType ?: "") + "\n"
                         )
                     } catch (t: Throwable) {}
+                    // 兜底：SuFilePathHandler 读不到（statusCode 0）时用 SuFile 直接读
+                    if (url.host == WEB_DOMAIN && (resp == null || resp.statusCode == 0)) {
+                        try {
+                            val rel = url.path?.removePrefix("/") ?: ""
+                            if (rel.isNotEmpty() && !rel.startsWith("internal/")) {
+                                val f = java.io.File(webUIState.modDir + "/webroot", rel)
+                                val suFile = com.topjohnwu.superuser.io.SuFile(f.absolutePath)
+                                suFile.setShell(shell)
+                                val ins = com.topjohnwu.superuser.io.SuFileInputStream.open(suFile)
+                                val ext = rel.substringAfterLast('.', "").lowercase()
+                                val mime = when (ext) {
+                                    "html" -> "text/html"
+                                    "js", "mjs" -> "application/javascript"
+                                    "css" -> "text/css"
+                                    "json" -> "application/json"
+                                    "png" -> "image/png"
+                                    "jpg", "jpeg" -> "image/jpeg"
+                                    "svg" -> "image/svg+xml"
+                                    "woff2" -> "font/woff2"
+                                    "ttf" -> "font/ttf"
+                                    else -> "application/octet-stream"
+                                }
+                                return WebResourceResponse(mime, null, ins)
+                            }
+                        } catch (t: Throwable) {}
+                    }
                     return resp"""
     if old not in s:
-        print('WARN: shouldInterceptRequest return not found, skip webui error log')
+        print('WARN: shouldInterceptRequest return not found, skip webui patch')
         return
     s = s.replace(old, new, 1)
     io.open(WH, 'w', encoding='utf-8').write(s)
-    print('WebUI error log patched')
-
+    print('WebUI intercept patched (log + SuFile fallback)')
 
 def patch_webview_ua():
     """部分模块的 WebUI 用 UA 里的 Chrome 版本判断 WebView 是否 >=120。
