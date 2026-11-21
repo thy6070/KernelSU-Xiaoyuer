@@ -2564,8 +2564,14 @@ private fun ProMaxIsland(
 
             AnimatedVisibility(
                 visible = (navMode || navTarget != null) && !navClosing,
-                enter = expandVertically(animationSpec = tween(260, easing = zyEase), expandFrom = Alignment.Bottom) + fadeIn(tween(160)),
-                exit = shrinkVertically(animationSpec = tween(260, easing = zyEase), shrinkTowards = Alignment.Bottom) + fadeOut(tween(40))
+                enter = expandVertically(
+                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+                    expandFrom = Alignment.Bottom
+                ) + fadeIn(tween(180)),
+                exit = shrinkVertically(
+                    animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
+                    shrinkTowards = Alignment.Bottom
+                ) + fadeOut(tween(90))
             ) {
                 Column(
                     modifier = Modifier
