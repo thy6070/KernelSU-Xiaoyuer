@@ -65,7 +65,7 @@ def patch_webui_error_log():
                         java.io.File(activity.filesDir, "webui.log").appendText(
                             System.currentTimeMillis().toString() + " " + url.toString() +
                                 " -> " + (resp?.statusCode?.toString() ?: "null") +
-                                " " + (resp?.mimeType ?: "") + "\n"
+                                " " + (resp?.mimeType ?: "") + "\\n"
                         )
                     } catch (t: Throwable) {}
                     // 兜底：SuFilePathHandler 读不到（statusCode 0）时用 SuFile 直接读
