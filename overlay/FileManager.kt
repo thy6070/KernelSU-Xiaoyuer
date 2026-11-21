@@ -1947,7 +1947,8 @@ private fun ProMaxIsland(
     onFileOp: (String, String) -> Unit,
     onOpenTerminal: () -> Unit,
     onPreview: (String) -> Unit,
-    onOpen: () -> Unit
+    onOpen: () -> Unit,
+    onRefresh: () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
     var bgModePick by remember { mutableStateOf<String?>(null) }
@@ -2584,7 +2585,7 @@ private fun ProMaxIsland(
                                                     }
                                                 } catch (t: Throwable) {}
                                             }
-                                            refreshTick += 1
+                                            onRefresh()
                                         }
                                     }
                                 }
