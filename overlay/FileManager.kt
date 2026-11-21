@@ -5326,8 +5326,10 @@ class SmoothCornerShape(
         val w = size.width
         val h = size.height
         val s = smoothing.coerceIn(0f, 1f)
-        val p = (r * (1f - 0.25f * s)).coerceAtMost(minOf(w, h) / 2f)
-        val c = p * 0.5523f
+        // iOS continuous corner：曲线更长（直线段更早结束），控制点按 1.28 倍半径拉伸，
+        // 让曲率过渡更缓（单段贝塞尔做不到严格 G2，但视觉上接近 squircle）
+        val p = (r * (1f + 0.28f * s)).coerceAtMost(minOf(w, h) / 2f)
+        val c = p * 0.62f
         val path = androidx.compose.ui.graphics.Path()
         path.moveTo(p, 0f)
         path.lineTo(w - p, 0f)
