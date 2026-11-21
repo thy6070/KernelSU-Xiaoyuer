@@ -1488,39 +1488,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val pickList = uiPicker
     val pickTitle = uiPickerTitle
     if (pickList != null) {
-        // 收盘动画状态（与进入动画对称）
-        var pickClosing by remember { mutableStateOf(false) }
-        LaunchedEffect(pickClosing) {
-            if (pickClosing) {
-                kotlinx.coroutines.delay(340)
-                uiPicker = null
-                uiPickerIcons = null
-                pickClosing = false
-            }
-        }
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { pickClosing = true },
-            properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnClickOutside = true,
-                dismissOnBackPress = true
-            )
+        // 与卡密登录同款：底部半屏面板（滑入/滑出动画由 ModalBottomSheet 提供）
+        val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
+            skipPartiallyExpanded = true
+        )
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { uiPicker = null },
+            sheetState = pickSheetState,
+            containerColor = Color.Transparent,
+            shape = androidx.compose.ui.graphics.RectangleShape,
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            dragHandle = null
         ) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = !pickClosing,
-                enter = androidx.compose.animation.slideInVertically(
-                    initialOffsetY = { it / 3 },
-                    animationSpec = androidx.compose.animation.core.tween(400)
-                ) + androidx.compose.animation.fadeIn(
-                    animationSpec = androidx.compose.animation.core.tween(320)
-                ),
-                exit = androidx.compose.animation.slideOutVertically(
-                    targetOffsetY = { it / 3 },
-                    animationSpec = androidx.compose.animation.core.tween(320)
-                ) + androidx.compose.animation.fadeOut(
-                    animationSpec = androidx.compose.animation.core.tween(240)
-                )
-            ) {
-            // 外层 Column：卡片和按钮垂直排列（否则会重叠），左右收窄
+            // 外层 Column：卡片和按钮垂直排列，左右收窄
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
             Column(
                 modifier = Modifier
@@ -1640,7 +1620,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         textAlign = TextAlign.Center
                     )
                 }
-            }
             }
             }
         }
