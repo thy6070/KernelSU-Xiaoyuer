@@ -49,6 +49,33 @@ def patch_manifest():
         print('Manifest no change')
 
 
+
+def patch_webui_error_log():
+    """给 WebUI 的请求拦截加诊断日志：写到 App files/webui.log。
+    用来排查 oh_my_keymint 的 ERR_INVALID_RESPONSE（SuFilePathHandler 返回空响应）。"""
+    s = io.open(WH, encoding='utf-8').read()
+    if 'webui.log' in s:
+        print('WebUI error log already patched')
+        return
+    old = "                    return webViewAssetLoader.shouldInterceptRequest(url)"
+    new = """                    val resp = webViewAssetLoader.shouldInterceptRequest(url)
+                    // 诊断：记录每个被拦截的请求和响应状态（排查 WebUI 打不开）
+                    try {
+                        java.io.File(activity.filesDir, "webui.log").appendText(
+                            System.currentTimeMillis().toString() + " " + url.toString() +
+                                " -> " + (resp?.statusCode?.toString() ?: "null") +
+                                " " + (resp?.mimeType ?: "") + "\n"
+                        )
+                    } catch (t: Throwable) {}
+                    return resp"""
+    if old not in s:
+        print('WARN: shouldInterceptRequest return not found, skip webui error log')
+        return
+    s = s.replace(old, new, 1)
+    io.open(WH, 'w', encoding='utf-8').write(s)
+    print('WebUI error log patched')
+
+
 def patch_webview_ua():
     """部分模块的 WebUI 用 UA 里的 Chrome 版本判断 WebView 是否 >=120。
     设备 WebView 明明够，但 UA 版本号解析不到 120 时会自己显示"需要 WebView 120+"。
@@ -81,4 +108,5 @@ def patch_webview_ua():
 if __name__ == '__main__':
     patch_webview_helper()
     patch_webview_ua()
+    patch_webui_error_log()
     patch_manifest()
