@@ -1411,29 +1411,39 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         androidx.compose.ui.window.Dialog(onDismissRequest = { if (updateProgress < 0) updateVer = null }) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(SmoothCornerShape(20.dp))
-                    // iOS 白色风格
+                    .width(280.dp)
+                    .clip(SmoothCornerShape(14.dp))
+                    // iOS AlertDialog：白卡 + 14dp 圆角
                     .background(Color(0xFFF2F2F7))
-                    .padding(20.dp)
+                    .padding(top = 20.dp, bottom = 0.dp)
             ) {
-                Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, color = Color.Black, textAlign = TextAlign.Center)
+                Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.Black, textAlign = TextAlign.Center)
                 Text(updateVer!!, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 13.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 if (updateProgress >= 0) {
                     Spacer(Modifier.height(14.dp))
                     // iOS 风格进度条：细（5dp）+ 圆角 + 半透明轨道 + iOS 蓝进度
                     androidx.compose.material3.LinearProgressIndicator(
                         progress = { (updateProgress / 100f).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(SmoothCornerShape(2.5.dp)),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(4.dp).clip(SmoothCornerShape(2.dp)),
                         color = Color(0xFF007AFF),
                         trackColor = Color(0xFFE5E5EA)
                     )
                     Text(updateProgress.toString() + "%", modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 12.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 }
                 Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.fillMaxWidth()) {
-                        IslandActionButton("立即更新", Color(0xFF0A84FF)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 左：灰色取消
+                    Box(Modifier.weight(1f)) {
+                        IslandActionButton("取消", Color(0xFF8E8E93)) {
+                            if (updateProgress < 0) updateVer = null
+                        }
+                    }
+                    // 右：蓝色更新
+                    Box(Modifier.weight(1f)) {
+                        IslandActionButton("更新", Color(0xFF007AFF)) {
                             if (updateProgress < 0) {
                                 updateProgress = 0
                                 uiScope.launch(kotlinx.coroutines.Dispatchers.IO) {
