@@ -1518,7 +1518,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(SmoothCornerShape(12.dp))
-                        .background(Color.White)
+                        .background(Color(0xFFF2F2F7))
                         .clickable {
                             uiPickerAction?.invoke("恢复原样")
                             uiPicker = null
