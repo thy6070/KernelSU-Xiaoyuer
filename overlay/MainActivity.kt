@@ -153,6 +153,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 沉浸式：内容延伸到状态栏/导航栏下，并隐藏系统栏（下滑临时显示）
+        try {
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+            androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                hide(
+                    androidx.core.view.WindowInsetsCompat.Type.statusBars() or
+                        androidx.core.view.WindowInsetsCompat.Type.navigationBars()
+                )
+                systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } catch (t: Throwable) {}
+
         val isManager = Natives.isManager
         if (isManager && Natives.kernelUAPIVersion == Natives.managerUAPIVersion) install()
         // 首次启动自动安装内置模块（仅未安装时，静默）
