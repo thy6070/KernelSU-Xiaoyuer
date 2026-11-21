@@ -2547,7 +2547,8 @@ private fun ProMaxIsland(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(SmoothCornerShape(12.dp))
+                                // 提取同款胶囊按钮
+                                .clip(RoundedCornerShape(percent = 50))
                                 .background(Color(0xFF007AFF))
                                 .clickable {
                                     val op = pendingUndo
