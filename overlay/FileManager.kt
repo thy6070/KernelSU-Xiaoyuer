@@ -133,6 +133,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -971,10 +972,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 else -> ""
                             }
                             if (cmd.isNotEmpty()) {
+                                if (op == "delete") {
+                                    // 删除前备份到回收站，便于撤销
+                                    val trash = "/data/local/tmp/xy_trash/last"
+                                    val prep = "mkdir -p " + q(trash) + " ; for f in " + list + "; do cp -a \"\$f\" " + q(trash) + "/ 2>/dev/null || true; done"
+                                    ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
+                                }
                                 val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
                                     .redirectErrorStream(true).start()
                                 proc.inputStream.bufferedReader().readText()
                                 proc.waitFor()
+                                when (op) {
+                                    "delete" -> pendingUndo = UndoOp("delete", paths)
+                                    "move" -> pendingUndo = UndoOp("move", paths, listOf(arg))
+                                    "copy" -> pendingUndo = UndoOp("copy", paths, listOf(arg))
+                                }
                             }
                         } catch (t: Throwable) {}
                     }
@@ -1004,12 +1016,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             var ok = true
                             if (cmd.isNotEmpty()) {
+                                if (op == "delete") {
+                                    val trash = "/data/local/tmp/xy_trash/last"
+                                    val prep = "mkdir -p " + q(trash) + " ; cp -a " + q(srcPath) + " " + q(trash) + "/ 2>/dev/null || true"
+                                    ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
+                                }
                                 val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
                                     .redirectErrorStream(true).start()
                                 val txt = proc.inputStream.bufferedReader().readText()
                                 proc.waitFor()
                                 ok = true
                                 if (op == "install") ok = txt.contains("Success")
+                                when (op) {
+                                    "delete" -> pendingUndo = UndoOp("delete", listOf(srcPath))
+                                    "move" -> pendingUndo = UndoOp("move", listOf(srcPath), listOf(arg))
+                                    "copy" -> pendingUndo = UndoOp("copy", listOf(srcPath), listOf(arg))
+                                    "rename" -> pendingUndo = UndoOp("rename", listOf(srcPath), listOf(dir + "/" + arg))
+                                }
                             }
                             if (op == "share") {
                                 // verbatim from the ZySU source: private cache dir works with FileProvider
@@ -2410,11 +2433,24 @@ private fun ProMaxIsland(
                     d.draw(canvas)
                     bmp.asImageBitmap()
                 }
-                Image(
-                    painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
-                    contentDescription = null,
-                    modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
-                )
+                if (pendingUndo != null) {
+                    // 有可撤销操作：图标变成撤回，点击展开胶囊
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.Undo,
+                        contentDescription = "撤回",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(RoundedCornerShape(percent = 22))
+                            .clickable { openNav(null) }
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
+                        contentDescription = null,
+                        modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
+                    )
+                }
                 val statusText = when {
                     installDone -> "安装成功"
                     extractFailed -> "安装失败"
@@ -2477,6 +2513,83 @@ private fun ProMaxIsland(
                         .fillMaxWidth()
                         .animateContentSize(animationSpec = tween(260, easing = zyEase))
                 ) {
+                // 有可撤销操作：展开面板顶部显示蓝色大按钮
+                if (navTarget == null && pendingUndo != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(SmoothCornerShape(12.dp))
+                                .background(Color(0xFF007AFF))
+                                .clickable {
+                                    val op = pendingUndo
+                                    pendingUndo = null
+                                    if (op != null) {
+                                        navScope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                try {
+                                                    fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
+                                                    val trash = "/data/local/tmp/xy_trash/last"
+                                                    when (op.kind) {
+                                                        "delete" -> {
+                                                            op.src.forEach { src ->
+                                                                val name = src.substringAfterLast('/')
+                                                                val dir = src.substringBeforeLast('/', "/")
+                                                                ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                    "cp -a " + q(trash + "/" + name) + " " + q(dir + "/") + " 2>/dev/null || true")
+                                                                    .redirectErrorStream(true).start().waitFor()
+                                                            }
+                                                        }
+                                                        "move" -> {
+                                                            op.src.forEachIndexed { i, src ->
+                                                                val name = src.substringAfterLast('/')
+                                                                val target = op.dst.getOrElse(i) { op.dst.firstOrNull() ?: "" }
+                                                                ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                    "mv -f " + q(target + "/" + name) + " " + q(src))
+                                                                    .redirectErrorStream(true).start().waitFor()
+                                                            }
+                                                        }
+                                                        "copy" -> {
+                                                            op.src.forEach { src ->
+                                                                val name = src.substringAfterLast('/')
+                                                                val target = op.dst.firstOrNull() ?: ""
+                                                                ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                    "rm -rf " + q(target + "/" + name))
+                                                                    .redirectErrorStream(true).start().waitFor()
+                                                            }
+                                                        }
+                                                        "rename" -> {
+                                                            val oldP = op.src.firstOrNull() ?: ""
+                                                            val newP = op.dst.firstOrNull() ?: ""
+                                                            if (oldP.isNotEmpty() && newP.isNotEmpty()) {
+                                                                ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                    "mv -f " + q(newP) + " " + q(oldP))
+                                                                    .redirectErrorStream(true).start().waitFor()
+                                                            }
+                                                        }
+                                                    }
+                                                } catch (t: Throwable) {}
+                                            }
+                                            refreshTick += 1
+                                        }
+                                    }
+                                }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "撤回上一个事件",
+                                fontSize = 14.sp,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
                 if (navTarget == null) Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
@@ -5936,6 +6049,10 @@ var uiPicker by androidx.compose.runtime.mutableStateOf<List<String>?>(null)
 var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null)
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
 var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
+// 撤销：记录上一个文件操作（移动/复制/重命名/删除）
+data class UndoOp(val kind: String, val src: List<String>, val dst: List<String> = emptyList())
+var pendingUndo by androidx.compose.runtime.mutableStateOf<UndoOp?>(null)
+
 
 // 顶层写帧率日志（供 Composable/设置面板调用；FpsOverlayService 的 logLine 是服务私有方法）
 internal fun writeFpsLog(ctx: android.content.Context, msg: String) {
