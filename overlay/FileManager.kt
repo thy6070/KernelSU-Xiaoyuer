@@ -2343,6 +2343,12 @@ private fun ProMaxIsland(
     val config = LocalConfiguration.current
     val density = androidx.compose.ui.platform.LocalDensity.current
     val pillW = (config.screenWidthDp * 0.36f).dp
+    // 完成态：胶囊像灵动岛那样横向展开，3 秒后收回
+    val pillWAnim by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (doneEvent != null) pillW * 1.45f else pillW,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 420f),
+        label = "pillWAnim"
+    )
 
     val sel = selectedFile
     val selName = sel?.substringAfterLast('/') ?: ""
@@ -2438,7 +2444,7 @@ private fun ProMaxIsland(
         Column(
             modifier = Modifier
                 .zIndex(1f)
-                .width(pillW)
+                .width(pillWAnim)
                 .graphicsLayer {
                     scaleX = bump
                     scaleY = bump
