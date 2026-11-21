@@ -1448,69 +1448,72 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    // 一次显示 5 个胶囊按钮（每个约 54dp）
-                    modifier = Modifier.heightIn(max = 270.dp)
+                    // 一次显示 5 个胶囊按钮（每个约 44dp）
+                    modifier = Modifier.heightIn(max = 230.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
                         val icon = uiPickerIcons?.getOrNull(i)
-                        // iOS 风格：每个选项是独立的黄色胶囊按钮
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 5.dp)
-                        ) {
-                            Box(
+                        // iOS 列表行：白底黑字 + 行间分割线
+                        Column {
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(percent = 50))
-                                    .background(Color(0xFFFFD60A))
                                     .clickable {
                                         uiPickerAction?.invoke(item)
                                         uiPicker = null
                                         uiPickerIcons = null
                                     }
-                                    .padding(vertical = 11.dp),
-                                contentAlignment = Alignment.Center
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = item,
+                                    modifier = Modifier.weight(1f),
                                     fontSize = 15.sp,
                                     color = Color.Black,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            // 行间分割线（最后一个不画）
+                            if (i < pickList.size - 1) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 16.dp)
+                                        .height(0.5.dp)
+                                        .background(Color(0x22000000))
                                 )
                             }
                         }
                     }
                 }
-                // 底部按钮：改机型的"恢复原样"（点外部也可关闭）
+                // 底部：独立的「恢复原样」按钮（上方留白，悬浮感）
                 if (pickTitle == "选择机型") {
-                    // 列表与按钮之间留间隔
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 5.dp)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(Color.White)
+                            .padding(horizontal = 12.dp)
+                            .clip(SmoothCornerShape(12.dp))
+                            .background(Color(0xFFE5E5EA))
                             .clickable {
                                 uiPickerAction?.invoke("恢复原样")
                                 uiPicker = null
                                 uiPickerIcons = null
                             }
-                            .padding(vertical = 11.dp),
+                            .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "恢复原样",
                             fontSize = 15.sp,
-                            color = Color.Black,
+                            color = Color(0xFF007AFF),
                             textAlign = TextAlign.Center
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
             }
