@@ -1998,13 +1998,7 @@ private fun ProMaxIsland(
     var showWave by remember { mutableStateOf(false) }
     var navMode by remember { mutableStateOf(false) }
     var navTarget by remember { mutableStateOf<String?>(null) }
-    // 完成态 3 秒后恢复
-    LaunchedEffect(doneEvent) {
-        if (doneEvent != null) {
-            kotlinx.coroutines.delay(3000)
-            doneEvent = null
-        }
-    }
+
     var navClosing by remember { mutableStateOf(false) }
     var jumpStep by remember { mutableStateOf(0) }
     var jumpSide by remember { mutableStateOf(0) }
@@ -2358,6 +2352,8 @@ private fun ProMaxIsland(
                 1.45f,
                 androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 380f)
             )
+            // 动画结束 → 立即恢复
+            doneEvent = null
         } else {
             // 恢复
             pillScale.animateTo(
