@@ -1450,6 +1450,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     animationSpec = androidx.compose.animation.core.tween(200)
                 )
             ) {
+            // 外层 Column：卡片和按钮垂直排列（否则会重叠）
+            Column(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
