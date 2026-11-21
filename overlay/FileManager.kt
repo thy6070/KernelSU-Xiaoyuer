@@ -2536,9 +2536,11 @@ private fun ProMaxIsland(
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text(
                             text = statusText,
-                            fontSize = 12.sp,
+                            fontSize = if (de != null) 13.sp else 12.sp,
                             textAlign = TextAlign.Center,
-                            color = if (extractFailed) Color(0xFFFF3B30) else Color(0xFF0A84FF)
+                            color = if (extractFailed) Color(0xFFFF3B30)
+                                    else if (de != null) Color.White
+                                    else Color(0xFF0A84FF)
                         )
                     }
                     if (de != null) {
