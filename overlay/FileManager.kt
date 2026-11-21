@@ -220,9 +220,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     // 卡密底部半屏面板：不可下滑关闭，验证成功才自动收起
     if (showCardSheet) {
+        // 卡密验证成功时临时允许隐藏（否则 confirmValueChange 会把 hide() 动画也拒绝掉，面板直接消失）
+        val allowHide = remember { mutableStateOf(false) }
         val cardSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true,
-            confirmValueChange = { it != androidx.compose.material3.SheetValue.Hidden }
+            confirmValueChange = { it != androidx.compose.material3.SheetValue.Hidden || allowHide.value }
         )
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { /* 忽略手势/返回键关闭 */ },
@@ -239,9 +241,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         ) {
             CardLoginSheet(appCtx) {
                 scope.launch {
-                    // 先播放下滑动画，动画结束再移除，否则会"啪"一下消失
+                    // 允许隐藏 → 播放下滑动画 → 动画结束再移除
+                    allowHide.value = true
                     try { cardSheetState.hide() } catch (t: Throwable) {}
-                    kotlinx.coroutines.delay(60)
+                    kotlinx.coroutines.delay(120)
                     showCardSheet = false
                 }
             }
