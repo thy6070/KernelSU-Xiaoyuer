@@ -885,6 +885,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         terminalMode = showTerminal,
         onOpenTerminal = { termFull = true },
         onPreview = { previewPath = it },
+        onRefresh = { refreshTick += 1 },
         termText = termText,
         termInput = termInput,
         onTermInput = { termInput = it },
@@ -2373,6 +2374,75 @@ private fun ProMaxIsland(
                     contentDescription = null,
                     modifier = Modifier.size(34.dp)
                 )
+                // 有可撤销操作：分岛上叠加一个撤回角标，点击直接撤回
+                if (pendingUndo != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(21.dp))
+                            .background(Color(0xCC000000))
+                            .clickable {
+                                // 直接撤回，不打开导航
+                                val op = pendingUndo
+                                pendingUndo = null
+                                if (op != null) {
+                                    reopenScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            try {
+                                                fun q(x: String) = "'" + x.replace("'", "'\''") + "'"
+                                                val trash = "/data/local/tmp/xy_trash/last"
+                                                when (op.kind) {
+                                                    "delete" -> {
+                                                        op.src.forEach { src ->
+                                                            val nm = src.substringAfterLast('/')
+                                                            val dir = src.substringBeforeLast('/', "/")
+                                                            ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                "cp -a " + q(trash + "/" + nm) + " " + q(dir + "/") + " 2>/dev/null || true")
+                                                                .redirectErrorStream(true).start().waitFor()
+                                                        }
+                                                        ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                            "rm -rf " + q(trash)).redirectErrorStream(true).start().waitFor()
+                                                    }
+                                                    "move" -> op.src.forEachIndexed { i, src ->
+                                                        val nm = src.substringAfterLast('/')
+                                                        val target = op.dst.getOrElse(i) { op.dst.firstOrNull() ?: "" }
+                                                        ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                            "mv -f " + q(target + "/" + nm) + " " + q(src))
+                                                            .redirectErrorStream(true).start().waitFor()
+                                                    }
+                                                    "copy" -> op.src.forEach { src ->
+                                                        val nm = src.substringAfterLast('/')
+                                                        val target = op.dst.firstOrNull() ?: ""
+                                                        ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                            "rm -rf " + q(target + "/" + nm))
+                                                            .redirectErrorStream(true).start().waitFor()
+                                                    }
+                                                    "rename" -> {
+                                                        val oldP = op.src.firstOrNull() ?: ""
+                                                        val newP = op.dst.firstOrNull() ?: ""
+                                                        if (oldP.isNotEmpty() && newP.isNotEmpty()) {
+                                                            ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                "mv -f " + q(newP) + " " + q(oldP))
+                                                                .redirectErrorStream(true).start().waitFor()
+                                                        }
+                                                    }
+                                                }
+                                            } catch (t: Throwable) {}
+                                        }
+                                        onRefresh()
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.Undo,
+                            contentDescription = "撤回",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
         }
 
@@ -2393,6 +2463,8 @@ private fun ProMaxIsland(
                 .combinedClickable(
                     onClick = {
                         if (terminalMode) onTermClose()
+                        // 收起时清空撤销事件（下次不残留）
+                        pendingUndo = null
                         // let the panels shrink before the pill settles, so closing keeps its animation
                         val hadNav = navMode || navTarget != null
                         navMode = false
@@ -2440,24 +2512,11 @@ private fun ProMaxIsland(
                     d.draw(canvas)
                     bmp.asImageBitmap()
                 }
-                if (pendingUndo != null) {
-                    // 有可撤销操作：图标变成撤回，点击展开胶囊
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Undo,
-                        contentDescription = "撤回",
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .clip(RoundedCornerShape(percent = 22))
-                            .clickable { openNav(null) }
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
-                        contentDescription = null,
-                        modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
-                    )
-                }
+                Image(
+                    painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
+                )
                 val statusText = when {
                     installDone -> "安装成功"
                     extractFailed -> "安装失败"
