@@ -1447,7 +1447,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    modifier = Modifier.heightIn(max = 360.dp)
+                    // 一次显示 5 行（每行约 44dp）
+                    modifier = Modifier.heightIn(max = 220.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -1499,12 +1500,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 // 底部按钮：改机型的"恢复原样"（点外部也可关闭）
                 if (pickTitle == "选择机型") {
+                    // 列表与按钮之间留间隔
+                    Spacer(modifier = Modifier.height(10.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(0.5.dp)
                             .background(Color(0xFF3A3A3C))
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "恢复原样",
                         modifier = Modifier
