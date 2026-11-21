@@ -1440,16 +1440,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
             ) {
-                // 改机型不显示标题（直接列表）
-                if (pickTitle != "选择机型") {
-                    Text(
-                        text = pickTitle ?: "选择",
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                        fontSize = 15.sp,
-                        color = Color(0xFF8E8E93),
-                        textAlign = TextAlign.Center
-                    )
-                }
+                Text(
+                    text = pickTitle ?: "选择",
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                    fontSize = 15.sp,
+                    color = Color(0xFF8E8E93),
+                    textAlign = TextAlign.Center
+                )
                 androidx.compose.foundation.lazy.LazyColumn(
                     // 一次显示 5 个胶囊按钮（每个约 44dp）
                     modifier = Modifier.heightIn(max = 230.dp)
@@ -1469,16 +1466,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     }
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                                horizontalArrangement = Arrangement.Start
                             ) {
                                 Text(
                                     text = item,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.weight(1f),
                                     fontSize = 15.sp,
                                     color = Color.Black,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center
+                                    textAlign = TextAlign.Start
                                 )
                             }
                             // 行间分割线（最后一个不画）
@@ -1494,32 +1491,31 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                // 底部：独立的「恢复原样」按钮（上方留白，悬浮感）
-                if (pickTitle == "选择机型") {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .clip(SmoothCornerShape(12.dp))
-                            .background(Color(0xFFE5E5EA))
-                            .clickable {
-                                uiPickerAction?.invoke("恢复原样")
-                                uiPicker = null
-                                uiPickerIcons = null
-                            }
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "恢复原样",
-                            fontSize = 15.sp,
-                            color = Color(0xFF007AFF),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
+            }
+            // 卡片外独立按钮：恢复原样（白色卡片）
+            if (pickTitle == "选择机型") {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(SmoothCornerShape(12.dp))
+                        .background(Color.White)
+                        .clickable {
+                            uiPickerAction?.invoke("恢复原样")
+                            uiPicker = null
+                            uiPickerIcons = null
+                        }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "恢复原样",
+                        fontSize = 15.sp,
+                        color = Color(0xFF007AFF),
+                        textAlign = TextAlign.Center
+                    )
                 }
+            }
             }
             }
         }
