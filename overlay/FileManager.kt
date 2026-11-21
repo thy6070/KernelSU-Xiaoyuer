@@ -892,6 +892,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         terminalMode = showTerminal,
         onOpenTerminal = { termFull = true },
         onPreview = { previewPath = it },
+        onOpen = {
+            // 分岛点击：打开模式面板（FPS+/禁用温控/执行此文件）
+            uiScope.launch {
+                panelP.snapTo(0f)
+                panel = true
+                panelP.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+            }
+        },
         termText = termText,
         termInput = termInput,
         onTermInput = { termInput = it },
@@ -1195,13 +1203,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
         },
-    ) {
-        uiScope.launch {
-            panelP.snapTo(0f)
-            panel = true
-            panelP.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
-        }
-    }
+    )
 
         }
 
