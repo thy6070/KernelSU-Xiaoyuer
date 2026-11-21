@@ -1408,13 +1408,26 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     if (updateVer != null) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { if (updateProgress < 0) updateVer = null }) {
+        // 用主界面内遮罩层（Dialog 是独立窗口，Haze 跨窗口模糊不了）
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(300f)
+                .background(Color(0x66000000))
+                .clickable {
+                    if (updateProgress < 0) updateVer = null
+                },
+            contentAlignment = Alignment.Center
+        ) {
             Column(
                 modifier = Modifier
                     .width(280.dp)
+                    .hazeEffect(hazeState) {
+                        blurRadius = 24.dp
+                    }
                     .clip(SmoothCornerShape(14.dp))
                     // iOS AlertDialog：白卡 + 14dp 圆角
-                    .background(Color(0xFFF2F2F7))
+                    .background(Color(0xE6F2F2F7))
                     .padding(top = 20.dp, bottom = 0.dp)
             ) {
                 Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.Black, textAlign = TextAlign.Center)
