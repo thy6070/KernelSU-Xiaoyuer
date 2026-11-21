@@ -1294,19 +1294,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(SmoothCornerShape(20.dp))
-                    .background(Color(0xFF2C2C2E))
+                    // iOS 白色风格
+                    .background(Color(0xFFF2F2F7))
                     .padding(20.dp)
             ) {
-                Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, color = Color.White, textAlign = TextAlign.Center)
+                Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, color = Color.Black, textAlign = TextAlign.Center)
                 Text(updateVer!!, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 13.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 if (updateProgress >= 0) {
                     Spacer(Modifier.height(14.dp))
                     // iOS 风格进度条：细（5dp）+ 圆角 + 半透明轨道 + iOS 蓝进度
                     androidx.compose.material3.LinearProgressIndicator(
                         progress = { (updateProgress / 100f).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(2.5.dp)),
-                        color = Color(0xFF0A84FF),
-                        trackColor = Color(0x33FFFFFF)
+                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(SmoothCornerShape(2.5.dp)),
+                        color = Color(0xFF007AFF),
+                        trackColor = Color(0xFFE5E5EA)
                     )
                     Text(updateProgress.toString() + "%", modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 12.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 }
@@ -1415,7 +1416,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     Image(
                                         bitmap = icon,
                                         contentDescription = null,
-                                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(7.dp))
+                                        modifier = Modifier.size(28.dp).clip(SmoothCornerShape(7.dp))
                                     )
                                 } else {
                                     Box(modifier = Modifier.size(28.dp))
@@ -2709,7 +2710,7 @@ private fun ProMaxIsland(
                                                     .padding(bottom = 6.dp)
                                                     .background(
                                                         if (chosen) Color(0xFF00BCD4) else Color(0x33FFFFFF),
-                                                        RoundedCornerShape(10.dp)
+                                                        SmoothCornerShape(10.dp)
                                                     )
                                                     .padding(1.dp)
                                                     .background(Color(0xFF16161A), SmoothCornerShape(10.dp))
@@ -2850,7 +2851,7 @@ private fun ProMaxIsland(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .padding(bottom = 6.dp)
-                                                    .background(ring, RoundedCornerShape(10.dp))
+                                                    .background(ring, SmoothCornerShape(10.dp))
                                                     .padding(1.dp)
                                                     .background(Color(0xFF16161A), SmoothCornerShape(10.dp))
                                                     .clickable { suSel = if (chosen) -1 else si }
@@ -3337,7 +3338,7 @@ private fun ProMaxIsland(
                             onValueChange = onTermInput,
                             modifier = Modifier
                                 .weight(1f)
-                                .background(Color(0xFF0E0E10), RoundedCornerShape(6.dp))
+                                .background(Color(0xFF0E0E10), SmoothCornerShape(6.dp))
                                 .padding(4.dp),
                             textStyle = androidx.compose.ui.text.TextStyle(
                                 color = Color.White,
@@ -3621,7 +3622,7 @@ private fun TerminalOverlay(
                         onValueChange = onInputChange,
                         modifier = Modifier
                             .weight(1f)
-                            .background(Color(0xFF0E0E10), RoundedCornerShape(6.dp))
+                            .background(Color(0xFF0E0E10), SmoothCornerShape(6.dp))
                             .padding(6.dp),
                         textStyle = androidx.compose.ui.text.TextStyle(
                             color = Color.White,
@@ -4778,7 +4779,7 @@ private fun BrowserPane(
                 Box(
                     modifier = Modifier
                         .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(SmoothCornerShape(8.dp))
                         .background(Color(TILE_COLOR)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -5130,7 +5131,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
             bitmap = mediaThumbNow,
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = Modifier.size(20.dp).clip(RoundedCornerShape(4.dp))
+            modifier = Modifier.size(20.dp).clip(SmoothCornerShape(4.dp))
         )
     } else if (apkIconNow != null) {
         Image(
