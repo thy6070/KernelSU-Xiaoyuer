@@ -1416,7 +1416,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val pickList = uiPicker
     val pickTitle = uiPickerTitle
     if (pickList != null) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { uiPicker = null }) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { uiPicker = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
+        ) {
+            // 上滑 + 淡入的进入动画
+            androidx.compose.animation.AnimatedVisibility(
+                visible = true,
+                enter = androidx.compose.animation.slideInVertically(
+                    initialOffsetY = { it / 3 },
+                    animationSpec = androidx.compose.animation.core.tween(260)
+                ) + androidx.compose.animation.fadeIn(
+                    animationSpec = androidx.compose.animation.core.tween(200)
+                )
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1504,6 +1520,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         textAlign = TextAlign.Center
                     )
                 }
+            }
             }
         }
     }
