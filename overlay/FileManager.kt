@@ -382,12 +382,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var lastUndoSeen by remember { mutableStateOf<UndoOp?>(null) }
     LaunchedEffect(pendingUndo) {
         val cur = pendingUndo
-        if (cur == null && lastUndoSeen != null) {
-            refreshTick += 1
-        }
+        if (cur == null && lastUndoSeen != null) refreshTick += 1
         lastUndoSeen = cur
     }
-
     var leftHighlight by remember { mutableStateOf<String?>(null) }
     var rightHighlight by remember { mutableStateOf<String?>(null) }
     var showSearch by remember { mutableStateOf(false) }
@@ -1054,7 +1051,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "move" -> pendingUndo = UndoOp("move", listOf(srcPath), listOf(arg))
                                     "copy" -> pendingUndo = UndoOp("copy", listOf(srcPath), listOf(arg))
                                     "rename" -> pendingUndo = UndoOp("rename", listOf(srcPath), listOf(dir + "/" + arg))
-                                    // 其他操作：分岛恢复成正常样式
                                     else -> pendingUndo = null
                                 }
                             }
@@ -2386,15 +2382,14 @@ private fun ProMaxIsland(
                     contentDescription = null,
                     modifier = Modifier.size(34.dp)
                 )
-                // 有可撤销操作：分岛上叠加一个撤回角标，点击展开胶囊（显示撤回按钮）
                 if (pendingUndo != null) {
+                    // 有可撤销操作：分岛叠一个撤回角标，点击展开胶囊
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(21.dp))
                             .background(Color(0xCC000000))
                             .clickable {
-                                // 展开胶囊，显示"撤回上一个事件"按钮（不直接执行）
                                 reopenScope.launch {
                                     navMode = true
                                     navTarget = null
@@ -2411,7 +2406,6 @@ private fun ProMaxIsland(
                             modifier = Modifier.size(22.dp)
                         )
                     }
-                }
                 }
             }
         }
@@ -2433,7 +2427,7 @@ private fun ProMaxIsland(
                 .combinedClickable(
                     onClick = {
                         if (terminalMode) onTermClose()
-                        // 收起时清空撤销事件（下次不残留）
+                        // 收起时清空撤销事件
                         pendingUndo = null
                         // let the panels shrink before the pill settles, so closing keeps its animation
                         val hadNav = navMode || navTarget != null
