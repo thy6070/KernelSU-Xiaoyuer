@@ -162,6 +162,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.hazeEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
@@ -266,7 +268,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 去掉顶部那个可以往下拉的小把手
             dragHandle = null
         ) {
-            CardLoginSheet(appCtx) {
+            CardLoginSheet(appCtx, hazeState) {
                 scope.launch {
                     // 允许隐藏 → 播放下滑动画 → 动画结束再移除
                     allowHide.value = true
@@ -387,6 +389,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var selectedFile by remember { mutableStateOf<String?>(null) }
     var refreshTick by remember { mutableStateOf(0) }
     // 撤回完成后（pendingUndo 被清空）刷新列表
+    // iOS 毛玻璃：模糊面板背后的 Compose 内容
+    val hazeState = remember { dev.chrisbanes.haze.HazeState() }
     var lastUndoSeen by remember { mutableStateOf<UndoOp?>(null) }
     LaunchedEffect(pendingUndo) {
         val cur = pendingUndo
@@ -573,7 +577,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     if (panel || termFull || editPath != null || previewPath != null) 30.dp else 0.dp
                 )
         ) {
-    Row(modifier = Modifier.fillMaxSize()) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .hazeSource(hazeState)
+    ) {
         key(leftPath) {
             BrowserPane(
                 path = leftPath,
@@ -5117,7 +5125,11 @@ private fun BrowserPane(
 }
 
 @Composable
-private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
+private fun CardLoginSheet(
+    ctx: android.content.Context,
+    hazeState: dev.chrisbanes.haze.HazeState,
+    onDone: () -> Unit
+) {
     var key by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
@@ -5136,6 +5148,9 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .hazeEffect(hazeState) {
+                blurRadius = 24.dp
+            }
             .padding(horizontal = 4.dp, vertical = 10.dp)
     ) {
         Text(
