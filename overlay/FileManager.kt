@@ -2487,10 +2487,20 @@ private fun ProMaxIsland(
                     onLongClick = { openNav(null) }
                 )
         ) {
+            // 完成态：高度向下延伸（上面加得少、下面加得多），顶部固定
+            val pillRowH by androidx.compose.animation.core.animateDpAsState(
+                // 按截图比例：完成态以变宽为主，高度只微调（更扁长）
+                targetValue = if (doneEvent != null) 44.dp else 42.dp,
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = 0.72f,
+                    stiffness = 420f
+                ),
+                label = "pillRowH"
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(42.dp)
+                    .height(pillRowH)
                     .padding(start = 12.dp, end = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
