@@ -1135,10 +1135,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Shell.getShell().close()
                     } catch (t: Throwable) {
                     }
-                    // 移动/复制完成后：选中并高亮目标目录里刚过去的那份文件
+                    // 移动/复制完成后：只高亮目标文件，不选中（否则会展开灵动岛）
                     if (op == "move" || op == "copy") {
                         val dest = arg.trimEnd('/') + "/" + srcPath.substringAfterLast('/')
-                        selectedFile = dest
                         if (arg.trimEnd('/') == leftPath.trimEnd('/')) leftHighlight = dest
                         else if (arg.trimEnd('/') == rightPath.trimEnd('/')) rightHighlight = dest
                     }
