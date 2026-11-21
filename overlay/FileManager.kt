@@ -1172,16 +1172,17 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { showSearch = false },
             sheetState = searchSheetState,
             containerColor = Color(0xFFF2F2F7),
-            shape = androidx.compose.ui.graphics.RectangleShape,
+            // 与卡密登录面板同款连续曲率圆角
+            shape = SmoothCornerShape(20.dp),
+            // 去掉 640dp 宽度上限，平板上铺满
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 10.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
-                Text(
-                    "搜索文件",
                     modifier = Modifier.fillMaxWidth(),
                     fontSize = 17.sp,
                     color = Color.Black,
@@ -1457,7 +1458,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
             ) {
             // 外层 Column：卡片和按钮垂直排列（否则会重叠）
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 36.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1487,7 +1488,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(
-                                        if (pickTitle == "选择要重置的应用" && uiPickerSelected == item) Color(0x33007AFF)
+                                        if (pickTitle == "选择要重置的应用" && uiPickerSelected == item) Color(0x4D007AFF)
                                         else Color.Transparent
                                     )
                                     .clickable {
