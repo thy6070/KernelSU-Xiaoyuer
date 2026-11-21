@@ -1630,8 +1630,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 uiPickerSelected = null
                             }
                         }
-                        // 按钮加高（长一点）
-                        .padding(vertical = 16.dp),
+                        // 按钮高度（略收）
+                        .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -2343,16 +2343,16 @@ private fun ProMaxIsland(
     LaunchedEffect(doneEvent) {
         if (doneEvent != null) {
             // 先缩
-            // 缩小幅度更大、时间更长（之前太快看不见）
+            // 缩小：幅度大、时间放慢
             pillScale.animateTo(
                 0.62f,
-                androidx.compose.animation.core.tween(220)
+                androidx.compose.animation.core.tween(340)
             )
-            kotlinx.coroutines.delay(60)
+            kotlinx.coroutines.delay(120)
             // 再放大展开
             pillScale.animateTo(
                 1.45f,
-                androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 380f)
+                androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 260f)
             )
             // 动画结束 → 立即恢复
             doneEvent = null
@@ -2360,7 +2360,7 @@ private fun ProMaxIsland(
             // 恢复
             pillScale.animateTo(
                 1f,
-                androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 400f)
+                androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 280f)
             )
         }
     }
