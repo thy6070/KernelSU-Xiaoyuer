@@ -1437,7 +1437,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(SmoothCornerShape(20.dp))
-                    .background(Color(0xFF2C2C2E))
+                    // iOS 白色主题
+                    .background(Color(0xFFF2F2F7))
             ) {
                 Text(
                     text = pickTitle ?: "选择",
@@ -1481,7 +1482,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             Text(
                                 text = item,
                                 fontSize = 15.sp,
-                                color = if (isRestore) Color(0xFF0A84FF) else Color.White,
+                                color = if (isRestore) Color(0xFF007AFF) else Color.Black,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = if (isRestore) TextAlign.Center else TextAlign.Start,
@@ -1493,7 +1494,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(0.5.dp)
-                                    .background(Color(0xFF3A3A3C))
+                                    .background(Color(0x22000000))
                             )
                         }
                     }
@@ -1506,7 +1507,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(0.5.dp)
-                            .background(Color(0xFF3A3A3C))
+                            .background(Color(0x22000000))
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
