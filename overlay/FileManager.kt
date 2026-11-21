@@ -2503,17 +2503,20 @@ private fun ProMaxIsland(
                     onLongClick = { openNav(null) }
                 )
         ) {
-            // 高度跟随完成态比例（先缩后展，保持扁长）
+            // 高度：缩小等比缩；放大时下面多延伸（上面少加、下面多加）
             val pillRowH = when {
-                pillScale.value > 1f -> 42.dp + (2.dp * (pillScale.value - 1f) * 3f)
+                pillScale.value > 1f -> 42.dp + (6.dp * (pillScale.value - 1f) / 0.45f)
                 pillScale.value < 1f -> 42.dp * pillScale.value
                 else -> 42.dp
             }
+            // 放大时内容整体下移一点（下面视觉上更长）
+            val pillContentShift = if (pillScale.value > 1f) 2.dp * (pillScale.value - 1f) / 0.45f else 0.dp
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(pillRowH)
-                    .padding(start = 12.dp, end = 8.dp),
+                    .padding(start = 12.dp, end = 8.dp)
+                    .padding(top = pillContentShift),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
