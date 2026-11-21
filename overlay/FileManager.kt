@@ -208,6 +208,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val view = LocalView.current
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
     var showCardSheet by remember { mutableStateOf(false) }
+    // 启动清理：撤销回收站里超过 1 天的备份（避免占用空间）
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            try {
+                ProcessBuilder(suBin(), "--mount-master", "-c",
+                    "find /data/local/tmp/xy_trash -mindepth 1 -mtime +1 -exec rm -rf {} + 2>/dev/null || true")
+                    .redirectErrorStream(true).start().waitFor()
+            } catch (t: Throwable) {}
+        }
+    }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         // 每次打开都显示卡密验证
@@ -973,9 +983,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             if (cmd.isNotEmpty()) {
                                 if (op == "delete") {
-                                    // 删除前备份到回收站，便于撤销
+                                    // 只保留本次备份：先清空回收站再备份
                                     val trash = "/data/local/tmp/xy_trash/last"
-                                    val prep = "mkdir -p " + q(trash) + " ; for f in " + list + "; do cp -a \"\$f\" " + q(trash) + "/ 2>/dev/null || true; done"
+                                    val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; for f in " + list + "; do cp -a \"\$f\" " + q(trash) + "/ 2>/dev/null || true; done"
                                     ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
                                 }
                                 val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
@@ -1017,8 +1027,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             var ok = true
                             if (cmd.isNotEmpty()) {
                                 if (op == "delete") {
+                                    // 只保留本次备份：先清空回收站再备份
                                     val trash = "/data/local/tmp/xy_trash/last"
-                                    val prep = "mkdir -p " + q(trash) + " ; cp -a " + q(srcPath) + " " + q(trash) + "/ 2>/dev/null || true"
+                                    val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; cp -a " + q(srcPath) + " " + q(trash) + "/ 2>/dev/null || true"
                                     ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
                                 }
                                 val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
@@ -2543,6 +2554,10 @@ private fun ProMaxIsland(
                                                                     "cp -a " + q(trash + "/" + name) + " " + q(dir + "/") + " 2>/dev/null || true")
                                                                     .redirectErrorStream(true).start().waitFor()
                                                             }
+                                                            // 撤销完成：清空回收站
+                                                            ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                "rm -rf " + q(trash))
+                                                                .redirectErrorStream(true).start().waitFor()
                                                         }
                                                         "move" -> {
                                                             op.src.forEachIndexed { i, src ->
