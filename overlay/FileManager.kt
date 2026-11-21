@@ -66,6 +66,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
@@ -1160,52 +1162,50 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     // ===== 搜索文件 =====
     if (showSearch) {
-        androidx.compose.ui.window.Dialog(
+        // 搜索：底部半屏面板（与卡密登录同风格：白色、直角）
+        val searchSheetState = androidx.compose.material3.rememberModalBottomSheetState(
+            skipPartiallyExpanded = true
+        )
+        androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showSearch = false },
-            properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnClickOutside = true,
-                dismissOnBackPress = true
-            )
+            sheetState = searchSheetState,
+            containerColor = Color(0xFFF2F2F7),
+            shape = androidx.compose.ui.graphics.RectangleShape,
+            dragHandle = null
         ) {
-            // 上滑 + 淡入的进入动画
-            androidx.compose.animation.AnimatedVisibility(
-                visible = true,
-                enter = androidx.compose.animation.slideInVertically(
-                    initialOffsetY = { it / 3 },
-                    animationSpec = androidx.compose.animation.core.tween(260)
-                ) + androidx.compose.animation.fadeIn(
-                    animationSpec = androidx.compose.animation.core.tween(200)
-                )
-            ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(SmoothCornerShape(20.dp))
-                    .background(Color(0xFF2C2C2E))
-                    .padding(16.dp)
+                    .padding(horizontal = 4.dp, vertical = 10.dp)
             ) {
-                Text("搜索文件", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, color = Color.White, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
+                Text(
+                    "搜索文件",
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 17.sp,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(10.dp))
                 androidx.compose.foundation.text.BasicTextField(
                     value = searchQ,
                     onValueChange = { searchQ = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1C1C1E), SmoothCornerShape(10.dp))
-                        .padding(10.dp),
-                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
-                    singleLine = true
+                        .clip(SmoothCornerShape(10.dp))
+                        .background(Color(0xFFE5E5EA))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.Black)
                 )
-                Spacer(Modifier.height(12.dp))
-                IslandActionButton(if (searching) "搜索中…" else "搜索此文件", Color(0xFF0A84FF)) {
-                    if (!searching && searchQ.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = {
+                        if (searchQ.isBlank() || searching) return@Button
                         searching = true
                         searchResults = emptyList()
                         uiScope.launch {
                             val q = searchQ.replace("'", "'\''")
                             withContext(Dispatchers.IO) {
                                 try {
-                                    // 全局搜索：先 /storage（快），再 /data（慢），流式输出
                                     val pb = ProcessBuilder(suBin(), "--mount-master", "-c",
                                         "find /storage/emulated/0 -maxdepth 8 -iname '*" + q + "*' -type f 2>/dev/null; " +
                                         "find /data -maxdepth 6 -iname '*" + q + "*' -type f 2>/dev/null")
@@ -1225,9 +1225,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             searching = false
                         }
-                    }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = SmoothCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF))
+                ) {
+                    Text(if (searching) "搜索中…" else "搜索此文件", color = Color.White, fontSize = 15.sp)
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
                     items(searchResults.size) { i ->
                         val r = searchResults[i]
@@ -1248,26 +1253,25 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     r.substringAfterLast('/'),
                                     modifier = Modifier.weight(1f),
                                     fontSize = 13.sp,
-                                    color = Color.White,
+                                    color = Color.Black,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     r.substringBeforeLast('/', ""),
                                     fontSize = 9.sp,
-                                    color = Color(0x66FFFFFF),
+                                    color = Color(0x88000000),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.widthIn(max = 260.dp).padding(start = 8.dp)
                                 )
                             }
                             if (i < searchResults.size - 1) {
-                                Box(modifier = Modifier.fillMaxWidth().padding(start = 10.dp).height(0.5.dp).background(Color(0x33FFFFFF)))
+                                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(0.5.dp).background(Color(0x22000000)))
                             }
                         }
                     }
                 }
-            }
             }
         }
     }
