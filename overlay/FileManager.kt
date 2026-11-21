@@ -153,6 +153,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -1186,13 +1187,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(10.dp))
+                var searchFocused by remember { mutableStateOf(false) }
                 androidx.compose.foundation.text.BasicTextField(
                     value = searchQ,
                     onValueChange = { searchQ = it },
                     modifier = Modifier
                         .fillMaxWidth()
+                        .onFocusChanged { searchFocused = it.isFocused }
                         .clip(SmoothCornerShape(10.dp))
-                        .background(Color(0xFFE5E5EA))
+                        .background(if (searchFocused) Color(0xFFEDEDF0) else Color(0xFFE5E5EA))
+                        .border(
+                            width = if (searchFocused) 1.5.dp else 0.5.dp,
+                            color = if (searchFocused) Color(0xFF007AFF) else Color(0x22000000),
+                            shape = SmoothCornerShape(10.dp)
+                        )
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.Black)
                 )
@@ -4931,6 +4939,7 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             modifier = Modifier.padding(horizontal = 8.dp)
         )
         Spacer(modifier = Modifier.height(10.dp))
+        var keyFocused by remember { mutableStateOf(false) }
         androidx.compose.foundation.text.BasicTextField(
             value = key,
             onValueChange = { key = it },
@@ -4938,8 +4947,14 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.Black),
             modifier = Modifier
                 .fillMaxWidth()
+                .onFocusChanged { keyFocused = it.isFocused }
                 .clip(SmoothCornerShape(10.dp))
-                .background(Color(0xFFE5E5EA))
+                .background(if (keyFocused) Color(0xFFEDEDF0) else Color(0xFFE5E5EA))
+                .border(
+                    width = if (keyFocused) 1.5.dp else 0.5.dp,
+                    color = if (keyFocused) Color(0xFF007AFF) else Color(0x22000000),
+                    shape = SmoothCornerShape(10.dp)
+                )
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         )
         Spacer(modifier = Modifier.height(12.dp))
