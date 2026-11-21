@@ -217,6 +217,8 @@ data class FsEntry(val name: String, val isDir: Boolean, val sizeText: String = 
 fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}) {
     val appCtx = LocalContext.current
     val view = LocalView.current
+    // iOS 毛玻璃：模糊面板背后的 Compose 内容
+    val hazeState = remember { dev.chrisbanes.haze.HazeState() }
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
     var showCardSheet by remember { mutableStateOf(false) }
     // 启动清理：撤销回收站里超过 1 天的备份（避免占用空间）
@@ -390,8 +392,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var selectedFile by remember { mutableStateOf<String?>(null) }
     var refreshTick by remember { mutableStateOf(0) }
     // 撤回完成后（pendingUndo 被清空）刷新列表
-    // iOS 毛玻璃：模糊面板背后的 Compose 内容
-    val hazeState = remember { dev.chrisbanes.haze.HazeState() }
     var lastUndoSeen by remember { mutableStateOf<UndoOp?>(null) }
     LaunchedEffect(pendingUndo) {
         val cur = pendingUndo
