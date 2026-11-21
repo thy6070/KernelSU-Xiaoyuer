@@ -2343,10 +2343,12 @@ private fun ProMaxIsland(
     LaunchedEffect(doneEvent) {
         if (doneEvent != null) {
             // 先缩
+            // 缩小幅度更大、时间更长（之前太快看不见）
             pillScale.animateTo(
-                0.82f,
-                androidx.compose.animation.core.tween(110)
+                0.62f,
+                androidx.compose.animation.core.tween(220)
             )
+            kotlinx.coroutines.delay(60)
             // 再放大展开
             pillScale.animateTo(
                 1.45f,
