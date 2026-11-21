@@ -135,6 +135,12 @@ import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.InstallMobile
+import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -1147,6 +1153,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     if (op == "delete") selectedFile = null   // 删除后清掉选中，否则快捷条还挂着
                     runOk = true
                     runMessage = if (op == "share") null else ("已完成")
+                    // 灵动岛完成态：图标 + 已完成 + 对勾，3 秒后恢复
+                    doneEvent = DoneEvent(op)
                 }
             }
             }
@@ -1988,6 +1996,13 @@ private fun ProMaxIsland(
     var showWave by remember { mutableStateOf(false) }
     var navMode by remember { mutableStateOf(false) }
     var navTarget by remember { mutableStateOf<String?>(null) }
+    // 完成态 3 秒后恢复
+    LaunchedEffect(doneEvent) {
+        if (doneEvent != null) {
+            kotlinx.coroutines.delay(3000)
+            doneEvent = null
+        }
+    }
     var navClosing by remember { mutableStateOf(false) }
     var jumpStep by remember { mutableStateOf(0) }
     var jumpSide by remember { mutableStateOf(0) }
@@ -2484,12 +2499,33 @@ private fun ProMaxIsland(
                     d.draw(canvas)
                     bmp.asImageBitmap()
                 }
-                Image(
-                    painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
-                    contentDescription = null,
-                    modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
-                )
+                val de = doneEvent
+                if (de != null) {
+                    // 完成态：换成操作类型图标
+                    val icon = when (de.kind) {
+                        "delete" -> Icons.Outlined.Delete
+                        "move" -> Icons.Outlined.DriveFileMove
+                        "copy" -> Icons.Outlined.ContentCopy
+                        "rename" -> Icons.Outlined.Edit
+                        "install" -> Icons.Outlined.InstallMobile
+                        "zip", "unzip" -> Icons.Outlined.FolderZip
+                        else -> Icons.Outlined.TaskAlt
+                    }
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
+                        contentDescription = null,
+                        modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
+                    )
+                }
                 val statusText = when {
+                    de != null -> "已完成"
                     installDone -> "安装成功"
                     extractFailed -> "安装失败"
                     extractDone -> "已完成"
@@ -2503,6 +2539,28 @@ private fun ProMaxIsland(
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center,
                             color = if (extractFailed) Color(0xFFFF3B30) else Color(0xFF0A84FF)
+                        )
+                    }
+                    if (de != null) {
+                        // 完成态：右侧对勾弹入（0 → 1 弹簧）
+                        val checkAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+                        LaunchedEffect(de) {
+                            checkAnim.snapTo(0f)
+                            checkAnim.animateTo(
+                                1f,
+                                androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 700f)
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Outlined.TaskAlt,
+                            contentDescription = "完成",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .graphicsLayer {
+                                    scaleX = checkAnim.value
+                                    scaleY = checkAnim.value
+                                }
                         )
                     }
                 } else if (terminalMode || (running && expanded)) {
@@ -6104,6 +6162,9 @@ var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
 // 撤销：记录上一个文件操作（移动/复制/重命名/删除）
 data class UndoOp(val kind: String, val src: List<String>, val dst: List<String> = emptyList())
 var pendingUndo by androidx.compose.runtime.mutableStateOf<UndoOp?>(null)
+// 操作完成事件（灵动岛完成态：图标 + 已完成 + 对勾，3 秒后恢复）
+data class DoneEvent(val kind: String)
+var doneEvent by androidx.compose.runtime.mutableStateOf<DoneEvent?>(null)
 
 
 // 顶层写帧率日志（供 Composable/设置面板调用；FpsOverlayService 的 logLine 是服务私有方法）
