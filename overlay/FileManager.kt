@@ -238,8 +238,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             contentColor = Color.Black,
             // 去掉 Material3 默认的 640dp 最大宽度限制，平板上才能真正铺满
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            // 面板不要圆角（直角铺满底部）
-            shape = androidx.compose.ui.graphics.RectangleShape,
+            // 面板用连续曲率圆角
+            shape = SmoothCornerShape(20.dp),
             // 完全禁止拖拽手势（面板不能被上下拖动）
             sheetGesturesEnabled = false,
             // 去掉顶部那个可以往下拉的小把手
@@ -1448,54 +1448,40 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    // 一次显示 5 行（每行约 44dp）
-                    modifier = Modifier.heightIn(max = 220.dp)
+                    // 一次显示 5 个胶囊按钮（每个约 54dp）
+                    modifier = Modifier.heightIn(max = 270.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
                         val icon = uiPickerIcons?.getOrNull(i)
+                        // iOS 风格：每个选项是独立的黄色胶囊按钮
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    uiPickerAction?.invoke(item)
-                                    uiPicker = null
-                                    uiPickerIcons = null
-                                }
-                                .padding(vertical = 11.dp, horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 14.dp, vertical = 5.dp)
                         ) {
-                            val isRestore = item == "恢复原样"
-                            if (!isRestore) {
-                                if (icon != null) {
-                                    Image(
-                                        bitmap = icon,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(28.dp).clip(SmoothCornerShape(7.dp))
-                                    )
-                                } else {
-                                    Box(modifier = Modifier.size(28.dp))
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                            }
-                            Text(
-                                text = item,
-                                fontSize = 15.sp,
-                                color = if (isRestore) Color(0xFF007AFF) else Color.Black,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = if (isRestore) TextAlign.Center else TextAlign.Start,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (i < pickList.size - 1) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(0.5.dp)
-                                    .background(Color(0x22000000))
-                            )
+                                    .clip(RoundedCornerShape(percent = 50))
+                                    .background(Color(0xFFFFD60A))
+                                    .clickable {
+                                        uiPickerAction?.invoke(item)
+                                        uiPicker = null
+                                        uiPickerIcons = null
+                                    }
+                                    .padding(vertical = 11.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = item,
+                                    fontSize = 15.sp,
+                                    color = Color.Black,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }
@@ -1506,24 +1492,25 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(0.5.dp)
-                            .background(Color(0x22000000))
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "恢复原样",
-                        modifier = Modifier
-                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 5.dp)
+                            .clip(RoundedCornerShape(percent = 50))
+                            .background(Color.White)
                             .clickable {
                                 uiPickerAction?.invoke("恢复原样")
                                 uiPicker = null
                                 uiPickerIcons = null
                             }
-                            .padding(vertical = 14.dp),
-                        fontSize = 15.sp,
-                        color = Color(0xFF0A84FF),
-                        textAlign = TextAlign.Center
-                    )
+                            .padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "恢复原样",
+                            fontSize = 15.sp,
+                            color = Color.Black,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
             }
             }
