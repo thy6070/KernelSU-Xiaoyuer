@@ -1194,14 +1194,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     modifier = Modifier
                         .fillMaxWidth()
                         .onFocusChanged { searchFocused = it.isFocused }
-                        .clip(SmoothCornerShape(10.dp))
-                        .background(if (searchFocused) Color(0xFFEDEDF0) else Color(0xFFE5E5EA))
-                        .border(
-                            width = if (searchFocused) 1.5.dp else 0.5.dp,
-                            color = if (searchFocused) Color(0xFF007AFF) else Color(0x22000000),
-                            shape = SmoothCornerShape(10.dp)
+                        .shadow(
+                            elevation = if (searchFocused) 8.dp else 3.dp,
+                            shape = SmoothCornerShape(12.dp),
+                            clip = false,
+                            ambientColor = Color(0x44000000),
+                            spotColor = Color(0x44000000)
                         )
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .clip(SmoothCornerShape(12.dp))
+                        // 无描边：聚焦靠阴影加深 + 背景微亮一阶
+                        .background(if (searchFocused) Color(0xFFFFFFFF) else Color(0xFFFAFAFC))
+                        .border(
+                            width = 0.5.dp,
+                            color = Color(0x1F000000),
+                            shape = SmoothCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.Black)
                 )
                 Spacer(Modifier.height(10.dp))
@@ -4948,14 +4956,22 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { keyFocused = it.isFocused }
-                .clip(SmoothCornerShape(10.dp))
-                .background(if (keyFocused) Color(0xFFEDEDF0) else Color(0xFFE5E5EA))
-                .border(
-                    width = if (keyFocused) 1.5.dp else 0.5.dp,
-                    color = if (keyFocused) Color(0xFF007AFF) else Color(0x22000000),
-                    shape = SmoothCornerShape(10.dp)
+                .shadow(
+                    elevation = if (keyFocused) 8.dp else 3.dp,
+                    shape = SmoothCornerShape(12.dp),
+                    clip = false,
+                    ambientColor = Color(0x44000000),
+                    spotColor = Color(0x44000000)
                 )
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .clip(SmoothCornerShape(12.dp))
+                // 无描边：聚焦靠阴影加深 + 背景微亮一阶
+                .background(if (keyFocused) Color(0xFFFFFFFF) else Color(0xFFFAFAFC))
+                .border(
+                    width = 0.5.dp,
+                    color = Color(0x1F000000),
+                    shape = SmoothCornerShape(12.dp)
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         )
         Spacer(modifier = Modifier.height(12.dp))
         Row(
