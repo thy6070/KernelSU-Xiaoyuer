@@ -2517,29 +2517,35 @@ private fun ProMaxIsland(
                     bmp.asImageBitmap()
                 }
                 val de = doneEvent
-                if (de != null) {
-                    // 完成态：换成操作类型图标
-                    val icon = when (de.kind) {
-                        "delete" -> Icons.Outlined.Delete
-                        "move" -> Icons.Outlined.DriveFileMove
-                        "copy" -> Icons.Outlined.ContentCopy
-                        "rename" -> Icons.Outlined.Edit
-                        "install" -> Icons.Outlined.InstallMobile
-                        "zip", "unzip" -> Icons.Outlined.FolderZip
-                        else -> Icons.Outlined.TaskAlt
+                // iOS 式图标切换：淡出旧图标 + 淡入新图标（crossfade）
+                androidx.compose.animation.Crossfade(
+                    targetState = de != null,
+                    animationSpec = androidx.compose.animation.core.tween(220),
+                    label = "pillIconSwitch"
+                ) { isDone ->
+                    if (isDone && de != null) {
+                        val icon = when (de.kind) {
+                            "delete" -> Icons.Outlined.Delete
+                            "move" -> Icons.Outlined.DriveFileMove
+                            "copy" -> Icons.Outlined.ContentCopy
+                            "rename" -> Icons.Outlined.Edit
+                            "install" -> Icons.Outlined.InstallMobile
+                            "zip", "unzip" -> Icons.Outlined.FolderZip
+                            else -> Icons.Outlined.TaskAlt
+                        }
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
+                            contentDescription = null,
+                            modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
+                        )
                     }
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
-                        contentDescription = null,
-                        modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
-                    )
                 }
                 val statusText = when {
                     installDone -> "安装成功"
