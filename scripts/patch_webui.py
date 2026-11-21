@@ -7,37 +7,10 @@ WH = 'src/manager/app/src/main/java/me/weishu/kernelsu/ui/webui/WebViewHelper.kt
 MANIFEST = 'src/manager/app/src/main/AndroidManifest.xml'
 
 def patch_webview_helper():
-    s = io.open(WH, encoding='utf-8').read()
-    if 'oh_my_keymint' in s:
-        print('WebViewHelper already patched')
-        return
-    old = 'val moduleInfo = modules.find { info -> info.id == moduleId }'
-    if old not in s:
-        # 新版本 WebViewHelper 可能换了写法；这时跳过 builtin 直达补丁即可（模块已在 modules）
-        print('WebViewHelper: moduleInfo 行未找到，跳过 builtin 直达补丁')
-        return
-    new = (
-        'val moduleInfo = modules.find { info -> info.id == moduleId } ?: run {\n'
-        '            // builtin 直达：oh_my_keymint 不在 modules 列表里\n'
-        '            if (moduleId == "oh_my_keymint") {\n'
-        '                me.weishu.kernelsu.data.model.Module(\n'
-        '                    id = moduleId, name = "OhMyKeymint", author = "", version = "", versionCode = 0,\n'
-        '                    description = "", enabled = true, update = false, remove = false, updateJson = "",\n'
-        '                    hasWebUi = true, hasActionScript = false, metamodule = false,\n'
-        '                    actionIconPath = null, webUiIconPath = null,\n'
-        '                )\n'
-        '            } else null\n'
-        '        }'
-    )
-    s = s.replace(old, new, 1)
-
-    old_dir = 'webUIState.modDir = "/data/adb/modules/${moduleId}"'
-    new_dir = ('webUIState.modDir = if (moduleId == "oh_my_keymint") '
-               '"/data/adb/ksu/builtin/$moduleId" else "/data/adb/modules/$moduleId"')
-    if old_dir in s:
-        s = s.replace(old_dir, new_dir, 1)
-    io.open(WH, 'w', encoding='utf-8').write(s)
-    print('WebViewHelper patched')
+    """不再改 WebViewHelper（模块已回到 modules，官方逻辑即可找到）。
+    之前这里的 builtin 直通会把 modDir 指向 /data/adb/ksu/builtin，
+    导致 oh_my_keymint 的 WebUI 读不到文件（ERR_INVALID_RESPONSE）。"""
+    print('WebViewHelper: skip (modules mode, no builtin redirect)')
 
 def patch_manifest():
     s = io.open(MANIFEST, encoding='utf-8').read()
