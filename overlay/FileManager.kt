@@ -24,6 +24,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.res.painterResource
 import me.weishu.kernelsu.R
 import androidx.compose.animation.core.animateFloatAsState
@@ -1756,8 +1757,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
             }
         }
-    }
-
     }
 }
 
