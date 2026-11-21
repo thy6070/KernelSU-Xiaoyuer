@@ -2525,13 +2525,34 @@ private fun ProMaxIsland(
                     )
                 }
                 val statusText = when {
-                    de != null -> "已完成"
                     installDone -> "安装成功"
                     extractFailed -> "安装失败"
                     extractDone -> "已完成"
                     else -> null
                 }
-                if (statusText != null) {
+                if (de != null) {
+                    // 完成态：中间留白，只显示右侧对勾（苹果灵动岛那样）
+                    Spacer(modifier = Modifier.weight(1f))
+                    val checkAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+                    LaunchedEffect(de) {
+                        checkAnim.snapTo(0f)
+                        checkAnim.animateTo(
+                            1f,
+                            androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 700f)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Outlined.TaskAlt,
+                        contentDescription = "完成",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .graphicsLayer {
+                                scaleX = checkAnim.value
+                                scaleY = checkAnim.value
+                            }
+                    )
+                } else if (statusText != null) {
                     // 状态文字独占整行并居中，不再被左右元素分摊宽度
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text(
@@ -2541,28 +2562,6 @@ private fun ProMaxIsland(
                             color = if (extractFailed) Color(0xFFFF3B30)
                                     else if (de != null) Color.White
                                     else Color(0xFF0A84FF)
-                        )
-                    }
-                    if (de != null) {
-                        // 完成态：右侧对勾弹入（0 → 1 弹簧）
-                        val checkAnim = remember { androidx.compose.animation.core.Animatable(0f) }
-                        LaunchedEffect(de) {
-                            checkAnim.snapTo(0f)
-                            checkAnim.animateTo(
-                                1f,
-                                androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 700f)
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Outlined.TaskAlt,
-                            contentDescription = "完成",
-                            tint = Color.White,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .graphicsLayer {
-                                    scaleX = checkAnim.value
-                                    scaleY = checkAnim.value
-                                }
                         )
                     }
                 } else if (terminalMode || (running && expanded)) {
