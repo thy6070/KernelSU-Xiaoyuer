@@ -32,6 +32,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.Animatable
@@ -3950,82 +3951,63 @@ private fun TerminalOverlay(
 
 @Composable
 private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifier) {
-    val phase = remember { Animatable(0f) }
-    val fill = remember { Animatable(0f) }
-    val finishing = remember { mutableStateOf(false) }
-    val round = remember { mutableStateOf(0) }
-    LaunchedEffect(running) {
-        if (running) {
-            fill.snapTo(0f)
-            while (true) {
-                phase.snapTo(0f)
-                phase.animateTo(1f, tween(900, easing = LinearEasing))
-                round.value = round.value + 1
-            }
-        } else {
-            finishing.value = true
-            phase.animateTo(1f, tween(450, easing = LinearEasing))
-            phase.snapTo(0f)
-            phase.animateTo(1f, tween(320, easing = LinearEasing))
-            round.value = round.value + 1
-            finishing.value = false
-            fill.animateTo(1f, tween(340, easing = LinearEasing))
-        }
-    }
+    // Siri 波形：多层正弦波 + 蓝紫粉渐变 + 无限相位动画
+    val infinite = rememberInfiniteTransition(label = "siriWave")
+    val phase by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "siriPhase"
+    )
+    val ampScale by infinite.animateFloat(
+        initialValue = 0.82f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "siriAmp"
+    )
     Canvas(
         modifier = modifier
             .padding(horizontal = 16.dp)
-            .height(12.dp)
+            .height(18.dp)
             .clipToBounds()
     ) {
         val cy = size.height / 2f
-        drawLine(
-            color = Color.White.copy(alpha = 0.45f),
-            start = Offset(0f, cy),
-            end = Offset(size.width, cy),
-            strokeWidth = 1.6.dp.toPx(),
-            cap = StrokeCap.Round
+        val gradient = Brush.horizontalGradient(
+            listOf(
+                Color(0xFF0A84FF),
+                Color(0xFFBF5AF2),
+                Color(0xFFFF375F)
+            )
         )
-        if (running || finishing.value) {
-            val seg = size.width * (0.30f + 0.10f * kotlin.math.min(round.value, 4).toFloat())
-            val amp = 2.6.dp.toPx()
-            for (k in 0 until 2) {
-                val p = (phase.value + k * 0.5f) % 1f
-                val x0 = -seg + p * (size.width + seg)
-                val path = Path()
-                var x = 0f
-                while (x <= seg) {
-                    val px = x0 + x
-                    val py = cy + amp * kotlin.math.sin(x / 26.dp.toPx() * 6.2831855f - phase.value * 6.2831855f)
-                    if (x <= 0f) path.moveTo(px, py) else path.lineTo(px, py)
-                    x += 1f
-                }
-                val ribbon = Brush.horizontalGradient(
-                    0f to color.copy(alpha = 0.05f),
-                    0.14f to color,
-                    0.86f to color,
-                    1f to color.copy(alpha = 0.05f)
-                )
-                drawPath(
-                    path = path,
-                    brush = ribbon,
-                    alpha = 0.18f,
-                    style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
-                drawPath(
-                    path = path,
-                    brush = ribbon,
-                    style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
+        for (layer in 0 until 3) {
+            val amp = (4.dp.toPx() + layer * 2.2.dp.toPx()) * ampScale
+            val freq = 1.6f + layer * 0.8f
+            val ph = phase + layer * 0.9f
+            val path = Path()
+            var x = 0f
+            val step = size.width / 160f
+            while (x <= size.width) {
+                val y = cy + amp * kotlin.math.sin((x / size.width) * 6.2831855f * freq + ph)
+                if (x == 0f) path.moveTo(x, y) else path.lineTo(x, y)
+                x += step
             }
-        }
-        if (fill.value > 0.001f) {
-            drawLine(
-                color = color,
-                start = Offset(0f, cy),
-                end = Offset(size.width * fill.value.coerceIn(0f, 1f), cy),
-                strokeWidth = 2.4.dp.toPx(),
-                cap = StrokeCap.Round
+            drawPath(
+                path = path,
+                brush = gradient,
+                alpha = 0.16f,
+                style = Stroke(width = (6.dp + layer * 2.dp).toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+            drawPath(
+                path = path,
+                brush = gradient,
+                alpha = (0.9f - layer * 0.2f).coerceAtLeast(0.3f),
+                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
         }
     }
