@@ -1189,11 +1189,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 Spacer(Modifier.height(10.dp))
                 var searchFocused by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 androidx.compose.foundation.text.BasicTextField(
                     value = searchQ,
                     onValueChange = { searchQ = it },
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .weight(1f)
                         .onFocusChanged { searchFocused = it.isFocused }
                         .shadow(
                             elevation = if (searchFocused) 8.dp else 3.dp,
@@ -1213,10 +1217,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.Black)
                 )
-                Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = {
-                        if (searchQ.isBlank() || searching) return@Button
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(SmoothCornerShape(10.dp))
+                        .background(Color(0xFF007AFF))
+                        .clickable {
+                        if (searchQ.isBlank() || searching) return@clickable
                         searching = true
                         searchResults = emptyList()
                         uiScope.launch {
@@ -1242,12 +1249,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             searching = false
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                    shape = SmoothCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF))
+                    }
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    Text(if (searching) "搜索中…" else "搜索此文件", color = Color.White, fontSize = 15.sp)
+                    Text(if (searching) "搜索中…" else "搜索", color = Color.White, fontSize = 15.sp)
+                }
                 }
                 Spacer(Modifier.height(8.dp))
                 androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
@@ -1451,13 +1457,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
             ) {
             // 外层 Column：卡片和按钮垂直排列（否则会重叠）
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 36.dp)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(SmoothCornerShape(20.dp))
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
+                    // 黑色描边（稍粗）
+                    .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
             ) {
                 Text(
                     text = pickTitle ?: "选择",
@@ -1478,15 +1486,31 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .background(
+                                        if (pickTitle == "选择要重置的应用" && uiPickerSelected == item) Color(0x33007AFF)
+                                        else Color.Transparent
+                                    )
                                     .clickable {
-                                        uiPickerAction?.invoke(item)
-                                        uiPicker = null
-                                        uiPickerIcons = null
+                                        if (pickTitle == "选择要重置的应用") {
+                                            uiPickerSelected = item
+                                        } else {
+                                            uiPickerAction?.invoke(item)
+                                            uiPicker = null
+                                            uiPickerIcons = null
+                                        }
                                     }
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Start
                             ) {
+                                if (icon != null) {
+                                    Image(
+                                        bitmap = icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(30.dp).clip(SmoothCornerShape(8.dp))
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                }
                                 Text(
                                     text = item,
                                     modifier = Modifier.weight(1f),
@@ -1511,26 +1535,43 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 }
             }
-            // 卡片外独立按钮：恢复原样（白色卡片）
-            if (pickTitle == "选择机型") {
+            // 卡片外独立按钮：改机型=恢复原样（蓝字），游戏清理=重置此应用（红字）
+            val bottomLabel = when (pickTitle) {
+                "选择机型" -> "恢复原样"
+                "选择要重置的应用" -> "重置此应用"
+                else -> null
+            }
+            if (bottomLabel != null) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(SmoothCornerShape(12.dp))
                         .background(Color(0xFFF2F2F7))
+                        .border(1.2.dp, Color.Black, SmoothCornerShape(12.dp))
                         .clickable {
-                            uiPickerAction?.invoke("恢复原样")
-                            uiPicker = null
-                            uiPickerIcons = null
+                            // 游戏清理的"重置"需要带上当前选中应用名：交给 uiPickerAction 由调用方判断
+                            if (pickTitle == "选择机型") {
+                                uiPickerAction?.invoke("恢复原样")
+                                uiPicker = null
+                                uiPickerIcons = null
+                            } else {
+                                val sel = uiPickerSelected
+                                if (sel != null) {
+                                    uiPickerAction?.invoke(sel)
+                                }
+                                uiPicker = null
+                                uiPickerIcons = null
+                                uiPickerSelected = null
+                            }
                         }
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "恢复原样",
+                        text = bottomLabel,
                         fontSize = 15.sp,
-                        color = Color(0xFF007AFF),
+                        color = if (bottomLabel == "重置此应用") Color(0xFFFF3B30) else Color(0xFF007AFF),
                         textAlign = TextAlign.Center
                     )
                 }
@@ -5893,6 +5934,7 @@ var uiPickerTitle by androidx.compose.runtime.mutableStateOf<String?>(null)
 var uiPicker by androidx.compose.runtime.mutableStateOf<List<String>?>(null)
 var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null)
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
+var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
 
 // 顶层写帧率日志（供 Composable/设置面板调用；FpsOverlayService 的 logLine 是服务私有方法）
 internal fun writeFpsLog(ctx: android.content.Context, msg: String) {
