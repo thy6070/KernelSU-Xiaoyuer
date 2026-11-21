@@ -1154,8 +1154,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     if (op == "delete") selectedFile = null   // 删除后清掉选中，否则快捷条还挂着
                     runOk = true
                     runMessage = if (op == "share") null else ("已完成")
-                    // 灵动岛完成态：图标 + 已完成 + 对勾，3 秒后恢复
-                    doneEvent = DoneEvent(op)
+
                 }
             }
             }
@@ -2338,33 +2337,6 @@ private fun ProMaxIsland(
     val config = LocalConfiguration.current
     val density = androidx.compose.ui.platform.LocalDensity.current
     val pillW = (config.screenWidthDp * 0.36f).dp
-    // 完成态：先缩小（灵动岛收拢），再在收拢后的范围放大
-    val pillScale = remember { androidx.compose.animation.core.Animatable(1f) }
-    LaunchedEffect(doneEvent) {
-        if (doneEvent != null) {
-            // 先缩
-            // 缩小：幅度大、时间放慢
-            pillScale.animateTo(
-                0.62f,
-                androidx.compose.animation.core.tween(340)
-            )
-            kotlinx.coroutines.delay(120)
-            // 再放大展开
-            pillScale.animateTo(
-                1.45f,
-                androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 260f)
-            )
-            // 动画结束 → 立即恢复
-            doneEvent = null
-        } else {
-            // 恢复
-            pillScale.animateTo(
-                1f,
-                androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 280f)
-            )
-        }
-    }
-    val pillWAnim = pillW * pillScale.value
 
     val sel = selectedFile
     val selName = sel?.substringAfterLast('/') ?: ""
@@ -2460,7 +2432,7 @@ private fun ProMaxIsland(
         Column(
             modifier = Modifier
                 .zIndex(1f)
-                .width(pillWAnim)
+                .width(pillW)
                 .graphicsLayer {
                     scaleX = bump
                     scaleY = bump
@@ -2503,20 +2475,11 @@ private fun ProMaxIsland(
                     onLongClick = { openNav(null) }
                 )
         ) {
-            // 高度：缩小等比缩；放大时下面多延伸（上面少加、下面多加）
-            val pillRowH = when {
-                pillScale.value > 1f -> 42.dp + (6.dp * (pillScale.value - 1f) / 0.45f)
-                pillScale.value < 1f -> 42.dp * pillScale.value
-                else -> 42.dp
-            }
-            // 放大时内容整体下移一点（下面视觉上更长）
-            val pillContentShift = if (pillScale.value > 1f) 2.dp * (pillScale.value - 1f) / 0.45f else 0.dp
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(pillRowH)
-                    .padding(start = 12.dp, end = 8.dp)
-                    .padding(top = pillContentShift),
+                    .height(42.dp)
+                    .padding(start = 12.dp, end = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -2531,79 +2494,25 @@ private fun ProMaxIsland(
                     d.draw(canvas)
                     bmp.asImageBitmap()
                 }
-                val de = doneEvent
-                // iOS 式图标切换：淡出旧图标 + 淡入新图标（crossfade）
-                androidx.compose.animation.Crossfade(
-                    targetState = de != null,
-                    animationSpec = androidx.compose.animation.core.tween(220),
-                    label = "pillIconSwitch"
-                ) { isDone ->
-                    if (isDone && de != null) {
-                        val icon = when (de.kind) {
-                            "delete" -> Icons.Outlined.Delete
-                            "move" -> Icons.Outlined.DriveFileMove
-                            "copy" -> Icons.Outlined.ContentCopy
-                            "rename" -> Icons.Outlined.Edit
-                            "install" -> Icons.Outlined.InstallMobile
-                            "zip", "unzip" -> Icons.Outlined.FolderZip
-                            else -> Icons.Outlined.TaskAlt
-                        }
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    } else {
-                        Image(
-                            painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
-                            contentDescription = null,
-                            modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
-                        )
-                    }
-                }
+                Image(
+                    painter = painterResource(id = me.weishu.kernelsu.R.mipmap.ic_modules_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
+                )
                 val statusText = when {
                     installDone -> "安装成功"
                     extractFailed -> "安装失败"
                     extractDone -> "已完成"
                     else -> null
                 }
-                if (de != null) {
-                    // 完成态：中间留白，只显示右侧对勾（苹果灵动岛那样）
-                    Spacer(modifier = Modifier.weight(1f))
-                    // 对勾：从 0 弹到 1（先置 0，下一帧置 1 触发动画）
-                    var checkOn by remember { mutableStateOf(false) }
-                    LaunchedEffect(de) {
-                        checkOn = false
-                        kotlinx.coroutines.delay(40)
-                        checkOn = true
-                    }
-                    val checkScale by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = if (checkOn) 1f else 0f,
-                        animationSpec = androidx.compose.animation.core.spring(
-                            dampingRatio = 0.5f,
-                            stiffness = 700f
-                        ),
-                        label = "checkScale"
-                    )
-                    Icon(
-                        imageVector = Icons.Outlined.TaskAlt,
-                        contentDescription = "完成",
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .scale(checkScale)
-                    )
-                } else if (statusText != null) {
+                if (statusText != null) {
                     // 状态文字独占整行并居中，不再被左右元素分摊宽度
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text(
                             text = statusText,
-                            fontSize = if (de != null) 13.sp else 12.sp,
+                            fontSize = 12.sp,
                             textAlign = TextAlign.Center,
-                            color = if (extractFailed) Color(0xFFFF3B30)
-                                    else if (de != null) Color.White
-                                    else Color(0xFF0A84FF)
+                            color = if (extractFailed) Color(0xFFFF3B30) else Color(0xFF0A84FF)
                         )
                     }
                 } else if (terminalMode || (running && expanded)) {
@@ -6205,9 +6114,6 @@ var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
 // 撤销：记录上一个文件操作（移动/复制/重命名/删除）
 data class UndoOp(val kind: String, val src: List<String>, val dst: List<String> = emptyList())
 var pendingUndo by androidx.compose.runtime.mutableStateOf<UndoOp?>(null)
-// 操作完成事件（灵动岛完成态：图标 + 已完成 + 对勾，3 秒后恢复）
-data class DoneEvent(val kind: String)
-var doneEvent by androidx.compose.runtime.mutableStateOf<DoneEvent?>(null)
 
 
 // 顶层写帧率日志（供 Composable/设置面板调用；FpsOverlayService 的 logLine 是服务私有方法）
