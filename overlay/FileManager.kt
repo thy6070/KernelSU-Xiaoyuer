@@ -2550,6 +2550,15 @@ private fun ProMaxIsland(
                                 .clickable {
                                     val op = pendingUndo
                                     pendingUndo = null
+                                    // 撤回后收起胶囊，避免面板切换/误入其他页面
+                                    reopenScope.launch {
+                                        navClosing = true
+                                        navMode = false
+                                        navTarget = null
+                                        expanded = false
+                                        kotlinx.coroutines.delay(200)
+                                        navClosing = false
+                                    }
                                     if (op != null) {
                                         navScope.launch {
                                             withContext(Dispatchers.IO) {
