@@ -234,6 +234,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             contentColor = Color.Black,
             // 去掉 Material3 默认的 640dp 最大宽度限制，平板上才能真正铺满
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            // 面板不要圆角（直角铺满底部）
+            shape = androidx.compose.foundation.shape.RectangleShape,
             // 完全禁止拖拽手势（面板不能被上下拖动）
             sheetGesturesEnabled = false,
             // 去掉顶部那个可以往下拉的小把手
@@ -2178,9 +2180,9 @@ private fun ProMaxIsland(
                     scaleY = ballScale * bump * press
                     alpha = (ballShift * 3f).coerceIn(0f, 1f)
                 }
-                .clip(SmoothCornerShape(21.dp))
+                .clip(RoundedCornerShape(21.dp))
                 .background(Color.Black)
-                .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(21.dp))
+                .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
                 .clickable {
                     if (wingIconExpanded) {
                         // 先关岛内终端 + 清长按/选中 + 收岛，再由全屏终端接管
