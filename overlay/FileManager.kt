@@ -2609,7 +2609,7 @@ private fun ProMaxIsland(
                                                     }
                                                 } catch (t: Throwable) {}
                                             }
-                                            onRefresh()
+                                            // 不调用 onRefresh：它的尾随 lambda 是"打开 ModePanel"，会误开面板
                                         }
                                     }
                                 }
