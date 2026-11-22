@@ -32,6 +32,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.Animatable
@@ -1488,46 +1489,26 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val pickList = uiPicker
     val pickTitle = uiPickerTitle
     if (pickList != null) {
-        // 收盘动画状态（与进入动画对称）
-        var pickClosing by remember { mutableStateOf(false) }
-        LaunchedEffect(pickClosing) {
-            if (pickClosing) {
-                kotlinx.coroutines.delay(340)
-                uiPicker = null
-                uiPickerIcons = null
-                pickClosing = false
-            }
-        }
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { pickClosing = true },
-            properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnClickOutside = true,
-                dismissOnBackPress = true
-            )
+        // 与卡密登录同款：底部半屏面板（滑入/滑出动画由 ModalBottomSheet 提供）
+        val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
+            skipPartiallyExpanded = true
+        )
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { uiPicker = null },
+            sheetState = pickSheetState,
+            containerColor = Color.Transparent,
+            shape = androidx.compose.ui.graphics.RectangleShape,
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            dragHandle = null
         ) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = !pickClosing,
-                enter = androidx.compose.animation.slideInVertically(
-                    initialOffsetY = { it / 3 },
-                    animationSpec = androidx.compose.animation.core.tween(400)
-                ) + androidx.compose.animation.fadeIn(
-                    animationSpec = androidx.compose.animation.core.tween(320)
-                ),
-                exit = androidx.compose.animation.slideOutVertically(
-                    targetOffsetY = { it / 3 },
-                    animationSpec = androidx.compose.animation.core.tween(320)
-                ) + androidx.compose.animation.fadeOut(
-                    animationSpec = androidx.compose.animation.core.tween(240)
-                )
-            ) {
-            // 外层 Column：卡片和按钮垂直排列（否则会重叠），左右收窄
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
+            // 外层 Column：卡片和按钮垂直排列，左右留白
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(SmoothCornerShape(20.dp))
-                    // iOS 白色主题
-                    .background(Color(0xFFF2F2F7))
+                    // iOS 白色主题（半透明，毛玻璃可见）
+                    .background(Color(0xE6F2F2F7))
                     // 黑色描边（稍粗）
                     .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
             ) {
@@ -1563,7 +1544,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             uiPickerIcons = null
                                         }
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Start
                             ) {
@@ -1642,7 +1623,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
             }
-            }
+            // 底部安全间距（按钮不贴底被裁）
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 
@@ -5356,8 +5338,10 @@ class SmoothCornerShape(
         val w = size.width
         val h = size.height
         val s = smoothing.coerceIn(0f, 1f)
-        val p = (r * (1f - 0.25f * s)).coerceAtMost(minOf(w, h) / 2f)
-        val c = p * 0.5523f
+        // iOS continuous corner：曲线更长（直线段更早结束），控制点按 1.28 倍半径拉伸，
+        // 让曲率过渡更缓（单段贝塞尔做不到严格 G2，但视觉上接近 squircle）
+        val p = (r * (1f + 0.28f * s)).coerceAtMost(minOf(w, h) / 2f)
+        val c = p * 0.62f
         val path = androidx.compose.ui.graphics.Path()
         path.moveTo(p, 0f)
         path.lineTo(w - p, 0f)
