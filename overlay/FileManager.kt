@@ -1506,7 +1506,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding(),
+                    .navigationBarsPadding()
+                    // 点击面板空白处收起
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        uiPicker = null
+                        uiPickerSelected = null
+                        uiPickerIcons = null
+                    },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
             Column(
