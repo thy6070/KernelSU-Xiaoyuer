@@ -3682,13 +3682,11 @@ private fun ProMaxIsland(
             }
             }
 
-            // 统一：与四个图标同一套 animateContentSize
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = tween(260, easing = zyEase))
+            AnimatedVisibility(
+                visible = terminalMode,
+                enter = expandVertically(animationSpec = tween(360, easing = zyEase), expandFrom = Alignment.CenterVertically) + fadeIn(tween(200)),
+                exit = shrinkVertically(animationSpec = tween(260, easing = zyEase), shrinkTowards = Alignment.CenterVertically) + fadeOut(tween(160))
             ) {
-            if (terminalMode) {
                 val termScroll = rememberScrollState()
                     LaunchedEffect(termText) {
                         termScroll.animateScrollTo(termScroll.maxValue)
@@ -3735,19 +3733,22 @@ private fun ProMaxIsland(
                             fontSize = 14.sp,
                             color = Color.White
                         )
-            }
 
                     }
                 }
             }
 
-            // 统一：与四个图标同一套 animateContentSize
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = tween(260, easing = zyEase))
+            AnimatedVisibility(
+                visible = sel != null && !terminalMode && !navMode && !soPanel,
+                enter = expandVertically(
+                    animationSpec = tween(360, easing = zyEase),
+                    expandFrom = Alignment.CenterVertically
+                ) + fadeIn(tween(200)),
+                exit = shrinkVertically(
+                    animationSpec = tween(260, easing = zyEase),
+                    shrinkTowards = Alignment.CenterVertically
+                ) + fadeOut(tween(160))
             ) {
-            if (sel != null && !terminalMode && !navMode && !soPanel) {
                 Column(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -3770,13 +3771,17 @@ private fun ProMaxIsland(
                 }
             }
 
-            // 统一：与四个图标同一套 animateContentSize
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = tween(260, easing = zyEase))
+            AnimatedVisibility(
+                visible = soPanel && sel != null && !terminalMode && !navMode,
+                enter = expandVertically(
+                    animationSpec = tween(320, easing = zyEase),
+                    expandFrom = Alignment.CenterVertically
+                ) + fadeIn(tween(180)),
+                exit = shrinkVertically(
+                    animationSpec = tween(240, easing = zyEase),
+                    shrinkTowards = Alignment.CenterVertically
+                ) + fadeOut(tween(140))
             ) {
-            if (soPanel && sel != null && !terminalMode && !navMode) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -4143,7 +4148,6 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                     try {
                         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                             "sed -n '6p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
-            }
                         val v = pr.inputStream.bufferedReader().readText().trim()
                         pr.waitFor()
                         if (v.isEmpty()) "未适配此机型" else v
