@@ -1229,8 +1229,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             containerColor = Color(0xFFF2F2F7),
             // 与卡密登录面板同款连续曲率圆角
             shape = SmoothCornerShape(20.dp),
-            // 宽度与改机型列表同款（屏宽 36%）
-            sheetMaxWidth = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp,
+            // 去掉 640dp 宽度上限，平板上铺满
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
             // 宽度与改机型列表同款（屏宽 36%）
@@ -1575,8 +1575,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(430.dp)
-                    .padding(bottom = 90.dp)
+                    // 高度受限：列表变长也不会把按钮挤出去
+                    .heightIn(max = 620.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
@@ -1590,7 +1590,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .width(pickW)
-                    .weight(1f)
                     .clip(SmoothCornerShape(20.dp))
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
@@ -1605,7 +1604,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    modifier = Modifier.weight(1f)
+                    // 固定高度：列表再长也只占这么多，按钮一定在下面
+                    modifier = Modifier.height(240.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -1704,7 +1704,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(70.dp))
             }
         }
     }
@@ -2623,13 +2623,32 @@ private fun ProMaxIsland(
                 }
             }
 
-            // 统一：与四个图标同一套 animateContentSize
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = tween(260, easing = zyEase))
+            AnimatedVisibility(
+                visible = (navMode || navTarget != null) && !navClosing,
+                // 展开：平滑丝滑（缓动，不带弹簧抖动）
+                enter = expandVertically(
+                    animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    expandFrom = Alignment.Bottom
+                ) + fadeIn(tween(240)) + androidx.compose.animation.scaleIn(
+                    initialScale = 0.94f,
+                    animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                ),
+                // 收起：像 iOS 音乐播放器收回灵动岛——往上缩 + 缩放撞入 + 淡出
+                exit = shrinkVertically(
+                    animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
+                    shrinkTowards = Alignment.Bottom
+                ) + androidx.compose.animation.scaleOut(
+                    targetScale = 0.35f,
+                    animationSpec = androidx.compose.animation.core.tween(160),
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                ) + fadeOut(tween(160))
             ) {
-            if ((navMode || navTarget != null) && !navClosing) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(animationSpec = tween(260, easing = zyEase))
+                ) {
                 // 有可撤销操作：展开面板顶部显示蓝色大按钮
                 if (navTarget == null && pendingUndo != null) {
                     Box(
@@ -3679,7 +3698,7 @@ private fun ProMaxIsland(
                             }
                         }
                     }
-            }
+                }
             }
 
             AnimatedVisibility(
