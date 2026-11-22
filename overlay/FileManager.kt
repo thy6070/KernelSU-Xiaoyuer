@@ -1417,27 +1417,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 描边与灵动岛同款：0.5dp 细边
                     .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
             ) {
-                // 标题
-                Text(
-                    text = "提示",
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center
-                )
-                // 标题下分割线
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(0.5.dp)
-                        .background(Color(0x33000000))
-                )
-                // 内容
+                // 内容（放大，无标题栏）
                 Text(
                     text = "发现新版本",
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    fontSize = 13.sp,
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = Color.Black,
                     textAlign = TextAlign.Center
                 )
@@ -1584,7 +1569,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 modifier = Modifier
                     .fillMaxWidth()
                     // 高度受限：列表变长也不会把按钮挤出去
-                    .heightIn(max = 560.dp)
+                    .heightIn(max = 620.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
@@ -1712,7 +1697,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(70.dp))
             }
         }
     }
@@ -2365,9 +2350,9 @@ private fun ProMaxIsland(
     // 撞击幅度按面板大小判定：小面板（如撤回）轻撞，大面板（导航/终端）重撞
     fun hitPill(big: Boolean) {
         reopenScope.launch {
-            val peak = if (big) 1.075f else 1.035f
-            hitScale.animateTo(peak, spring(dampingRatio = 0.42f, stiffness = 700f))
-            hitScale.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 500f))
+            val peak = if (big) 1.11f else 1.055f
+            hitScale.animateTo(peak, spring(dampingRatio = 0.42f, stiffness = 420f))
+            hitScale.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 300f))
         }
     }
     val bt = bounce.value
@@ -2512,8 +2497,8 @@ private fun ProMaxIsland(
                 .graphicsLayer {
                     scaleX = bump * hitScale.value
                     scaleY = bump * hitScale.value
-                    // 顶部为缩放原点：下面扩展多、上面少
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                    // 缩放原点偏上：上下都有放大，下面略多
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.18f)
                     translationX = with(density) { sway.dp.toPx() }
                     translationY = with(density) { lift.dp.toPx() }
                 }
