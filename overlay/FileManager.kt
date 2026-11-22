@@ -1537,9 +1537,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .hazeEffect(hazeState) {
+                        blurRadius = 24.dp
+                    }
                     .clip(SmoothCornerShape(20.dp))
-                    // iOS 白色主题
-                    .background(Color(0xFFF2F2F7))
+                    // iOS 白色主题（半透明，毛玻璃可见）
+                    .background(Color(0xE6F2F2F7))
                     // 黑色描边（稍粗）
                     .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
             ) {
