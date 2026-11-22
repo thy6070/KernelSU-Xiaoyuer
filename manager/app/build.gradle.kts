@@ -228,8 +228,6 @@ dependencies {
     implementation(libs.commonmark.ext.task.list.items)
 
     implementation(libs.androidx.webkit)
-    // iOS 毛玻璃（backdrop blur）
-    implementation("dev.chrisbanes.haze:haze:1.7.3")
 
     implementation(libs.lsposed.cxx)
 
