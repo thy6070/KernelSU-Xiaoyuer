@@ -4000,6 +4000,7 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
         }
     }
     val phase = phaseAnim.value * (2 * Math.PI).toFloat()
+    val infinite = rememberInfiniteTransition(label = "siriAmp")
     val ampScale by infinite.animateFloat(
         initialValue = 0.82f,
         targetValue = 1.18f,
