@@ -1420,7 +1420,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 标题
                 Text(
                     text = "提示",
-                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.Black,
@@ -1436,7 +1436,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 内容
                 Text(
                     text = "发现新版本",
-                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                     fontSize = 13.sp,
                     color = Color.Black,
                     textAlign = TextAlign.Center
@@ -1583,6 +1583,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // 高度受限：列表变长也不会把按钮挤出去
+                    .heightIn(max = 560.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
@@ -2356,12 +2358,8 @@ private fun ProMaxIsland(
         }
     }
 
-    // Island.kt motion: 1s bump/sway/lift envelope
-    val bounce = remember { Animatable(0f) }
-    LaunchedEffect(expanded, selectedFile) {
-        bounce.snapTo(0f)
-        bounce.animateTo(1f, tween(1000))
-    }
+    // Island.kt motion: 点击反馈（只在点胶囊时晃，展开/收起时不动）
+    val bounce = remember { Animatable(1f) }
     val bt = bounce.value
     val bump = 1f + 0.06f * sin(bt * PI.toFloat())
     val sway = 6f * sin(bt * 9.424778f) * (1f - bt)
@@ -2512,6 +2510,17 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
                 .combinedClickable(
                     onClick = {
+                        // 收起：面板撞入胶囊，胶囊被撞得弹一下（短促撞击感）
+                        reopenScope.launch {
+                            bounce.snapTo(0f)
+                            bounce.animateTo(
+                                1f,
+                                androidx.compose.animation.core.spring(
+                                    dampingRatio = 0.35f,
+                                    stiffness = 900f
+                                )
+                            )
+                        }
                         if (terminalMode) onTermClose()
                         // 收起时清空撤销事件
                         pendingUndo = null
@@ -2631,10 +2640,10 @@ private fun ProMaxIsland(
                     animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
                     shrinkTowards = Alignment.Bottom
                 ) + androidx.compose.animation.scaleOut(
-                    targetScale = 0.55f,
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 600f),
+                    targetScale = 0.35f,
+                    animationSpec = androidx.compose.animation.core.tween(160),
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
-                ) + fadeOut(tween(120))
+                ) + fadeOut(tween(160))
             ) {
                 Column(
                     modifier = Modifier
