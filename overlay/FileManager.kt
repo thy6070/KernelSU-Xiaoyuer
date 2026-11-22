@@ -1229,8 +1229,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             containerColor = Color(0xFFF2F2F7),
             // 与卡密登录面板同款连续曲率圆角
             shape = SmoothCornerShape(20.dp),
-            // 去掉 640dp 宽度上限，平板上铺满
-            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            // 宽度与改机型列表同款（屏宽 36%）
+            sheetMaxWidth = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp,
             dragHandle = null
         ) {
             // 宽度与改机型列表同款（屏宽 36%）
@@ -1575,8 +1575,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 高度受限：列表变长也不会把按钮挤出去
-                    .heightIn(max = 620.dp)
+                    .height(430.dp)
+                    .padding(bottom = 90.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
@@ -1590,6 +1590,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .width(pickW)
+                    .weight(1f)
                     .clip(SmoothCornerShape(20.dp))
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
@@ -1604,8 +1605,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    // 固定高度：列表再长也只占这么多，按钮一定在下面
-                    modifier = Modifier.height(240.dp)
+                    modifier = Modifier.weight(1f)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -1704,7 +1704,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(70.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             }
         }
     }
@@ -2630,11 +2630,6 @@ private fun ProMaxIsland(
                     .animateContentSize(animationSpec = tween(260, easing = zyEase))
             ) {
             if ((navMode || navTarget != null) && !navClosing) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateContentSize(animationSpec = tween(260, easing = zyEase))
-                ) {
                 // 有可撤销操作：展开面板顶部显示蓝色大按钮
                 if (navTarget == null && pendingUndo != null) {
                     Box(
@@ -3684,15 +3679,16 @@ private fun ProMaxIsland(
                             }
                         }
                     }
-                }
             }
             }
 
-            AnimatedVisibility(
-                visible = terminalMode,
-                enter = expandVertically(animationSpec = tween(360, easing = zyEase), expandFrom = Alignment.CenterVertically) + fadeIn(tween(200)),
-                exit = shrinkVertically(animationSpec = tween(260, easing = zyEase), shrinkTowards = Alignment.CenterVertically) + fadeOut(tween(160))
+            // 统一：与四个图标同一套 animateContentSize
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = tween(260, easing = zyEase))
             ) {
+            if (terminalMode) {
                 val termScroll = rememberScrollState()
                     LaunchedEffect(termText) {
                         termScroll.animateScrollTo(termScroll.maxValue)
@@ -3739,22 +3735,19 @@ private fun ProMaxIsland(
                             fontSize = 14.sp,
                             color = Color.White
                         )
+            }
 
                     }
                 }
             }
 
-            AnimatedVisibility(
-                visible = sel != null && !terminalMode && !navMode && !soPanel,
-                enter = expandVertically(
-                    animationSpec = tween(360, easing = zyEase),
-                    expandFrom = Alignment.CenterVertically
-                ) + fadeIn(tween(200)),
-                exit = shrinkVertically(
-                    animationSpec = tween(260, easing = zyEase),
-                    shrinkTowards = Alignment.CenterVertically
-                ) + fadeOut(tween(160))
+            // 统一：与四个图标同一套 animateContentSize
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = tween(260, easing = zyEase))
             ) {
+            if (sel != null && !terminalMode && !navMode && !soPanel) {
                 Column(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -3777,17 +3770,13 @@ private fun ProMaxIsland(
                 }
             }
 
-            AnimatedVisibility(
-                visible = soPanel && sel != null && !terminalMode && !navMode,
-                enter = expandVertically(
-                    animationSpec = tween(320, easing = zyEase),
-                    expandFrom = Alignment.CenterVertically
-                ) + fadeIn(tween(180)),
-                exit = shrinkVertically(
-                    animationSpec = tween(240, easing = zyEase),
-                    shrinkTowards = Alignment.CenterVertically
-                ) + fadeOut(tween(140))
+            // 统一：与四个图标同一套 animateContentSize
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = tween(260, easing = zyEase))
             ) {
+            if (soPanel && sel != null && !terminalMode && !navMode) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -4154,6 +4143,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                     try {
                         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                             "sed -n '6p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+            }
                         val v = pr.inputStream.bufferedReader().readText().trim()
                         pr.waitFor()
                         if (v.isEmpty()) "未适配此机型" else v
