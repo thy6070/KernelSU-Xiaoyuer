@@ -1233,9 +1233,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
+            // 宽度与改机型列表同款（屏宽 36%）
+            val searchW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .width(searchW)
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Spacer(Modifier.height(10.dp))
@@ -1345,6 +1351,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                         }
                     }
+            }
                 }
             }
         }
