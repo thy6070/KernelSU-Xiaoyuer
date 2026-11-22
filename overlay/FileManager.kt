@@ -1572,7 +1572,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
                     // 一次显示 5 个胶囊按钮（每个约 44dp）
-                    modifier = Modifier.heightIn(max = 200.dp)
+                    modifier = Modifier.heightIn(max = 168.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -1646,7 +1646,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .background(Color(0xFFF2F2F7))
                         .border(1.2.dp, Color.Black, SmoothCornerShape(12.dp))
                         .clickable {
-                            // 游戏清理的"重置"需要带上当前选中应用名：交给 uiPickerAction 由调用方判断
                             if (pickTitle == "选择机型") {
                                 uiPickerAction?.invoke("恢复原样")
                                 uiPicker = null
@@ -1661,7 +1660,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 uiPickerSelected = null
                             }
                         }
-                        // 按钮高度（略收）
                         .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1673,9 +1671,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                 }
             }
+            // 底部留白：按钮与系统导航栏保持距离
+            Spacer(modifier = Modifier.height(50.dp))
             }
-            // 底部留白：整体上移，按钮不与系统导航栏重叠
-            Spacer(modifier = Modifier.height(34.dp))
         }
     }
 
