@@ -1504,7 +1504,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 外层 Column：卡片和按钮垂直排列，宽度与展开的灵动岛一致
             val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
             Column(
@@ -1548,7 +1550,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             uiPickerIcons = null
                                         }
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    .padding(horizontal = 16.dp, vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Start
                             ) {
@@ -1556,7 +1558,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     Image(
                                         bitmap = icon,
                                         contentDescription = null,
-                                        modifier = Modifier.size(30.dp).clip(SmoothCornerShape(8.dp))
+                                        modifier = Modifier.size(26.dp).clip(SmoothCornerShape(8.dp))
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                 }
