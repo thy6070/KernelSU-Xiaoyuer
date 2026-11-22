@@ -1532,8 +1532,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
-            // 外层 Column：卡片和按钮垂直排列，左右收窄
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
+            // 外层 Column：卡片和按钮垂直排列，左右留白
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1578,7 +1578,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             uiPickerIcons = null
                                         }
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Start
                             ) {
@@ -1657,6 +1657,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
             }
+            // 底部安全间距（按钮不贴底被裁）
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 
