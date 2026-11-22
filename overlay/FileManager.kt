@@ -1572,7 +1572,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
                     // 一次显示 5 个胶囊按钮（每个约 44dp）
-                    modifier = Modifier.heightIn(max = 176.dp)
+                    modifier = Modifier.heightIn(max = 200.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -1674,8 +1674,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
             }
-            // 底部安全间距（按钮不贴底被裁）
-            Spacer(modifier = Modifier.height(20.dp))
+            // 底部留白：整体上移，按钮不与系统导航栏重叠
+            Spacer(modifier = Modifier.height(34.dp))
         }
     }
 
