@@ -1414,8 +1414,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .width(280.dp)
                     .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
-                    // 描边与灵动岛同款
-                    .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
+                    // 描边与灵动岛同款：0.5dp 细边
+                    .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
             ) {
                 // 标题
                 Text(
@@ -1550,8 +1550,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
+        val pickScope = rememberCoroutineScope()
+        // 统一收起：交给 sheetState.hide() 做平滑下滑动画，动完再清状态
+        val closePick: () -> Unit = {
+            pickScope.launch {
+                try {
+                    pickSheetState.hide()
+                } catch (t: Throwable) {
+                }
+                uiPicker = null
+                uiPickerSelected = null
+                uiPickerIcons = null
+            }
+        }
         androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { uiPicker = null },
+            onDismissRequest = { closePick() },
             sheetState = pickSheetState,
             containerColor = Color.Transparent,
             shape = androidx.compose.ui.graphics.RectangleShape,
@@ -1569,9 +1582,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
                     ) {
-                        uiPicker = null
-                        uiPickerSelected = null
-                        uiPickerIcons = null
+                        closePick()
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -1581,8 +1592,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .clip(SmoothCornerShape(20.dp))
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
-                    // 黑色描边（稍粗）
-                    .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
+                    // 描边与灵动岛同款：0.5dp 细边
+                    .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
             ) {
                 Text(
                     text = pickTitle ?: "选择",
@@ -1593,7 +1604,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
                     // 一次显示 5 个胶囊按钮（每个约 44dp）
-                    modifier = Modifier.heightIn(max = 168.dp)
+                    modifier = Modifier.heightIn(max = 210.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -1665,7 +1676,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .width(pickW)
                         .clip(SmoothCornerShape(12.dp))
                         .background(Color(0xFFF2F2F7))
-                        .border(1.2.dp, Color.Black, SmoothCornerShape(12.dp))
+                        .border(0.5.dp, Color(0x33000000), SmoothCornerShape(12.dp))
                         .clickable {
                             if (pickTitle == "选择机型") {
                                 uiPickerAction?.invoke("恢复原样")
@@ -1692,8 +1703,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                 }
             }
-            // 底部留白：按钮与系统导航栏保持距离
-            Spacer(modifier = Modifier.height(50.dp))
+            Spacer(modifier = Modifier.height(30.dp))
             }
         }
     }
