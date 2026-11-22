@@ -1501,14 +1501,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
-            // 外层 Column：卡片和按钮垂直排列，左右留白
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            // 外层 Column：卡片和按钮垂直排列，宽度与展开的灵动岛一致
+            val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .width(pickW)
                     .clip(SmoothCornerShape(20.dp))
-                    // iOS 白色主题（半透明，毛玻璃可见）
-                    .background(Color(0xE6F2F2F7))
+                    // iOS 白色主题
+                    .background(Color(0xFFF2F2F7))
                     // 黑色描边（稍粗）
                     .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
             ) {
@@ -1590,7 +1594,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 Spacer(modifier = Modifier.height(10.dp))
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .width(pickW)
                         .clip(SmoothCornerShape(12.dp))
                         .background(Color(0xFFF2F2F7))
                         .border(1.2.dp, Color.Black, SmoothCornerShape(12.dp))
