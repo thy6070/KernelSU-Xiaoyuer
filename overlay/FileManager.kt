@@ -4030,7 +4030,7 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
                 path = path,
                 brush = gradient,
                 alpha = 0.16f,
-                style = Stroke(width = (6.dp + layer * 2.dp).toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                style = Stroke(width = (6.dp + (2 * layer).dp).toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
             drawPath(
                 path = path,
