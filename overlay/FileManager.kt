@@ -2362,10 +2362,12 @@ private fun ProMaxIsland(
     val bounce = remember { Animatable(1f) }
     // 面板撞入时的胶囊受撞缩放：左右略放大、往下多扩、往上少扩，然后慢慢回落
     val hitScale = remember { Animatable(1f) }
-    fun hitPill() {
+    // 撞击幅度按面板大小判定：小面板（如撤回）轻撞，大面板（导航/终端）重撞
+    fun hitPill(big: Boolean) {
         reopenScope.launch {
-            hitScale.animateTo(1.08f, tween(120))
-            hitScale.animateTo(1f, tween(420, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            val peak = if (big) 1.075f else 1.035f
+            hitScale.animateTo(peak, spring(dampingRatio = 0.42f, stiffness = 700f))
+            hitScale.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 500f))
         }
     }
     val bt = bounce.value
@@ -2520,8 +2522,8 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
                 .combinedClickable(
                     onClick = {
-                        // 收起：面板撞入胶囊，胶囊左右+下方被顶起再慢慢回落
-                        hitPill()
+                        // 收起：面板撞入胶囊（幅度按面板大小判定）
+                        hitPill(big = hadNav)
                         if (terminalMode) onTermClose()
                         // 收起时清空撤销事件
                         pendingUndo = null
