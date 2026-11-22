@@ -1551,6 +1551,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             skipPartiallyExpanded = true
         )
         val pickScope = rememberCoroutineScope()
+        // 打开即完全展开（避免初始停在半展开状态把底部按钮裁掉）
+        LaunchedEffect(Unit) {
+            try {
+                pickSheetState.expand()
+            } catch (t: Throwable) {
+            }
+        }
         // 统一收起：交给 sheetState.hide() 做平滑下滑动画，动完再清状态
         val closePick: () -> Unit = {
             pickScope.launch {
@@ -1604,7 +1611,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
                     // 一次显示 5 个胶囊按钮（每个约 44dp）
-                    modifier = Modifier.heightIn(max = 210.dp)
+                    modifier = Modifier.heightIn(max = 260.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -2059,7 +2066,6 @@ private fun ProMaxIsland(
     var showWave by remember { mutableStateOf(false) }
     var navMode by remember { mutableStateOf(false) }
     var navTarget by remember { mutableStateOf<String?>(null) }
-
     var navClosing by remember { mutableStateOf(false) }
     var jumpStep by remember { mutableStateOf(0) }
     var jumpSide by remember { mutableStateOf(0) }
@@ -2615,14 +2621,20 @@ private fun ProMaxIsland(
 
             AnimatedVisibility(
                 visible = (navMode || navTarget != null) && !navClosing,
+                // 展开：平滑丝滑（缓动，不带弹簧抖动）
                 enter = expandVertically(
-                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+                    animationSpec = tween(280, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                     expandFrom = Alignment.Bottom
-                ) + fadeIn(tween(180)),
+                ) + fadeIn(tween(220)),
+                // 收起：像 iOS 音乐播放器收回灵动岛——往上缩 + 缩放撞入 + 淡出
                 exit = shrinkVertically(
                     animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
                     shrinkTowards = Alignment.Bottom
-                ) + fadeOut(tween(90))
+                ) + androidx.compose.animation.scaleOut(
+                    targetScale = 0.55f,
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 600f),
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                ) + fadeOut(tween(120))
             ) {
                 Column(
                     modifier = Modifier
