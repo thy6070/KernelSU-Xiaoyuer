@@ -1229,8 +1229,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             containerColor = Color(0xFFF2F2F7),
             // 与卡密登录面板同款连续曲率圆角
             shape = SmoothCornerShape(20.dp),
-            // 去掉 640dp 宽度上限，平板上铺满
-            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            // 宽度与改机型列表同款（屏宽 36%）
+            sheetMaxWidth = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp,
             dragHandle = null
         ) {
             // 宽度与改机型列表同款（屏宽 36%）
@@ -1575,8 +1575,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 高度受限：列表变长也不会把按钮挤出去
-                    .heightIn(max = 620.dp)
+                    .height(430.dp)
+                    .padding(bottom = 90.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
@@ -1590,6 +1590,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .width(pickW)
+                    .weight(1f)
                     .clip(SmoothCornerShape(20.dp))
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
@@ -1604,8 +1605,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    // 固定高度：列表再长也只占这么多，按钮一定在下面
-                    modifier = Modifier.height(240.dp)
+                    modifier = Modifier.weight(1f)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -1704,7 +1704,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(70.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             }
         }
     }
