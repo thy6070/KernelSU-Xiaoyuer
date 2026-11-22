@@ -1401,120 +1401,141 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     if (updateVer != null) {
+        // 苹果 AlertDialog：标题/分割线/内容/实线进度条/蓝字按钮
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { if (updateProgress < 0) updateVer = null },
             properties = androidx.compose.ui.window.DialogProperties(
-                // 更新中禁止点击空白/返回键取消
                 dismissOnClickOutside = updateProgress < 0,
                 dismissOnBackPress = updateProgress < 0
             )
         ) {
             Column(
                 modifier = Modifier
-                    .width(270.dp)
-                    .clip(SmoothCornerShape(14.dp))
-                    // iOS 白色
+                    .width(280.dp)
+                    .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
+                    // 描边与灵动岛同款
+                    .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
             ) {
                 // 标题
                 Text(
                     text = "提示",
-                    modifier = Modifier.fillMaxWidth().padding(top = 19.dp, bottom = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 12.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.Black,
                     textAlign = TextAlign.Center
                 )
+                // 标题下分割线
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.5.dp)
+                        .background(Color(0x33000000))
+                )
                 // 内容
                 Text(
                     text = "发现新版本",
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
                     fontSize = 13.sp,
                     color = Color.Black,
                     textAlign = TextAlign.Center
                 )
                 Text(
                     text = updateVer!!,
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 14.dp),
                     fontSize = 12.sp,
                     color = Color(0xFF8E8E93),
                     textAlign = TextAlign.Center
                 )
                 if (updateProgress >= 0) {
-                    Spacer(Modifier.height(14.dp))
-                    // iOS 风格进度条：细（5dp）+ 圆角 + 半透明轨道 + iOS 蓝进度
-                    androidx.compose.material3.LinearProgressIndicator(
-                        progress = { (updateProgress / 100f).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(SmoothCornerShape(2.5.dp)),
-                        color = Color(0xFF007AFF),
-                        trackColor = Color(0xFFE5E5EA)
+                    // 实线进度条：轨道 + 填充（直接覆盖过去，无虚线/缩短）
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                            .height(4.dp)
+                            .clip(SmoothCornerShape(2.dp))
+                            .background(Color(0xFFE5E5EA))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth((updateProgress / 100f).coerceIn(0f, 1f))
+                                .background(Color(0xFF007AFF))
+                        )
+                    }
+                    Text(
+                        text = updateProgress.toString() + "%",
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 10.dp),
+                        fontSize = 12.sp,
+                        color = Color(0xFF8E8E93),
+                        textAlign = TextAlign.Center
                     )
-                    Text(updateProgress.toString() + "%", modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 12.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 }
-                // 分割线
+                // 内容下分割线
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 16.dp)
                         .height(0.5.dp)
                         .background(Color(0x33000000))
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.fillMaxWidth()) {
-                        IslandActionButton("更新", Color(0xFF007AFF)) {
-                            if (updateProgress < 0) {
-                                updateProgress = 0
-                                uiScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    try {
-                                        val conn = (java.net.URL(updateUrl).openConnection() as java.net.HttpURLConnection)
-                                        conn.instanceFollowRedirects = true
-                                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15)")
-                                        conn.setRequestProperty("Accept", "application/octet-stream")
-                                        conn.connectTimeout = 10000
-                                        conn.readTimeout = 30000
-                                        val total = conn.contentLengthLong
-                                        val dlDir = updCtx.getExternalFilesDir(null) ?: updCtx.cacheDir
-                                        val dst = java.io.File(dlDir, "update.apk")
-                                        var done = 0L
-                                        conn.inputStream.use { ins ->
-                                            dst.outputStream().use { out ->
-                                                val buf = ByteArray(16384)
-                                                var n = ins.read(buf)
-                                                while (n > 0) {
-                                                    out.write(buf, 0, n)
-                                                    done += n
-                                                    if (total > 0) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                        updateProgress = ((done * 100) / total).toInt()
-                                                    }
-                                                    n = ins.read(buf)
-                                                }
+                // 更新：蓝字文字按钮；进度中隐藏
+                if (updateProgress < 0) {
+                    IosTextButton("更新", Color(0xFF007AFF)) {
+
+                    if (updateProgress < 0) {
+                        updateProgress = 0
+                        uiScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                val conn = (java.net.URL(updateUrl).openConnection() as java.net.HttpURLConnection)
+                                conn.instanceFollowRedirects = true
+                                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15)")
+                                conn.setRequestProperty("Accept", "application/octet-stream")
+                                conn.connectTimeout = 10000
+                                conn.readTimeout = 30000
+                                val total = conn.contentLengthLong
+                                val dlDir = updCtx.getExternalFilesDir(null) ?: updCtx.cacheDir
+                                val dst = java.io.File(dlDir, "update.apk")
+                                var done = 0L
+                                conn.inputStream.use { ins ->
+                                    dst.outputStream().use { out ->
+                                        val buf = ByteArray(16384)
+                                        var n = ins.read(buf)
+                                        while (n > 0) {
+                                            out.write(buf, 0, n)
+                                            done += n
+                                            if (total > 0) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                updateProgress = ((done * 100) / total).toInt()
                                             }
-                                        }
-                                        // 下载完成：复制到 Download（版本号命名）+ 定位（不自动安装）
-                                        val verName = (updateVer ?: "update") + ".apk"
-                                        val dlPath = "/storage/emulated/0/Download/" + verName
-                                        try {
-                                            ProcessBuilder("su", "-c", "cp -f '" + dst.absolutePath + "' '" + dlPath + "' && chmod 644 '" + dlPath + "'").redirectErrorStream(true).start().waitFor()
-                                        } catch (t: Throwable) {}
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            updateProgress = -1
-                                            updateVer = null
-                                            runMessage = "已下载: " + dlPath + "（请手动安装）"
-                                            try {
-                                                // 定位到 Download 目录并高亮下载的 APK
-                                                FileLocate.path = dlPath
-                                                FileLocate.tick += 1
-                                            } catch (t: Throwable) {}
-                                        }
-                                    } catch (t: Throwable) {
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            updateProgress = -1
-                                            runMessage = "下载失败: " + t
+                                            n = ins.read(buf)
                                         }
                                     }
                                 }
+                                // 下载完成：复制到 Download（版本号命名）+ 定位（不自动安装）
+                                val verName = (updateVer ?: "update") + ".apk"
+                                val dlPath = "/storage/emulated/0/Download/" + verName
+                                try {
+                                    ProcessBuilder("su", "-c", "cp -f '" + dst.absolutePath + "' '" + dlPath + "' && chmod 644 '" + dlPath + "'").redirectErrorStream(true).start().waitFor()
+                                } catch (t: Throwable) {}
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    updateProgress = -1
+                                    updateVer = null
+                                    runMessage = "已下载: " + dlPath + "（请手动安装）"
+                                    try {
+                                        // 定位到 Download 目录并高亮下载的 APK
+                                        FileLocate.path = dlPath
+                                        FileLocate.tick += 1
+                                    } catch (t: Throwable) {}
+                                }
+                            } catch (t: Throwable) {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    updateProgress = -1
+                                    runMessage = "下载失败: " + t
+                                }
                             }
                         }
+                    }
                     }
                 }
             }
@@ -3872,6 +3893,22 @@ private fun NavIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, onCli
             modifier = Modifier.size(24.dp)
         )
     }
+}
+
+@Composable
+private fun IosTextButton(label: String, color: Color, onClick: () -> Unit) {
+    Text(
+        text = label,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 14.dp),
+        fontSize = 17.sp,
+        lineHeight = 22.sp,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+        color = color
+    )
 }
 
 @Composable
