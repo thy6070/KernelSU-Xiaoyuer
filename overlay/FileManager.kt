@@ -3984,16 +3984,20 @@ private fun TerminalOverlay(
 @Composable
 private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifier) {
     // Siri 波形：多层正弦波 + 蓝紫粉渐变 + 无限相位动画
-    val infinite = rememberInfiniteTransition(label = "siriWave")
-    val phase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "siriPhase"
-    )
+    // 相位：每圈时长递减（越来越快）
+    val phaseAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(Unit) {
+        var dur = 1900L
+        while (true) {
+            phaseAnim.snapTo(0f)
+            phaseAnim.animateTo(
+                1f,
+                androidx.compose.animation.core.tween(dur.toInt(), easing = LinearEasing)
+            )
+            dur = (dur - 70L).coerceAtLeast(520L)
+        }
+    }
+    val phase = phaseAnim.value * (2 * Math.PI).toFloat()
     val ampScale by infinite.animateFloat(
         initialValue = 0.82f,
         targetValue = 1.18f,
@@ -4010,12 +4014,13 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
             .clipToBounds()
     ) {
         val cy = size.height / 2f
+        // 两端透明 → 波形两边渐隐，不会硬切消失
         val gradient = Brush.horizontalGradient(
-            listOf(
-                Color(0xFF0A84FF),
-                Color(0xFFBF5AF2),
-                Color(0xFFFF375F)
-            )
+            0f to Color.Transparent,
+            0.12f to Color(0xFF0A84FF),
+            0.5f to Color(0xFFBF5AF2),
+            0.88f to Color(0xFFFF375F),
+            1f to Color.Transparent
         )
         for (layer in 0 until 3) {
             val amp = (4.dp.toPx() + layer * 2.2.dp.toPx()) * ampScale
