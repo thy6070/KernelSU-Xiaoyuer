@@ -2522,13 +2522,13 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
                 .combinedClickable(
                     onClick = {
-                        // 收起：面板撞入胶囊（幅度按面板大小判定）
-                        hitPill(big = hadNav)
                         if (terminalMode) onTermClose()
                         // 收起时清空撤销事件
                         pendingUndo = null
                         // let the panels shrink before the pill settles, so closing keeps its animation
                         val hadNav = navMode || navTarget != null
+                        // 收起：面板撞入胶囊（幅度按面板大小判定）
+                        hitPill(big = hadNav)
                         navMode = false
                         expanded = false
                         onClearLongPress()
