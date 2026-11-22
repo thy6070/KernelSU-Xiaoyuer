@@ -32,7 +32,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.Animatable
@@ -163,8 +162,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.hazeEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
@@ -217,8 +214,6 @@ data class FsEntry(val name: String, val isDir: Boolean, val sizeText: String = 
 fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}) {
     val appCtx = LocalContext.current
     val view = LocalView.current
-    // iOS 毛玻璃：模糊面板背后的 Compose 内容
-    val hazeState = remember { dev.chrisbanes.haze.HazeState() }
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
     var showCardSheet by remember { mutableStateOf(false) }
     // 启动清理：撤销回收站里超过 1 天的备份（避免占用空间）
@@ -271,7 +266,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 去掉顶部那个可以往下拉的小把手
             dragHandle = null
         ) {
-            CardLoginSheet(appCtx, hazeState) {
+            CardLoginSheet(appCtx) {
                 scope.launch {
                     // 允许隐藏 → 播放下滑动画 → 动画结束再移除
                     allowHide.value = true
@@ -578,11 +573,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     if (panel || termFull || editPath != null || previewPath != null) 30.dp else 0.dp
                 )
         ) {
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .hazeSource(hazeState)
-    ) {
+    Row(modifier = Modifier.fillMaxSize()) {
         key(leftPath) {
             BrowserPane(
                 path = leftPath,
@@ -1408,55 +1399,32 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     if (updateVer != null) {
-        // 用主界面内遮罩层（Dialog 是独立窗口，Haze 跨窗口模糊不了）
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(300f)
-                .background(Color(0x66000000))
-                .clickable {
-                    if (updateProgress < 0) updateVer = null
-                },
-            contentAlignment = Alignment.Center
-        ) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { if (updateProgress < 0) updateVer = null }) {
             Column(
                 modifier = Modifier
-                    .width(280.dp)
-                    .hazeEffect(hazeState) {
-                        blurRadius = 24.dp
-                    }
-                    .clip(SmoothCornerShape(14.dp))
-                    // iOS AlertDialog：白卡 + 14dp 圆角
-                    .background(Color(0xE6F2F2F7))
-                    .padding(top = 20.dp, bottom = 0.dp)
+                    .fillMaxWidth()
+                    .clip(SmoothCornerShape(20.dp))
+                    // iOS 白色风格
+                    .background(Color(0xFFF2F2F7))
+                    .padding(20.dp)
             ) {
-                Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.Black, textAlign = TextAlign.Center)
+                Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, color = Color.Black, textAlign = TextAlign.Center)
                 Text(updateVer!!, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 13.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 if (updateProgress >= 0) {
                     Spacer(Modifier.height(14.dp))
                     // iOS 风格进度条：细（5dp）+ 圆角 + 半透明轨道 + iOS 蓝进度
                     androidx.compose.material3.LinearProgressIndicator(
                         progress = { (updateProgress / 100f).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(4.dp).clip(SmoothCornerShape(2.dp)),
+                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(SmoothCornerShape(2.5.dp)),
                         color = Color(0xFF007AFF),
                         trackColor = Color(0xFFE5E5EA)
                     )
                     Text(updateProgress.toString() + "%", modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 12.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 }
                 Spacer(Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // 左：灰色取消
-                    Box(Modifier.weight(1f)) {
-                        IslandActionButton("取消", Color(0xFF8E8E93)) {
-                            if (updateProgress < 0) updateVer = null
-                        }
-                    }
-                    // 右：蓝色更新
-                    Box(Modifier.weight(1f)) {
-                        IslandActionButton("更新", Color(0xFF007AFF)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.fillMaxWidth()) {
+                        IslandActionButton("立即更新", Color(0xFF0A84FF)) {
                             if (updateProgress < 0) {
                                 updateProgress = 0
                                 uiScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -1520,29 +1488,46 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val pickList = uiPicker
     val pickTitle = uiPickerTitle
     if (pickList != null) {
-        // 与卡密登录同款：底部半屏面板（滑入/滑出动画由 ModalBottomSheet 提供）
-        val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
-            skipPartiallyExpanded = true
-        )
-        androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { uiPicker = null },
-            sheetState = pickSheetState,
-            containerColor = Color.Transparent,
-            shape = androidx.compose.ui.graphics.RectangleShape,
-            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            dragHandle = null
+        // 收盘动画状态（与进入动画对称）
+        var pickClosing by remember { mutableStateOf(false) }
+        LaunchedEffect(pickClosing) {
+            if (pickClosing) {
+                kotlinx.coroutines.delay(340)
+                uiPicker = null
+                uiPickerIcons = null
+                pickClosing = false
+            }
+        }
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { pickClosing = true },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
         ) {
-            // 外层 Column：卡片和按钮垂直排列，左右留白
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !pickClosing,
+                enter = androidx.compose.animation.slideInVertically(
+                    initialOffsetY = { it / 3 },
+                    animationSpec = androidx.compose.animation.core.tween(400)
+                ) + androidx.compose.animation.fadeIn(
+                    animationSpec = androidx.compose.animation.core.tween(320)
+                ),
+                exit = androidx.compose.animation.slideOutVertically(
+                    targetOffsetY = { it / 3 },
+                    animationSpec = androidx.compose.animation.core.tween(320)
+                ) + androidx.compose.animation.fadeOut(
+                    animationSpec = androidx.compose.animation.core.tween(240)
+                )
+            ) {
+            // 外层 Column：卡片和按钮垂直排列（否则会重叠），左右收窄
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .hazeEffect(hazeState) {
-                        blurRadius = 24.dp
-                    }
                     .clip(SmoothCornerShape(20.dp))
-                    // iOS 白色主题（半透明，毛玻璃可见）
-                    .background(Color(0xE6F2F2F7))
+                    // iOS 白色主题
+                    .background(Color(0xFFF2F2F7))
                     // 黑色描边（稍粗）
                     .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
             ) {
@@ -1578,7 +1563,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             uiPickerIcons = null
                                         }
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Start
                             ) {
@@ -1657,8 +1642,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
             }
-            // 底部安全间距（按钮不贴底被裁）
-            Spacer(modifier = Modifier.height(20.dp))
+            }
         }
     }
 
@@ -3985,69 +3969,82 @@ private fun TerminalOverlay(
 
 @Composable
 private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifier) {
-    // Siri 波形：多层正弦波 + 蓝紫粉渐变 + 无限相位动画
-    // 相位：每圈时长递减（越来越快）
-    val phaseAnim = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(Unit) {
-        var dur = 1900L
-        while (true) {
-            phaseAnim.snapTo(0f)
-            phaseAnim.animateTo(
-                1f,
-                androidx.compose.animation.core.tween(dur.toInt(), easing = LinearEasing)
-            )
-            dur = (dur - 70L).coerceAtLeast(520L)
+    val phase = remember { Animatable(0f) }
+    val fill = remember { Animatable(0f) }
+    val finishing = remember { mutableStateOf(false) }
+    val round = remember { mutableStateOf(0) }
+    LaunchedEffect(running) {
+        if (running) {
+            fill.snapTo(0f)
+            while (true) {
+                phase.snapTo(0f)
+                phase.animateTo(1f, tween(900, easing = LinearEasing))
+                round.value = round.value + 1
+            }
+        } else {
+            finishing.value = true
+            phase.animateTo(1f, tween(450, easing = LinearEasing))
+            phase.snapTo(0f)
+            phase.animateTo(1f, tween(320, easing = LinearEasing))
+            round.value = round.value + 1
+            finishing.value = false
+            fill.animateTo(1f, tween(340, easing = LinearEasing))
         }
     }
-    val phase = phaseAnim.value * (2 * Math.PI).toFloat()
-    val infinite = rememberInfiniteTransition(label = "siriAmp")
-    val ampScale by infinite.animateFloat(
-        initialValue = 0.82f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "siriAmp"
-    )
     Canvas(
         modifier = modifier
             .padding(horizontal = 16.dp)
-            .height(18.dp)
+            .height(12.dp)
             .clipToBounds()
     ) {
         val cy = size.height / 2f
-        // 两端透明 → 波形两边渐隐，不会硬切消失
-        val gradient = Brush.horizontalGradient(
-            0f to Color.Transparent,
-            0.12f to Color(0xFF0A84FF),
-            0.5f to Color(0xFFBF5AF2),
-            0.88f to Color(0xFFFF375F),
-            1f to Color.Transparent
+        drawLine(
+            color = Color.White.copy(alpha = 0.45f),
+            start = Offset(0f, cy),
+            end = Offset(size.width, cy),
+            strokeWidth = 1.6.dp.toPx(),
+            cap = StrokeCap.Round
         )
-        for (layer in 0 until 3) {
-            val amp = (4.dp.toPx() + layer * 2.2.dp.toPx()) * ampScale
-            val freq = 1.6f + layer * 0.8f
-            val ph = phase + layer * 0.9f
-            val path = Path()
-            var x = 0f
-            val step = size.width / 160f
-            while (x <= size.width) {
-                val y = cy + amp * kotlin.math.sin((x / size.width) * 6.2831855f * freq + ph)
-                if (x == 0f) path.moveTo(x, y) else path.lineTo(x, y)
-                x += step
+        if (running || finishing.value) {
+            val seg = size.width * (0.30f + 0.10f * kotlin.math.min(round.value, 4).toFloat())
+            val amp = 2.6.dp.toPx()
+            for (k in 0 until 2) {
+                val p = (phase.value + k * 0.5f) % 1f
+                val x0 = -seg + p * (size.width + seg)
+                val path = Path()
+                var x = 0f
+                while (x <= seg) {
+                    val px = x0 + x
+                    val py = cy + amp * kotlin.math.sin(x / 26.dp.toPx() * 6.2831855f - phase.value * 6.2831855f)
+                    if (x <= 0f) path.moveTo(px, py) else path.lineTo(px, py)
+                    x += 1f
+                }
+                val ribbon = Brush.horizontalGradient(
+                    0f to color.copy(alpha = 0.05f),
+                    0.14f to color,
+                    0.86f to color,
+                    1f to color.copy(alpha = 0.05f)
+                )
+                drawPath(
+                    path = path,
+                    brush = ribbon,
+                    alpha = 0.18f,
+                    style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                )
+                drawPath(
+                    path = path,
+                    brush = ribbon,
+                    style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                )
             }
-            drawPath(
-                path = path,
-                brush = gradient,
-                alpha = 0.16f,
-                style = Stroke(width = (6.dp + (2 * layer).dp).toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-            )
-            drawPath(
-                path = path,
-                brush = gradient,
-                alpha = (0.9f - layer * 0.2f).coerceAtLeast(0.3f),
-                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        }
+        if (fill.value > 0.001f) {
+            drawLine(
+                color = color,
+                start = Offset(0f, cy),
+                end = Offset(size.width * fill.value.coerceIn(0f, 1f), cy),
+                strokeWidth = 2.4.dp.toPx(),
+                cap = StrokeCap.Round
             )
         }
     }
@@ -5147,11 +5144,7 @@ private fun BrowserPane(
 }
 
 @Composable
-private fun CardLoginSheet(
-    ctx: android.content.Context,
-    hazeState: dev.chrisbanes.haze.HazeState,
-    onDone: () -> Unit
-) {
+private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     var key by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
@@ -5170,9 +5163,6 @@ private fun CardLoginSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .hazeEffect(hazeState) {
-                blurRadius = 24.dp
-            }
             .padding(horizontal = 4.dp, vertical = 10.dp)
     ) {
         Text(
@@ -5366,10 +5356,8 @@ class SmoothCornerShape(
         val w = size.width
         val h = size.height
         val s = smoothing.coerceIn(0f, 1f)
-        // iOS continuous corner：曲线更长（直线段更早结束），控制点按 1.28 倍半径拉伸，
-        // 让曲率过渡更缓（单段贝塞尔做不到严格 G2，但视觉上接近 squircle）
-        val p = (r * (1f + 0.28f * s)).coerceAtMost(minOf(w, h) / 2f)
-        val c = p * 0.62f
+        val p = (r * (1f - 0.25f * s)).coerceAtMost(minOf(w, h) / 2f)
+        val c = p * 0.5523f
         val path = androidx.compose.ui.graphics.Path()
         path.moveTo(p, 0f)
         path.lineTo(w - p, 0f)
