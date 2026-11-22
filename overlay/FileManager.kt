@@ -1572,7 +1572,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
                     // 一次显示 5 个胶囊按钮（每个约 44dp）
-                    modifier = Modifier.heightIn(max = 230.dp)
+                    modifier = Modifier.heightIn(max = 176.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -4002,27 +4002,26 @@ private fun TerminalOverlay(
 
 @Composable
 private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifier) {
-    val phase = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val phase = remember { Animatable(0f) }
     val fill = remember { Animatable(0f) }
     val finishing = remember { mutableStateOf(false) }
     val round = remember { mutableStateOf(0) }
-    // 帧级累积相位：不重置，波形连续滚动（避免每圈跳回起点）
     LaunchedEffect(running) {
         if (running) {
             fill.snapTo(0f)
-            var last = 0L
             while (true) {
-                androidx.compose.runtime.withFrameNanos { now ->
-                    if (last != 0L) {
-                        phase.floatValue = (phase.floatValue + (now - last) / 900_000_000f) % 1f
-                    }
-                    last = now
-                }
+                phase.snapTo(0f)
+                phase.animateTo(1f, tween(900, easing = LinearEasing))
+                round.value = round.value + 1
             }
         } else {
             finishing.value = true
-            fill.animateTo(1f, tween(340, easing = LinearEasing))
+            phase.animateTo(1f, tween(450, easing = LinearEasing))
+            phase.snapTo(0f)
+            phase.animateTo(1f, tween(320, easing = LinearEasing))
+            round.value = round.value + 1
             finishing.value = false
+            fill.animateTo(1f, tween(340, easing = LinearEasing))
         }
     }
     Canvas(
@@ -4043,13 +4042,13 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
             val seg = size.width * (0.30f + 0.10f * kotlin.math.min(round.value, 4).toFloat())
             val amp = 2.6.dp.toPx()
             for (k in 0 until 2) {
-                val p = (phase.floatValue + k * 0.5f) % 1f
+                val p = (phase.value + k * 0.5f) % 1f
                 val x0 = -seg + p * (size.width + seg)
                 val path = Path()
                 var x = 0f
                 while (x <= seg) {
                     val px = x0 + x
-                    val py = cy + amp * kotlin.math.sin(x / 26.dp.toPx() * 6.2831855f - phase.floatValue * 6.2831855f)
+                    val py = cy + amp * kotlin.math.sin(x / 26.dp.toPx() * 6.2831855f - phase.value * 6.2831855f)
                     if (x <= 0f) path.moveTo(px, py) else path.lineTo(px, py)
                     x += 1f
                 }
