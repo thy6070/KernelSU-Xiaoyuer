@@ -1612,8 +1612,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    // 一次显示 5 个胶囊按钮（每个约 44dp）
-                    modifier = Modifier.heightIn(max = 260.dp)
+                    // 固定高度：列表再长也只占这么多，按钮一定在下面
+                    modifier = Modifier.height(240.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -2360,6 +2360,14 @@ private fun ProMaxIsland(
 
     // Island.kt motion: 点击反馈（只在点胶囊时晃，展开/收起时不动）
     val bounce = remember { Animatable(1f) }
+    // 面板撞入时的胶囊受撞缩放：左右略放大、往下多扩、往上少扩，然后慢慢回落
+    val hitScale = remember { Animatable(1f) }
+    fun hitPill() {
+        reopenScope.launch {
+            hitScale.animateTo(1.08f, tween(120))
+            hitScale.animateTo(1f, tween(420, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+        }
+    }
     val bt = bounce.value
     val bump = 1f + 0.06f * sin(bt * PI.toFloat())
     val sway = 6f * sin(bt * 9.424778f) * (1f - bt)
@@ -2500,8 +2508,10 @@ private fun ProMaxIsland(
                 .zIndex(1f)
                 .width(pillW)
                 .graphicsLayer {
-                    scaleX = bump
-                    scaleY = bump
+                    scaleX = bump * hitScale.value
+                    scaleY = bump * hitScale.value
+                    // 顶部为缩放原点：下面扩展多、上面少
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
                     translationX = with(density) { sway.dp.toPx() }
                     translationY = with(density) { lift.dp.toPx() }
                 }
@@ -2510,17 +2520,8 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
                 .combinedClickable(
                     onClick = {
-                        // 收起：面板撞入胶囊，胶囊被撞得弹一下（短促撞击感）
-                        reopenScope.launch {
-                            bounce.snapTo(0f)
-                            bounce.animateTo(
-                                1f,
-                                androidx.compose.animation.core.spring(
-                                    dampingRatio = 0.35f,
-                                    stiffness = 900f
-                                )
-                            )
-                        }
+                        // 收起：面板撞入胶囊，胶囊左右+下方被顶起再慢慢回落
+                        hitPill()
                         if (terminalMode) onTermClose()
                         // 收起时清空撤销事件
                         pendingUndo = null
@@ -2632,9 +2633,13 @@ private fun ProMaxIsland(
                 visible = (navMode || navTarget != null) && !navClosing,
                 // 展开：平滑丝滑（缓动，不带弹簧抖动）
                 enter = expandVertically(
-                    animationSpec = tween(280, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                     expandFrom = Alignment.Bottom
-                ) + fadeIn(tween(220)),
+                ) + fadeIn(tween(240)) + androidx.compose.animation.scaleIn(
+                    initialScale = 0.94f,
+                    animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                ),
                 // 收起：像 iOS 音乐播放器收回灵动岛——往上缩 + 缩放撞入 + 淡出
                 exit = shrinkVertically(
                     animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
