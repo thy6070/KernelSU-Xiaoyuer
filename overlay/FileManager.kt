@@ -1400,17 +1400,45 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     if (updateVer != null) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { if (updateProgress < 0) updateVer = null }) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { if (updateProgress < 0) updateVer = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                // 更新中禁止点击空白/返回键取消
+                dismissOnClickOutside = updateProgress < 0,
+                dismissOnBackPress = updateProgress < 0
+            )
+        ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(SmoothCornerShape(20.dp))
-                    // iOS 白色风格
+                    .width(270.dp)
+                    .clip(SmoothCornerShape(14.dp))
+                    // iOS 白色
                     .background(Color(0xFFF2F2F7))
-                    .padding(20.dp)
             ) {
-                Text("发现新版本", modifier = Modifier.fillMaxWidth(), fontSize = 17.sp, color = Color.Black, textAlign = TextAlign.Center)
-                Text(updateVer!!, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 13.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
+                // 标题
+                Text(
+                    text = "提示",
+                    modifier = Modifier.fillMaxWidth().padding(top = 19.dp, bottom = 4.dp),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
+                )
+                // 内容
+                Text(
+                    text = "发现新版本",
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 13.sp,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = updateVer!!,
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    fontSize = 12.sp,
+                    color = Color(0xFF8E8E93),
+                    textAlign = TextAlign.Center
+                )
                 if (updateProgress >= 0) {
                     Spacer(Modifier.height(14.dp))
                     // iOS 风格进度条：细（5dp）+ 圆角 + 半透明轨道 + iOS 蓝进度
@@ -1422,10 +1450,17 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                     Text(updateProgress.toString() + "%", modifier = Modifier.fillMaxWidth().padding(top = 6.dp), fontSize = 12.sp, color = Color(0xFF8E8E93), textAlign = TextAlign.Center)
                 }
-                Spacer(Modifier.height(16.dp))
+                // 分割线
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                        .height(0.5.dp)
+                        .background(Color(0x33000000))
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.fillMaxWidth()) {
-                        IslandActionButton("立即更新", Color(0xFF0A84FF)) {
+                        IslandActionButton("更新", Color(0xFF007AFF)) {
                             if (updateProgress < 0) {
                                 updateProgress = 0
                                 uiScope.launch(kotlinx.coroutines.Dispatchers.IO) {
