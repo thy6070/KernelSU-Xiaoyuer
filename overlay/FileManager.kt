@@ -1580,7 +1580,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 允许下拉关闭（skipPartiallyExpanded 保证不会半展开）
             sheetGesturesEnabled = true,
             // 去掉 sheet 自带的导航栏 insets（否则和下面的 navigationBarsPadding 叠加出双倍白条）
-            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+            contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
             dragHandle = null
         ) {
             Column(
