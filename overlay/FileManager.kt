@@ -1229,8 +1229,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             containerColor = Color(0xFFF2F2F7),
             // 与卡密登录面板同款连续曲率圆角
             shape = SmoothCornerShape(20.dp),
-            // 去掉 640dp 宽度上限，平板上铺满
-            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            // 宽度与改机型列表同款（屏宽 36%）
+            sheetMaxWidth = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp,
             dragHandle = null
         ) {
             Column(
@@ -1569,6 +1569,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             containerColor = Color.Transparent,
             shape = androidx.compose.ui.graphics.RectangleShape,
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            // 禁止拖动/折叠：按钮位置固定
+            sheetGesturesEnabled = false,
             dragHandle = null
         ) {
             // 外层 Column：卡片和按钮垂直排列，宽度与展开的灵动岛一致
