@@ -1543,8 +1543,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
             sheetState = pickSheetState,
-            containerColor = Color.Transparent,
-            shape = androidx.compose.ui.graphics.RectangleShape,
+            containerColor = Color(0xFFF2F2F7),
+            shape = SmoothCornerShape(20.dp),
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             sheetGesturesEnabled = false,
             dragHandle = null
@@ -1561,21 +1561,65 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 卡片（里面嵌列表）
+                // 卡片（标题 + 列表 + 按钮一体）
                 Column(
                     modifier = Modifier
-                        .width(pickW)
-                        .clip(SmoothCornerShape(20.dp))
-                        .background(Color(0xFFF2F2F7))
-                        .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
+                        .fillMaxWidth()
                 ) {
-                    Text(
-                        text = pickTitle ?: "选择",
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                        fontSize = 15.sp,
-                        color = Color(0xFF8E8E93),
-                        textAlign = TextAlign.Center
-                    )
+                    // 顶部：左红取消 / 标题 / 右蓝确定
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "取消",
+                            modifier = Modifier.clickable {
+                                if (pickTitle == "选择机型") {
+                                    pickConfirm = "恢复默认机型" to {
+                                        uiPickerAction?.invoke("恢复原样")
+                                        uiPicker = null
+                                        uiPickerIcons = null
+                                    }
+                                } else {
+                                    closePick()
+                                }
+                            },
+                            fontSize = 15.sp,
+                            color = Color(0xFFFF3B30)
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = pickTitle ?: "选择",
+                            fontSize = 15.sp,
+                            color = Color(0xFF8E8E93),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            "确定",
+                            modifier = Modifier.clickable {
+                                val sel = uiPickerSelected
+                                if (sel != null) {
+                                    if (pickTitle == "选择机型") {
+                                        pickConfirm = "设为 $sel" to {
+                                            uiPickerAction?.invoke(sel)
+                                            uiPicker = null
+                                            uiPickerIcons = null
+                                        }
+                                    } else {
+                                        pickConfirm = "重置 $sel" to {
+                                            uiPickerAction?.invoke(sel)
+                                            uiPicker = null
+                                            uiPickerIcons = null
+                                            uiPickerSelected = null
+                                        }
+                                    }
+                                }
+                            },
+                            fontSize = 15.sp,
+                            color = Color(0xFF007AFF)
+                        )
+                    }
                     androidx.compose.foundation.lazy.LazyColumn(
                         modifier = Modifier.heightIn(max = 240.dp)
                     ) {
@@ -1634,47 +1678,66 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                // 卡片外独立按钮
-                val bottomLabel = when (pickTitle) {
-                    "选择机型" -> "恢复原样"
-                    "选择要重置的应用" -> "重置此应用"
-                    else -> null
-                }
-                if (bottomLabel != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+
+    // 抽屉「确定/取消」的确认弹窗（iOS Alert 样式：文案 + 分割线 + 左红取消/右蓝确定）
+    val pc = pickConfirm
+    if (pc != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { pickConfirm = null }) {
+            Column(
+                modifier = Modifier
+                    .width(280.dp)
+                    .clip(SmoothCornerShape(20.dp))
+                    .background(Color(0xFFF2F2F7))
+            ) {
+                Text(
+                    text = pc.first,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 20.dp),
+                    fontSize = 15.sp,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.5.dp)
+                        .background(Color(0x33000000))
+                )
+                Row(modifier = Modifier.fillMaxWidth().height(50.dp)) {
                     Box(
                         modifier = Modifier
-                            .width(pickW)
-                            .clip(SmoothCornerShape(12.dp))
-                            .background(Color(0xFFF2F2F7))
-                            .border(0.5.dp, Color(0x33000000), SmoothCornerShape(12.dp))
-                            .clickable {
-                                if (pickTitle == "选择机型") {
-                                    uiPickerAction?.invoke("恢复原样")
-                                    uiPicker = null
-                                    uiPickerIcons = null
-                                } else {
-                                    val sel = uiPickerSelected
-                                    if (sel != null) {
-                                        uiPickerAction?.invoke(sel)
-                                    }
-                                    uiPicker = null
-                                    uiPickerIcons = null
-                                    uiPickerSelected = null
-                                }
-                            }
-                            .padding(vertical = 14.dp),
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { pickConfirm = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = bottomLabel,
-                            fontSize = 15.sp,
-                            color = if (bottomLabel == "重置此应用") Color(0xFFFF3B30) else Color(0xFF007AFF),
-                            textAlign = TextAlign.Center
-                        )
+                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(0.5.dp)
+                            .fillMaxHeight()
+                            .background(Color(0x33000000))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable {
+                                val action = pc.second
+                                pickConfirm = null
+                                action()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("确定", fontSize = 17.sp, color = Color(0xFF007AFF))
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
@@ -6169,6 +6232,8 @@ var uiPicker by androidx.compose.runtime.mutableStateOf<List<String>?>(null)
 var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null)
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
 var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
+// 抽屉确定/取消的确认弹窗：文案 + 动作
+var pickConfirm by androidx.compose.runtime.mutableStateOf<Pair<String, () -> Unit>?>(null)
 // 撤销：记录上一个文件操作（移动/复制/重命名/删除）
 data class UndoOp(val kind: String, val src: List<String>, val dst: List<String> = emptyList())
 var pendingUndo by androidx.compose.runtime.mutableStateOf<UndoOp?>(null)
