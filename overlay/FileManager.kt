@@ -1586,10 +1586,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+            // 顶部留白：卡片+按钮贴到底部
+            Spacer(modifier = Modifier.weight(1f))
             Column(
                 modifier = Modifier
                     .width(pickW)
-                    .weight(1f)
                     .clip(SmoothCornerShape(20.dp))
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
