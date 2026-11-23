@@ -261,8 +261,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             contentColor = Color.Black,
             // 去掉 Material3 默认的 640dp 最大宽度限制，平板上才能真正铺满
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            // 面板用连续曲率圆角
-            shape = SmoothCornerShape(20.dp),
+            // 卡密面板也不要圆角
+            shape = androidx.compose.ui.graphics.RectangleShape,
             // 完全禁止拖拽手势（面板不能被上下拖动）
             sheetGesturesEnabled = false,
             // 去掉顶部那个可以往下拉的小把手
@@ -1227,8 +1227,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { showSearch = false },
             sheetState = searchSheetState,
             containerColor = Color(0xFFF2F2F7),
-            // 与卡密登录面板同款连续曲率圆角
-            shape = SmoothCornerShape(20.dp),
+            // 抽屉不要圆角
+            shape = androidx.compose.ui.graphics.RectangleShape,
             // 宽度与改机型列表同款（屏宽 36%）
             sheetMaxWidth = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp,
             dragHandle = null
@@ -1544,7 +1544,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { closePick() },
             sheetState = pickSheetState,
             containerColor = Color(0xFFF2F2F7),
-            shape = SmoothCornerShape(20.dp),
+            shape = androidx.compose.ui.graphics.RectangleShape,
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             sheetGesturesEnabled = false,
             dragHandle = null
@@ -5265,11 +5265,21 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     // 沿用旧版保存位置：/sdcard/小鱼儿/小鱼儿密钥（第一行）
     LaunchedEffect(Unit) {
         val saved = withContext(Dispatchers.IO) {
+            // 1) root 读
             try {
-                com.topjohnwu.superuser.Shell.cmd(
+                val r = com.topjohnwu.superuser.Shell.cmd(
                     "head -1 \"/storage/emulated/0/小鱼儿/小鱼儿密钥\" 2>/dev/null"
                 ).exec().out.joinToString("").trim()
-            } catch (t: Throwable) { "" }
+                if (r.isNotEmpty()) return@withContext r
+            } catch (t: Throwable) {
+            }
+            // 2) 直接文件读（App 有存储权限时兜底）
+            try {
+                val f = java.io.File("/storage/emulated/0/小鱼儿/小鱼儿密钥")
+                if (f.exists()) f.readLines().firstOrNull()?.trim() ?: "" else ""
+            } catch (t: Throwable) {
+                ""
+            }
         }
         if (saved.isNotEmpty() && key.isEmpty()) key = saved
     }
