@@ -1578,8 +1578,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 整体上移：底部留白把面板推离屏幕底边
-                    .padding(bottom = 80.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
@@ -2507,6 +2505,11 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
                 .combinedClickable(
                     onClick = {
+                        // 收起时：胶囊晃动（bump/sway/lift 衰减）
+                        reopenScope.launch {
+                            bounce.snapTo(0f)
+                            bounce.animateTo(1f, tween(1000))
+                        }
                         if (terminalMode) onTermClose()
                         // 收起时清空撤销事件
                         pendingUndo = null
