@@ -1575,7 +1575,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(420.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
@@ -1586,8 +1585,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-            // 顶部留白：卡片+按钮贴到底部
-            Spacer(modifier = Modifier.weight(1f))
             Column(
                 modifier = Modifier
                     .width(pickW)
