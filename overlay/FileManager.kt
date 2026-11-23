@@ -2005,6 +2005,63 @@ private fun ansiAnnotated(src: String): androidx.compose.ui.text.AnnotatedString
 }
 
 @Composable
+private fun IslandTerminalPane(
+    termText: String,
+    termInput: String,
+    onTermInput: (String) -> Unit,
+    onTermRun: () -> Unit,
+) {
+    val termScroll = rememberScrollState()
+    LaunchedEffect(termText) {
+        termScroll.animateScrollTo(termScroll.maxValue)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
+    ) {
+        Text(
+            text = ansiAnnotated(termText),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp)
+                .verticalScroll(termScroll),
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            color = Color.White
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.foundation.text.BasicTextField(
+                value = termInput,
+                onValueChange = onTermInput,
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color(0xFF0E0E10), SmoothCornerShape(6.dp))
+                    .padding(4.dp),
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = Color.White,
+                    fontSize = 11.sp
+                ),
+                singleLine = true
+            )
+            Text(
+                "发送",
+                modifier = Modifier
+                    .clickable { onTermRun() }
+                    .padding(start = 10.dp)
+                    .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
+                    .padding(horizontal = 16.dp, vertical = 7.dp),
+                fontSize = 14.sp,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
 private fun ProMaxIsland(
     onBack: () -> Unit = {},
     onNavigate: (String) -> Unit = {},
@@ -3682,62 +3739,14 @@ private fun ProMaxIsland(
             }
             }
 
-            // 统一：与导航栏同一套 animateContentSize
+            // 统一：与导航栏同一套 animateContentSize（终端内容已拆成独立 composable）
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .animateContentSize(animationSpec = tween(260, easing = zyEase))
             ) {
             if (terminalMode) {
-                val termScroll = rememberScrollState()
-                    LaunchedEffect(termText) {
-                        termScroll.animateScrollTo(termScroll.maxValue)
-                    }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
-                ) {
-                    Text(
-                        text = ansiAnnotated(termText),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp)
-                            .verticalScroll(termScroll),
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color.White
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        androidx.compose.foundation.text.BasicTextField(
-                            value = termInput,
-                            onValueChange = onTermInput,
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(Color(0xFF0E0E10), SmoothCornerShape(6.dp))
-                                .padding(4.dp),
-                            textStyle = androidx.compose.ui.text.TextStyle(
-                                color = Color.White,
-                                fontSize = 11.sp
-                            ),
-                            singleLine = true
-                        )
-                        Text(
-                            "发送",
-                            modifier = Modifier
-                                .clickable { onTermRun() }
-                                .padding(start = 10.dp)
-                                .background(Color(0xFF0A84FF), RoundedCornerShape(percent = 50))
-                                .padding(horizontal = 16.dp, vertical = 7.dp),
-                            fontSize = 14.sp,
-                            color = Color.White
-                        )
-
-                    }
-                }
+                IslandTerminalPane(termText, termInput, onTermInput, onTermRun)
             }
             }
 
