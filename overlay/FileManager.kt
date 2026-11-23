@@ -1417,35 +1417,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 描边与灵动岛同款：0.5dp 细边
                     .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
             ) {
-                // 标题
+                // 内容：只保留「发现新版本」（删掉「提示」标题和版本号小字）
                 Text(
-                    text = "提示",
-                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 12.dp),
+                    text = "发现新版本",
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.Black,
-                    textAlign = TextAlign.Center
-                )
-                // 标题下分割线
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(0.5.dp)
-                        .background(Color(0x33000000))
-                )
-                // 内容
-                Text(
-                    text = "发现新版本",
-                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-                    fontSize = 13.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = updateVer!!,
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 14.dp),
-                    fontSize = 12.sp,
-                    color = Color(0xFF8E8E93),
                     textAlign = TextAlign.Center
                 )
                 if (updateProgress >= 0) {
