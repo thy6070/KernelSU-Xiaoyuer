@@ -1575,8 +1575,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(430.dp)
-                    .padding(bottom = 90.dp)
+                    .height(420.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
