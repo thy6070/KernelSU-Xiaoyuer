@@ -261,8 +261,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             contentColor = Color.Black,
             // 去掉 Material3 默认的 640dp 最大宽度限制，平板上才能真正铺满
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            // 面板用连续曲率圆角
-            shape = SmoothCornerShape(20.dp),
+            // 卡密面板：小连续曲率
+            shape = SmoothCornerShape(12.dp),
             // 完全禁止拖拽手势（面板不能被上下拖动）
             sheetGesturesEnabled = false,
             // 去掉顶部那个可以往下拉的小把手
@@ -1227,9 +1227,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { showSearch = false },
             sheetState = searchSheetState,
             containerColor = Color(0xFFF2F2F7),
-            // 与卡密登录面板同款连续曲率圆角
-            shape = SmoothCornerShape(20.dp),
-            // 去掉 640dp 宽度上限，平板上铺满
+            // 与卡密登录同款：小连续曲率、全宽
+            shape = SmoothCornerShape(12.dp),
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
@@ -1310,7 +1309,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
                     items(searchResults.size) { i ->
                         val r = searchResults[i]
-                        Column {
+                        // 结果逐条淡入
+                        val rowAlpha = remember(r) { androidx.compose.animation.core.Animatable(0f) }
+                        LaunchedEffect(r) {
+                            kotlinx.coroutines.delay((i % 8) * 30L)
+                            rowAlpha.animateTo(1f, tween(160))
+                        }
+                        Column(modifier = Modifier.graphicsLayer { alpha = rowAlpha.value }) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1405,8 +1410,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { if (updateProgress < 0) updateVer = null },
             properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnClickOutside = updateProgress < 0,
-                dismissOnBackPress = updateProgress < 0
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false
             )
         ) {
             Column(
@@ -1414,38 +1419,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .width(280.dp)
                     .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
-                    // 描边与灵动岛同款
-                    .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
+                    // 描边与灵动岛同款：0.5dp 细边
+                    .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
             ) {
-                // 标题
+                // 内容：只保留「发现新版本」（删掉「提示」标题和版本号小字）
                 Text(
-                    text = "提示",
-                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 12.dp),
+                    text = "发现新版本",
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.Black,
-                    textAlign = TextAlign.Center
-                )
-                // 标题下分割线
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(0.5.dp)
-                        .background(Color(0x33000000))
-                )
-                // 内容
-                Text(
-                    text = "发现新版本",
-                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-                    fontSize = 13.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = updateVer!!,
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 14.dp),
-                    fontSize = 12.sp,
-                    color = Color(0xFF8E8E93),
                     textAlign = TextAlign.Center
                 )
                 if (updateProgress >= 0) {
@@ -1480,9 +1463,29 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .height(0.5.dp)
                         .background(Color(0x33000000))
                 )
-                // 更新：蓝字文字按钮；进度中隐藏
+                // 左红取消 / 右蓝更新（进度中隐藏整行）
                 if (updateProgress < 0) {
-                    IosTextButton("更新", Color(0xFF007AFF)) {
+                    Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { updateVer = null },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .width(0.5.dp)
+                                .fillMaxHeight()
+                                .background(Color(0x33000000))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable {
 
                     if (updateProgress < 0) {
                         updateProgress = 0
@@ -1536,6 +1539,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                         }
                     }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("更新", fontSize = 17.sp, color = Color(0xFF007AFF))
+                        }
                     }
                 }
             }
@@ -1546,154 +1554,254 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val pickList = uiPicker
     val pickTitle = uiPickerTitle
     if (pickList != null) {
-        // 与卡密登录同款：底部半屏面板（滑入/滑出动画由 ModalBottomSheet 提供）
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
+        val pickScope = rememberCoroutineScope()
+        val closePick: () -> Unit = {
+            pickScope.launch {
+                try {
+                    pickSheetState.hide()
+                } catch (t: Throwable) {
+                }
+                uiPicker = null
+                uiPickerSelected = null
+                uiPickerIcons = null
+            }
+        }
+        val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
         androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { uiPicker = null },
+            onDismissRequest = { closePick() },
             sheetState = pickSheetState,
-            containerColor = Color.Transparent,
-            shape = androidx.compose.ui.graphics.RectangleShape,
+            containerColor = Color(0xFFF2F2F7),
+            // 小连续曲率
+            shape = SmoothCornerShape(12.dp),
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            // 允许下拉关闭（skipPartiallyExpanded 保证不会半展开）
+            sheetGesturesEnabled = true,
+            // 去掉 sheet 自带的导航栏 insets（否则和下面的 navigationBarsPadding 叠加出双倍白条）
+            contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
             dragHandle = null
         ) {
-            // 外层 Column：卡片和按钮垂直排列，宽度与展开的灵动岛一致
-            val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    // 点击面板空白处收起
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
                     ) {
-                        uiPicker = null
-                        uiPickerSelected = null
-                        uiPickerIcons = null
+                        closePick()
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-            Column(
-                modifier = Modifier
-                    .width(pickW)
-                    .clip(SmoothCornerShape(20.dp))
-                    // iOS 白色主题
-                    .background(Color(0xFFF2F2F7))
-                    // 黑色描边（稍粗）
-                    .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
-            ) {
-                Text(
-                    text = pickTitle ?: "选择",
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                    fontSize = 15.sp,
-                    color = Color(0xFF8E8E93),
-                    textAlign = TextAlign.Center
-                )
-                androidx.compose.foundation.lazy.LazyColumn(
-                    // 一次显示 5 个胶囊按钮（每个约 44dp）
-                    modifier = Modifier.heightIn(max = 168.dp)
+                // 卡片（标题 + 列表 + 按钮一体）
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
                 ) {
-                    items(pickList.size) { i ->
-                        val item = pickList[i]
-                        val icon = uiPickerIcons?.getOrNull(i)
-                        // iOS 列表行：白底黑字 + 行间分割线
-                        Column {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (pickTitle == "选择要重置的应用" && uiPickerSelected == item) Color(0x4D007AFF)
-                                        else Color.Transparent
-                                    )
-                                    .clickable {
-                                        if (pickTitle == "选择要重置的应用") {
-                                            uiPickerSelected = item
-                                        } else {
-                                            uiPickerAction?.invoke(item)
+                    // 打开时逐段淡入（顶部 → 列表）
+                    val topAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+                    LaunchedEffect(Unit) {
+                        topAlpha.animateTo(1f, tween(180))
+                    }
+                    // 顶部：左红取消 / 标题 / 右蓝确定
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { alpha = topAlpha.value }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "取消",
+                            modifier = Modifier.clickable {
+                                if (pickTitle == "选择机型") {
+                                    pickConfirm = "恢复默认机型" to {
+                                        uiPickerAction?.invoke("恢复原样")
+                                        uiPicker = null
+                                        uiPickerIcons = null
+                                    }
+                                } else {
+                                    closePick()
+                                }
+                            },
+                            fontSize = 15.sp,
+                            color = Color(0xFFFF3B30)
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = pickTitle ?: "选择",
+                            fontSize = 15.sp,
+                            color = Color(0xFF8E8E93),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            "确定",
+                            modifier = Modifier.clickable {
+                                val sel = uiPickerSelected
+                                if (sel != null) {
+                                    if (pickTitle == "选择机型") {
+                                        pickConfirm = "设为 $sel" to {
+                                            uiPickerAction?.invoke(sel)
                                             uiPicker = null
                                             uiPickerIcons = null
                                         }
+                                    } else {
+                                        pickConfirm = "重置 $sel" to {
+                                            uiPickerAction?.invoke(sel)
+                                            uiPicker = null
+                                            uiPickerIcons = null
+                                            uiPickerSelected = null
+                                        }
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Start
-                            ) {
-                                if (icon != null) {
-                                    Image(
-                                        bitmap = icon,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(26.dp).clip(SmoothCornerShape(8.dp))
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
                                 }
-                                Text(
-                                    text = item,
-                                    modifier = Modifier.weight(1f),
-                                    fontSize = 15.sp,
-                                    color = Color.Black,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Start
-                                )
-                            }
-                            // 行间分割线（最后一个不画）
-                            if (i < pickList.size - 1) {
-                                Box(
+                            },
+                            fontSize = 15.sp,
+                            color = Color(0xFF007AFF)
+                        )
+                    }
+                    val listAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+                    LaunchedEffect(Unit) {
+                        kotlinx.coroutines.delay(70)
+                        listAlpha.animateTo(1f, tween(200))
+                    }
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        // 半屏再低一点
+                        modifier = Modifier
+                            .heightIn(max = 180.dp)
+                            .graphicsLayer { alpha = listAlpha.value }
+                    ) {
+                        items(pickList.size, key = { pickList[it] }) { i ->
+                            val item = pickList[i]
+                            val icon = uiPickerIcons?.getOrNull(i)
+                            Column {
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = 16.dp)
-                                        .height(0.5.dp)
-                                        .background(Color(0x22000000))
-                                )
+                                        .background(
+                                            if (uiPickerSelected == item) Color(0x4D007AFF)
+                                            else Color.Transparent
+                                        )
+                                        .clickable {
+                                            // 点击只选中（高亮），点顶部「确定」才应用
+                                            uiPickerSelected = item
+                                        }
+                                        .padding(horizontal = 16.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Start
+                                ) {
+                                    if (icon != null) {
+                                        Image(
+                                            bitmap = icon,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(26.dp).clip(SmoothCornerShape(8.dp))
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                    }
+                                    Text(
+                                        text = item,
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = 15.sp,
+                                        color = Color.Black,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Start
+                                    )
+                                }
+                                if (i < pickList.size - 1) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp)
+                                            .height(0.5.dp)
+                                            .background(Color(0x22000000))
+                                    )
+                                }
                             }
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-            // 卡片外独立按钮：改机型=恢复原样（蓝字），游戏清理=重置此应用（红字）
-            val bottomLabel = when (pickTitle) {
-                "选择机型" -> "恢复原样"
-                "选择要重置的应用" -> "重置此应用"
-                else -> null
+        }
+    }
+
+    // 抽屉「确定/取消」的确认弹窗（iOS Alert 样式：文案 + 分割线 + 左红取消/右蓝确定）
+    val pc = pickConfirm
+    if (pc != null) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false
+            )
+        ) {
+            val pop = remember { androidx.compose.animation.core.Animatable(0.92f) }
+            LaunchedEffect(Unit) {
+                pop.animateTo(
+                    1f,
+                    androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 600f)
+                )
             }
-            if (bottomLabel != null) {
-                Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier
+                    .width(240.dp)
+                    .graphicsLayer {
+                        scaleX = pop.value
+                        scaleY = pop.value
+                        alpha = ((pop.value - 0.92f) / 0.08f).coerceIn(0f, 1f)
+                    }
+                    .clip(SmoothCornerShape(20.dp))
+                    .background(Color(0xFFF2F2F7))
+            ) {
+                Text(
+                    text = pc.first,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1C1C1E),
+                    textAlign = TextAlign.Center
+                )
                 Box(
                     modifier = Modifier
-                        .width(pickW)
-                        .clip(SmoothCornerShape(12.dp))
-                        .background(Color(0xFFF2F2F7))
-                        .border(1.2.dp, Color.Black, SmoothCornerShape(12.dp))
-                        .clickable {
-                            if (pickTitle == "选择机型") {
-                                uiPickerAction?.invoke("恢复原样")
-                                uiPicker = null
-                                uiPickerIcons = null
-                            } else {
-                                val sel = uiPickerSelected
-                                if (sel != null) {
-                                    uiPickerAction?.invoke(sel)
-                                }
-                                uiPicker = null
-                                uiPickerIcons = null
-                                uiPickerSelected = null
-                            }
-                        }
-                        .padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = bottomLabel,
-                        fontSize = 15.sp,
-                        color = if (bottomLabel == "重置此应用") Color(0xFFFF3B30) else Color(0xFF007AFF),
-                        textAlign = TextAlign.Center
+                        .fillMaxWidth()
+                        .height(0.5.dp)
+                        .background(Color(0x33000000))
+                )
+                Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { pickConfirm = null },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(0.5.dp)
+                            .fillMaxHeight()
+                            .background(Color(0x33000000))
                     )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable {
+                                val action = pc.second
+                                pickConfirm = null
+                                action()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("确定", fontSize = 15.sp, color = Color(0xFF007AFF))
+                    }
                 }
-            }
-            // 底部留白：按钮与系统导航栏保持距离
-            Spacer(modifier = Modifier.height(50.dp))
             }
         }
     }
@@ -2263,11 +2371,12 @@ private fun ProMaxIsland(
             navClosing = true
             navMode = false
             expanded = false
-            onClearLongPress()
-            kotlinx.coroutines.delay(180)
+            // 立即重置，避免收起过程中先闪回上一级面板（多收一层的观感）
             navTarget = null
             jumpStep = 0
             jumpInput = ""
+            onClearLongPress()
+            kotlinx.coroutines.delay(180)
             navClosing = false
         }
     }
@@ -2340,7 +2449,7 @@ private fun ProMaxIsland(
         }
     }
 
-    // Island.kt motion: 1s bump/sway/lift envelope
+    // Island.kt motion: 1s bump/sway/lift envelope（#1119 原样：展开/选中也晃）
     val bounce = remember { Animatable(0f) }
     LaunchedEffect(expanded, selectedFile) {
         bounce.snapTo(0f)
@@ -2634,14 +2743,14 @@ private fun ProMaxIsland(
                                 .background(Color(0xFF007AFF))
                                 .clickable {
                                     val op = pendingUndo
+                                    // 撤回：按钮和面板一起收起（面板直接收，不经过导航栏状态）
                                     pendingUndo = null
-                                    // 撤回后收起胶囊，避免面板切换/误入其他页面
+                                    navClosing = true
+                                    navMode = false
+                                    navTarget = null
+                                    expanded = false
                                     reopenScope.launch {
-                                        navClosing = true
-                                        navMode = false
-                                        navTarget = null
-                                        expanded = false
-                                        kotlinx.coroutines.delay(200)
+                                        kotlinx.coroutines.delay(220)
                                         navClosing = false
                                     }
                                     if (op != null) {
@@ -3494,11 +3603,11 @@ private fun ProMaxIsland(
                                     }
                                 }
                                 0 -> {
-                                    GradientActionButton("提取", Color(0xFF0A84FF)) { switchStep(7) }
-                                    GradientActionButton("data/储存", Color(0xFF0A84FF)) { switchStep(2) }
-                                    GradientActionButton("文件/文件夹", Color(0xFF0A84FF)) { switchStep(1) }
-                                    GradientActionButton("跳转", Color(0xFF0A84FF)) { switchStep(4) }
-                                    GradientActionButton("搜索", Color(0xFF0A84FF)) { onSearch() }
+                                    GradientActionButton("提取", Color(0xFF0A84FF), 0) { switchStep(7) }
+                                    GradientActionButton("data/储存", Color(0xFF0A84FF), 1) { switchStep(2) }
+                                    GradientActionButton("文件/文件夹", Color(0xFF0A84FF), 2) { switchStep(1) }
+                                    GradientActionButton("跳转", Color(0xFF0A84FF), 3) { switchStep(4) }
+                                    GradientActionButton("搜索", Color(0xFF0A84FF), 4) { onSearch() }
                                 }
                                 1 -> {
                                     Row(
@@ -3826,7 +3935,12 @@ private fun ProMaxIsland(
 }
 
 @Composable
-private fun GradientActionButton(label: String, color: Color, onClick: () -> Unit) {
+private fun GradientActionButton(
+    label: String,
+    color: Color,
+    index: Int = 0,
+    onClick: () -> Unit
+) {
     Text(
         text = label,
         modifier = Modifier
@@ -5220,11 +5334,21 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     // 沿用旧版保存位置：/sdcard/小鱼儿/小鱼儿密钥（第一行）
     LaunchedEffect(Unit) {
         val saved = withContext(Dispatchers.IO) {
+            // 1) root 读
             try {
-                com.topjohnwu.superuser.Shell.cmd(
+                val r = com.topjohnwu.superuser.Shell.cmd(
                     "head -1 \"/storage/emulated/0/小鱼儿/小鱼儿密钥\" 2>/dev/null"
                 ).exec().out.joinToString("").trim()
-            } catch (t: Throwable) { "" }
+                if (r.isNotEmpty()) return@withContext r
+            } catch (t: Throwable) {
+            }
+            // 2) 直接文件读（App 有存储权限时兜底）
+            try {
+                val f = java.io.File("/storage/emulated/0/小鱼儿/小鱼儿密钥")
+                if (f.exists()) f.readLines().firstOrNull()?.trim() ?: "" else ""
+            } catch (t: Throwable) {
+                ""
+            }
         }
         if (saved.isNotEmpty() && key.isEmpty()) key = saved
     }
@@ -5898,6 +6022,11 @@ internal fun restoreDeviceModel(ctx: android.content.Context) {
 
 // 游戏清理：先选应用再清理该应用缓存
 internal fun gameCleanCache(ctx: android.content.Context) {
+    // 立即打开抽屉（先空列表，加载完再填）
+    uiPickerTitle = "选择要重置的应用"
+    uiPicker = emptyList()
+    uiPickerIcons = null
+    uiPickerSelected = null
     // 后台线程加载应用列表，避免卡 UI
     Thread {
     try {
@@ -5928,9 +6057,8 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 .sortedBy { it.loadLabel(pm).toString() }
                 .map { SuApp(it.packageName, it.loadLabel(pm).toString(), it.uid, false, null) }
         }
-        uiPickerTitle = "选择要重置的应用"
-        uiPicker = apps.map { it.label }
-        uiPickerIcons = apps.map { app ->
+        val labels = apps.map { it.label }
+        val icons = apps.map { app ->
             try {
                 val d = pm.getApplicationIcon(app.pkg)
                 val bmp = android.graphics.Bitmap.createBitmap(
@@ -5943,6 +6071,10 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 d.draw(cv)
                 bmp.asImageBitmap()
             } catch (t: Throwable) { null }
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            uiPicker = labels
+            uiPickerIcons = icons
         }
         uiPickerAction = { label ->
             try {
@@ -6187,6 +6319,8 @@ var uiPicker by androidx.compose.runtime.mutableStateOf<List<String>?>(null)
 var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null)
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
 var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
+// 抽屉确定/取消的确认弹窗：文案 + 动作
+var pickConfirm by androidx.compose.runtime.mutableStateOf<Pair<String, () -> Unit>?>(null)
 // 撤销：记录上一个文件操作（移动/复制/重命名/删除）
 data class UndoOp(val kind: String, val src: List<String>, val dst: List<String> = emptyList())
 var pendingUndo by androidx.compose.runtime.mutableStateOf<UndoOp?>(null)
