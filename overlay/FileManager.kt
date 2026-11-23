@@ -1227,10 +1227,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { showSearch = false },
             sheetState = searchSheetState,
             containerColor = Color(0xFFF2F2F7),
-            // 搜索：上边缘连续曲率
-            shape = SmoothCornerShape(20.dp),
-            // 宽度与改机型列表同款（屏宽 36%）
-            sheetMaxWidth = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp,
+            // 与卡密登录同款：直角、全宽
+            shape = androidx.compose.ui.graphics.RectangleShape,
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
             Column(
@@ -1460,7 +1459,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 // 左红取消 / 右蓝更新（进度中隐藏整行）
                 if (updateProgress < 0) {
-                    Row(modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -1572,6 +1571,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             shape = androidx.compose.ui.graphics.RectangleShape,
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             sheetGesturesEnabled = false,
+            // 去掉 sheet 自带的导航栏 insets（否则和下面的 navigationBarsPadding 叠加出双倍白条）
+            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
             dragHandle = null
         ) {
             Column(
@@ -1707,7 +1708,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // 抽屉「确定/取消」的确认弹窗（iOS Alert 样式：文案 + 分割线 + 左红取消/右蓝确定）
     val pc = pickConfirm
     if (pc != null) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { pickConfirm = null }) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false
+            )
+        ) {
             Column(
                 modifier = Modifier
                     .width(240.dp)
@@ -1718,7 +1725,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     text = pc.first,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 20.dp),
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
@@ -1730,7 +1737,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .height(0.5.dp)
                         .background(Color(0x33000000))
                 )
-                Row(modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -1738,7 +1745,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable { pickConfirm = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
+                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
                     }
                     Box(
                         modifier = Modifier
@@ -1757,7 +1764,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("确定", fontSize = 17.sp, color = Color(0xFF007AFF))
+                        Text("确定", fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
