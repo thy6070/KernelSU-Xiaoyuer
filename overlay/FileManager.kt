@@ -198,8 +198,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val BG_COLOR = 0xFF2B2B2B.toInt()
 private const val TILE_COLOR = 0xFF3A3A3A.toInt()
-private const val TEXT_COLOR = 0xFFEDEDED.toInt()
-private const val FOLDER_ICON = 0xFFD6D6D6.toInt()
+private const val TEXT_COLOR = 0xFF1C1C1E.toInt()
+private const val FOLDER_ICON = 0xFF007AFF.toInt()
 private const val FILE_ICON = 0xFF9A9A9A.toInt()
 
 private val apkIconCache = ConcurrentHashMap<String, ImageBitmap?>()
@@ -457,7 +457,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // 目录滚动位置（根层共享，避免 key 重建丢状态）
     val dirScroll = remember { mutableStateMapOf<String, Int>() }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    // 默认白色背景；只有设置了背景图/视频才显示
+    Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
         // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
         androidx.compose.ui.viewinterop.AndroidView(
             factory = { ctx ->
@@ -488,6 +489,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     } catch (t: Throwable) {}
                     iv
+                } else if (!java.io.File(ctx.filesDir, "bg_video.mp4").exists()) {
+                    // 未设置任何背景 → 透明（露出白色底）
+                    android.view.View(ctx)
                 } else {
                 val tv = android.view.TextureView(ctx)
                 // 横屏模式：视频旋转 90°
