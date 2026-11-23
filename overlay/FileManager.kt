@@ -1546,12 +1546,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val pickList = uiPicker
     val pickTitle = uiPickerTitle
     if (pickList != null) {
-        // 与卡密登录同款：底部半屏面板（滑入/滑出动画由 ModalBottomSheet 提供）
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
         val pickScope = rememberCoroutineScope()
-        // 统一收起：交给 sheetState.hide() 做平滑下滑动画，动完再清状态
         val closePick: () -> Unit = {
             pickScope.launch {
                 try {
@@ -1563,23 +1561,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 uiPickerIcons = null
             }
         }
+        val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
             sheetState = pickSheetState,
             containerColor = Color.Transparent,
             shape = androidx.compose.ui.graphics.RectangleShape,
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            // 禁止拖动/折叠：按钮位置固定
             sheetGesturesEnabled = false,
             dragHandle = null
         ) {
-            // 外层 Column：卡片和按钮垂直排列，宽度与展开的灵动岛一致
-            val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    // 点击面板空白处收起
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
@@ -1588,125 +1583,120 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-            Column(
-                modifier = Modifier
-                    .width(pickW)
-                    .clip(SmoothCornerShape(20.dp))
-                    // iOS 白色主题
-                    .background(Color(0xFFF2F2F7))
-                    // 描边与灵动岛同款：0.5dp 细边
-                    .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
-            ) {
-                Text(
-                    text = pickTitle ?: "选择",
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                    fontSize = 15.sp,
-                    color = Color(0xFF8E8E93),
-                    textAlign = TextAlign.Center
-                )
-                androidx.compose.foundation.lazy.LazyColumn(
-                    // 一次显示 5 个胶囊按钮（每个约 44dp）
-                    modifier = Modifier.heightIn(max = 210.dp)
+                // 卡片（里面嵌列表）
+                Column(
+                    modifier = Modifier
+                        .width(pickW)
+                        .clip(SmoothCornerShape(20.dp))
+                        .background(Color(0xFFF2F2F7))
+                        .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
                 ) {
-                    items(pickList.size) { i ->
-                        val item = pickList[i]
-                        val icon = uiPickerIcons?.getOrNull(i)
-                        // iOS 列表行：白底黑字 + 行间分割线
-                        Column {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (pickTitle == "选择要重置的应用" && uiPickerSelected == item) Color(0x4D007AFF)
-                                        else Color.Transparent
-                                    )
-                                    .clickable {
-                                        if (pickTitle == "选择要重置的应用") {
-                                            uiPickerSelected = item
-                                        } else {
-                                            uiPickerAction?.invoke(item)
-                                            uiPicker = null
-                                            uiPickerIcons = null
-                                        }
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Start
-                            ) {
-                                if (icon != null) {
-                                    Image(
-                                        bitmap = icon,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(26.dp).clip(SmoothCornerShape(8.dp))
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                }
-                                Text(
-                                    text = item,
-                                    modifier = Modifier.weight(1f),
-                                    fontSize = 15.sp,
-                                    color = Color.Black,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Start
-                                )
-                            }
-                            // 行间分割线（最后一个不画）
-                            if (i < pickList.size - 1) {
-                                Box(
+                    Text(
+                        text = pickTitle ?: "选择",
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                        fontSize = 15.sp,
+                        color = Color(0xFF8E8E93),
+                        textAlign = TextAlign.Center
+                    )
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.heightIn(max = 240.dp)
+                    ) {
+                        items(pickList.size) { i ->
+                            val item = pickList[i]
+                            val icon = uiPickerIcons?.getOrNull(i)
+                            Column {
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = 16.dp)
-                                        .height(0.5.dp)
-                                        .background(Color(0x22000000))
-                                )
+                                        .background(
+                                            if (pickTitle == "选择要重置的应用" && uiPickerSelected == item) Color(0x4D007AFF)
+                                            else Color.Transparent
+                                        )
+                                        .clickable {
+                                            if (pickTitle == "选择要重置的应用") {
+                                                uiPickerSelected = item
+                                            } else {
+                                                uiPickerAction?.invoke(item)
+                                                uiPicker = null
+                                                uiPickerIcons = null
+                                            }
+                                        }
+                                        .padding(horizontal = 16.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Start
+                                ) {
+                                    if (icon != null) {
+                                        Image(
+                                            bitmap = icon,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(26.dp).clip(SmoothCornerShape(8.dp))
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                    }
+                                    Text(
+                                        text = item,
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = 15.sp,
+                                        color = Color.Black,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Start
+                                    )
+                                }
+                                if (i < pickList.size - 1) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp)
+                                            .height(0.5.dp)
+                                            .background(Color(0x22000000))
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
-            // 卡片外独立按钮：改机型=恢复原样（蓝字），游戏清理=重置此应用（红字）
-            val bottomLabel = when (pickTitle) {
-                "选择机型" -> "恢复原样"
-                "选择要重置的应用" -> "重置此应用"
-                else -> null
-            }
-            if (bottomLabel != null) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Box(
-                    modifier = Modifier
-                        .width(pickW)
-                        .clip(SmoothCornerShape(12.dp))
-                        .background(Color(0xFFF2F2F7))
-                        .border(0.5.dp, Color(0x33000000), SmoothCornerShape(12.dp))
-                        .clickable {
-                            if (pickTitle == "选择机型") {
-                                uiPickerAction?.invoke("恢复原样")
-                                uiPicker = null
-                                uiPickerIcons = null
-                            } else {
-                                val sel = uiPickerSelected
-                                if (sel != null) {
-                                    uiPickerAction?.invoke(sel)
-                                }
-                                uiPicker = null
-                                uiPickerIcons = null
-                                uiPickerSelected = null
-                            }
-                        }
-                        .padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = bottomLabel,
-                        fontSize = 15.sp,
-                        color = if (bottomLabel == "重置此应用") Color(0xFFFF3B30) else Color(0xFF007AFF),
-                        textAlign = TextAlign.Center
-                    )
+                // 卡片外独立按钮
+                val bottomLabel = when (pickTitle) {
+                    "选择机型" -> "恢复原样"
+                    "选择要重置的应用" -> "重置此应用"
+                    else -> null
                 }
-            }
-            // 按钮下方留白：避开系统手势条，按钮完整显示
-            Spacer(modifier = Modifier.height(64.dp))
+                if (bottomLabel != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(pickW)
+                            .clip(SmoothCornerShape(12.dp))
+                            .background(Color(0xFFF2F2F7))
+                            .border(0.5.dp, Color(0x33000000), SmoothCornerShape(12.dp))
+                            .clickable {
+                                if (pickTitle == "选择机型") {
+                                    uiPickerAction?.invoke("恢复原样")
+                                    uiPicker = null
+                                    uiPickerIcons = null
+                                } else {
+                                    val sel = uiPickerSelected
+                                    if (sel != null) {
+                                        uiPickerAction?.invoke(sel)
+                                    }
+                                    uiPicker = null
+                                    uiPickerIcons = null
+                                    uiPickerSelected = null
+                                }
+                            }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = bottomLabel,
+                            fontSize = 15.sp,
+                            color = if (bottomLabel == "重置此应用") Color(0xFFFF3B30) else Color(0xFF007AFF),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
