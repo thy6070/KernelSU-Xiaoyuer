@@ -1578,6 +1578,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // 整体上移：底部留白把面板推离屏幕底边
+                    .padding(bottom = 80.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
@@ -1705,7 +1707,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(30.dp))
+            // 按钮下方留白：避开系统手势条，按钮完整显示
+            Spacer(modifier = Modifier.height(64.dp))
             }
         }
     }
@@ -2352,12 +2355,8 @@ private fun ProMaxIsland(
         }
     }
 
-    // Island.kt motion: 1s bump/sway/lift envelope
-    val bounce = remember { Animatable(0f) }
-    LaunchedEffect(expanded, selectedFile) {
-        bounce.snapTo(0f)
-        bounce.animateTo(1f, tween(1000))
-    }
+    // Island.kt motion: 点击反馈（仅点击触发；展开/收起不晃）
+    val bounce = remember { Animatable(1f) }
     val bt = bounce.value
     val bump = 1f + 0.06f * sin(bt * PI.toFloat())
     val sway = 6f * sin(bt * 9.424778f) * (1f - bt)
