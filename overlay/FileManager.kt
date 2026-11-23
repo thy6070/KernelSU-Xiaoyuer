@@ -1433,13 +1433,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     color = Color.Black,
                     textAlign = TextAlign.Center
                 )
-                Text(
-                    text = updateVer!!,
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 14.dp),
-                    fontSize = 12.sp,
-                    color = Color(0xFF8E8E93),
-                    textAlign = TextAlign.Center
-                )
+                // 版本号小字已删除（只显示「发现新版本」一行）
+                Spacer(modifier = Modifier.height(14.dp))
                 if (updateProgress >= 0) {
                     // 实线进度条：轨道 + 填充（直接覆盖过去，无虚线/缩短）
                     Box(
@@ -1575,7 +1570,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(430.dp)
+                    .heightIn(max = 520.dp)
                     .padding(bottom = 90.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
@@ -1590,7 +1585,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .width(pickW)
-                    .weight(1f)
                     .clip(SmoothCornerShape(20.dp))
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
@@ -1605,7 +1599,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.height(240.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
