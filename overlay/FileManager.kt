@@ -1229,19 +1229,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             containerColor = Color(0xFFF2F2F7),
             // 与卡密登录面板同款连续曲率圆角
             shape = SmoothCornerShape(20.dp),
-            // 宽度与改机型列表同款（屏宽 36%）
-            sheetMaxWidth = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp,
+            // 去掉 640dp 宽度上限，平板上铺满
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
-            // 宽度与改机型列表同款（屏宽 36%）
-            val searchW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
             Column(
                 modifier = Modifier
-                    .width(searchW)
+                    .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Spacer(Modifier.height(10.dp))
@@ -1351,7 +1345,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                         }
                     }
-            }
                 }
             }
         }
@@ -1421,20 +1414,40 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .width(280.dp)
                     .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
-                    // 描边与灵动岛同款：0.5dp 细边
-                    .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
+                    // 描边与灵动岛同款
+                    .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
             ) {
-                // 内容（放大，无标题栏）
+                // 标题
                 Text(
-                    text = "发现新版本",
-                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                    text = "提示",
+                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 12.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.Black,
                     textAlign = TextAlign.Center
                 )
-                // 版本号小字已删除（只显示「发现新版本」一行）
-                Spacer(modifier = Modifier.height(14.dp))
+                // 标题下分割线
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.5.dp)
+                        .background(Color(0x33000000))
+                )
+                // 内容
+                Text(
+                    text = "发现新版本",
+                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                    fontSize = 13.sp,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = updateVer!!,
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 14.dp),
+                    fontSize = 12.sp,
+                    color = Color(0xFF8E8E93),
+                    textAlign = TextAlign.Center
+                )
                 if (updateProgress >= 0) {
                     // 实线进度条：轨道 + 填充（直接覆盖过去，无虚线/缩短）
                     Box(
@@ -1537,28 +1550,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
-        val pickScope = rememberCoroutineScope()
-        // 打开即完全展开（避免初始停在半展开状态把底部按钮裁掉）
-        LaunchedEffect(Unit) {
-            try {
-                pickSheetState.expand()
-            } catch (t: Throwable) {
-            }
-        }
-        // 统一收起：交给 sheetState.hide() 做平滑下滑动画，动完再清状态
-        val closePick: () -> Unit = {
-            pickScope.launch {
-                try {
-                    pickSheetState.hide()
-                } catch (t: Throwable) {
-                }
-                uiPicker = null
-                uiPickerSelected = null
-                uiPickerIcons = null
-            }
-        }
         androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { closePick() },
+            onDismissRequest = { uiPicker = null },
             sheetState = pickSheetState,
             containerColor = Color.Transparent,
             shape = androidx.compose.ui.graphics.RectangleShape,
@@ -1570,15 +1563,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .padding(bottom = 90.dp)
                     .navigationBarsPadding()
                     // 点击面板空白处收起
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
                     ) {
-                        closePick()
+                        uiPicker = null
+                        uiPickerSelected = null
+                        uiPickerIcons = null
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -1588,8 +1581,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .clip(SmoothCornerShape(20.dp))
                     // iOS 白色主题
                     .background(Color(0xFFF2F2F7))
-                    // 描边与灵动岛同款：0.5dp 细边
-                    .border(0.5.dp, Color(0x33000000), SmoothCornerShape(20.dp))
+                    // 黑色描边（稍粗）
+                    .border(1.5.dp, Color.Black, SmoothCornerShape(20.dp))
             ) {
                 Text(
                     text = pickTitle ?: "选择",
@@ -1599,7 +1592,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textAlign = TextAlign.Center
                 )
                 androidx.compose.foundation.lazy.LazyColumn(
-                    modifier = Modifier.height(240.dp)
+                    // 一次显示 5 个胶囊按钮（每个约 44dp）
+                    modifier = Modifier.heightIn(max = 168.dp)
                 ) {
                     items(pickList.size) { i ->
                         val item = pickList[i]
@@ -1671,7 +1665,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .width(pickW)
                         .clip(SmoothCornerShape(12.dp))
                         .background(Color(0xFFF2F2F7))
-                        .border(0.5.dp, Color(0x33000000), SmoothCornerShape(12.dp))
+                        .border(1.2.dp, Color.Black, SmoothCornerShape(12.dp))
                         .clickable {
                             if (pickTitle == "选择机型") {
                                 uiPickerAction?.invoke("恢复原样")
@@ -1698,7 +1692,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            // 底部留白：按钮与系统导航栏保持距离
+            Spacer(modifier = Modifier.height(50.dp))
             }
         }
     }
@@ -2054,6 +2049,7 @@ private fun ProMaxIsland(
     var showWave by remember { mutableStateOf(false) }
     var navMode by remember { mutableStateOf(false) }
     var navTarget by remember { mutableStateOf<String?>(null) }
+
     var navClosing by remember { mutableStateOf(false) }
     var jumpStep by remember { mutableStateOf(0) }
     var jumpSide by remember { mutableStateOf(0) }
@@ -2344,17 +2340,11 @@ private fun ProMaxIsland(
         }
     }
 
-    // Island.kt motion: 点击反馈（只在点胶囊时晃，展开/收起时不动）
-    val bounce = remember { Animatable(1f) }
-    // 面板撞入时的胶囊受撞缩放：左右略放大、往下多扩、往上少扩，然后慢慢回落
-    val hitScale = remember { Animatable(1f) }
-    // 撞击幅度按面板大小判定：小面板（如撤回）轻撞，大面板（导航/终端）重撞
-    fun hitPill(big: Boolean) {
-        reopenScope.launch {
-            val peak = if (big) 1.11f else 1.055f
-            hitScale.animateTo(peak, spring(dampingRatio = 0.42f, stiffness = 420f))
-            hitScale.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 300f))
-        }
+    // Island.kt motion: 1s bump/sway/lift envelope
+    val bounce = remember { Animatable(0f) }
+    LaunchedEffect(expanded, selectedFile) {
+        bounce.snapTo(0f)
+        bounce.animateTo(1f, tween(1000))
     }
     val bt = bounce.value
     val bump = 1f + 0.06f * sin(bt * PI.toFloat())
@@ -2496,10 +2486,8 @@ private fun ProMaxIsland(
                 .zIndex(1f)
                 .width(pillW)
                 .graphicsLayer {
-                    scaleX = bump * hitScale.value
-                    scaleY = bump * hitScale.value
-                    // 缩放原点偏上：上下都有放大，下面略多
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.18f)
+                    scaleX = bump
+                    scaleY = bump
                     translationX = with(density) { sway.dp.toPx() }
                     translationY = with(density) { lift.dp.toPx() }
                 }
@@ -2513,8 +2501,6 @@ private fun ProMaxIsland(
                         pendingUndo = null
                         // let the panels shrink before the pill settles, so closing keeps its animation
                         val hadNav = navMode || navTarget != null
-                        // 收起：面板撞入胶囊（幅度按面板大小判定）
-                        hitPill(big = hadNav)
                         navMode = false
                         expanded = false
                         onClearLongPress()
@@ -2619,24 +2605,14 @@ private fun ProMaxIsland(
 
             AnimatedVisibility(
                 visible = (navMode || navTarget != null) && !navClosing,
-                // 展开：平滑丝滑（缓动，不带弹簧抖动）
                 enter = expandVertically(
-                    animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
                     expandFrom = Alignment.Bottom
-                ) + fadeIn(tween(240)) + androidx.compose.animation.scaleIn(
-                    initialScale = 0.94f,
-                    animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
-                ),
-                // 收起：像 iOS 音乐播放器收回灵动岛——往上缩 + 缩放撞入 + 淡出
+                ) + fadeIn(tween(180)),
                 exit = shrinkVertically(
                     animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
                     shrinkTowards = Alignment.Bottom
-                ) + androidx.compose.animation.scaleOut(
-                    targetScale = 0.35f,
-                    animationSpec = androidx.compose.animation.core.tween(160),
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
-                ) + fadeOut(tween(160))
+                ) + fadeOut(tween(90))
             ) {
                 Column(
                     modifier = Modifier
