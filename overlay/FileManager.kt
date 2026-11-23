@@ -261,8 +261,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             contentColor = Color.Black,
             // 去掉 Material3 默认的 640dp 最大宽度限制，平板上才能真正铺满
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            // 卡密面板也不要圆角
-            shape = androidx.compose.ui.graphics.RectangleShape,
+            // 卡密面板：小连续曲率
+            shape = SmoothCornerShape(12.dp),
             // 完全禁止拖拽手势（面板不能被上下拖动）
             sheetGesturesEnabled = false,
             // 去掉顶部那个可以往下拉的小把手
@@ -1227,8 +1227,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { showSearch = false },
             sheetState = searchSheetState,
             containerColor = Color(0xFFF2F2F7),
-            // 与卡密登录同款：直角、全宽
-            shape = androidx.compose.ui.graphics.RectangleShape,
+            // 与卡密登录同款：小连续曲率、全宽
+            shape = SmoothCornerShape(12.dp),
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
             dragHandle = null
         ) {
@@ -3954,7 +3954,11 @@ private fun GradientActionButton(
             .fillMaxWidth()
             .graphicsLayer {
                 this.alpha = alpha.value
-                translationY = (1f - alpha.value) * 10f
+                // 从下往上 + 由小放大（逐个显示放大）
+                translationY = (1f - alpha.value) * 12f
+                val sc = 0.82f + 0.18f * alpha.value
+                scaleX = sc
+                scaleY = sc
             }
             .clickable { onClick() }
             .background(color, RoundedCornerShape(percent = 50))
