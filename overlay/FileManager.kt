@@ -1309,7 +1309,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
                     items(searchResults.size) { i ->
                         val r = searchResults[i]
-                        Column {
+                        // 结果逐条淡入
+                        val rowAlpha = remember(r) { androidx.compose.animation.core.Animatable(0f) }
+                        LaunchedEffect(r) {
+                            kotlinx.coroutines.delay((i % 8) * 30L)
+                            rowAlpha.animateTo(1f, tween(160))
+                        }
+                        Column(modifier = Modifier.graphicsLayer { alpha = rowAlpha.value }) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1568,9 +1574,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { closePick() },
             sheetState = pickSheetState,
             containerColor = Color(0xFFF2F2F7),
-            shape = androidx.compose.ui.graphics.RectangleShape,
+            // 小连续曲率
+            shape = SmoothCornerShape(12.dp),
             sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            sheetGesturesEnabled = false,
+            // 允许下拉关闭（skipPartiallyExpanded 保证不会半展开）
+            sheetGesturesEnabled = true,
             // 去掉 sheet 自带的导航栏 insets（否则和下面的 navigationBarsPadding 叠加出双倍白条）
             contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
             dragHandle = null
@@ -1592,9 +1600,17 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     modifier = Modifier
                         .fillMaxWidth()
                 ) {
+                    // 打开时逐段淡入（顶部 → 列表）
+                    val topAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+                    LaunchedEffect(Unit) {
+                        topAlpha.animateTo(1f, tween(180))
+                    }
                     // 顶部：左红取消 / 标题 / 右蓝确定
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { alpha = topAlpha.value }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -1646,9 +1662,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             color = Color(0xFF007AFF)
                         )
                     }
+                    val listAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+                    LaunchedEffect(Unit) {
+                        kotlinx.coroutines.delay(70)
+                        listAlpha.animateTo(1f, tween(200))
+                    }
                     androidx.compose.foundation.lazy.LazyColumn(
                         // 半屏再低一点
-                        modifier = Modifier.heightIn(max = 180.dp)
+                        modifier = Modifier
+                            .heightIn(max = 180.dp)
+                            .graphicsLayer { alpha = listAlpha.value }
                     ) {
                         items(pickList.size, key = { pickList[it] }) { i ->
                             val item = pickList[i]
@@ -1715,9 +1738,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 dismissOnBackPress = false
             )
         ) {
+            val pop = remember { androidx.compose.animation.core.Animatable(0.92f) }
+            LaunchedEffect(Unit) {
+                pop.animateTo(
+                    1f,
+                    androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 600f)
+                )
+            }
             Column(
                 modifier = Modifier
                     .width(240.dp)
+                    .graphicsLayer {
+                        scaleX = pop.value
+                        scaleY = pop.value
+                        alpha = ((pop.value - 0.92f) / 0.08f).coerceIn(0f, 1f)
+                    }
                     .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
             ) {
@@ -2336,11 +2371,12 @@ private fun ProMaxIsland(
             navClosing = true
             navMode = false
             expanded = false
-            onClearLongPress()
-            kotlinx.coroutines.delay(180)
+            // 立即重置，避免收起过程中先闪回上一级面板（多收一层的观感）
             navTarget = null
             jumpStep = 0
             jumpInput = ""
+            onClearLongPress()
+            kotlinx.coroutines.delay(180)
             navClosing = false
         }
     }
@@ -2708,14 +2744,14 @@ private fun ProMaxIsland(
                                 .background(Color(0xFF007AFF))
                                 .clickable {
                                     val op = pendingUndo
+                                    // 撤回：按钮和面板一起收起（面板直接收，不经过导航栏状态）
                                     pendingUndo = null
-                                    // 撤回后收起胶囊，避免面板切换/误入其他页面
+                                    navClosing = true
+                                    navMode = false
+                                    navTarget = null
+                                    expanded = false
                                     reopenScope.launch {
-                                        navClosing = true
-                                        navMode = false
-                                        navTarget = null
-                                        expanded = false
-                                        kotlinx.coroutines.delay(200)
+                                        kotlinx.coroutines.delay(220)
                                         navClosing = false
                                     }
                                     if (op != null) {
@@ -3568,11 +3604,11 @@ private fun ProMaxIsland(
                                     }
                                 }
                                 0 -> {
-                                    GradientActionButton("提取", Color(0xFF0A84FF)) { switchStep(7) }
-                                    GradientActionButton("data/储存", Color(0xFF0A84FF)) { switchStep(2) }
-                                    GradientActionButton("文件/文件夹", Color(0xFF0A84FF)) { switchStep(1) }
-                                    GradientActionButton("跳转", Color(0xFF0A84FF)) { switchStep(4) }
-                                    GradientActionButton("搜索", Color(0xFF0A84FF)) { onSearch() }
+                                    GradientActionButton("提取", Color(0xFF0A84FF), 0) { switchStep(7) }
+                                    GradientActionButton("data/储存", Color(0xFF0A84FF), 1) { switchStep(2) }
+                                    GradientActionButton("文件/文件夹", Color(0xFF0A84FF), 2) { switchStep(1) }
+                                    GradientActionButton("跳转", Color(0xFF0A84FF), 3) { switchStep(4) }
+                                    GradientActionButton("搜索", Color(0xFF0A84FF), 4) { onSearch() }
                                 }
                                 1 -> {
                                     Row(
@@ -3900,11 +3936,26 @@ private fun ProMaxIsland(
 }
 
 @Composable
-private fun GradientActionButton(label: String, color: Color, onClick: () -> Unit) {
+private fun GradientActionButton(
+    label: String,
+    color: Color,
+    index: Int = 0,
+    onClick: () -> Unit
+) {
+    // 展开时逐条出现（stagger）
+    val alpha = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(index * 30L)
+        alpha.animateTo(1f, tween(140, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
     Text(
         text = label,
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                this.alpha = alpha.value
+                translationY = (1f - alpha.value) * 10f
+            }
             .clickable { onClick() }
             .background(color, RoundedCornerShape(percent = 50))
             .padding(vertical = 11.dp),
