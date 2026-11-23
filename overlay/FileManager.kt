@@ -1405,8 +1405,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { if (updateProgress < 0) updateVer = null },
             properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnClickOutside = updateProgress < 0,
-                dismissOnBackPress = updateProgress < 0
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false
             )
         ) {
             Column(
@@ -1534,6 +1534,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                         }
                     }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("更新", fontSize = 17.sp, color = Color(0xFF007AFF))
+                        }
                     }
                 }
             }
@@ -1553,13 +1558,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 try {
                     pickSheetState.hide()
                 } catch (t: Throwable) {
-                                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("更新", fontSize = 17.sp, color = Color(0xFF007AFF))
-                        }
-                    }
                 }
+                uiPicker = null
+                uiPickerSelected = null
+                uiPickerIcons = null
             }
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
@@ -1697,8 +1699,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                // 底部安全留白：最后一行不被遮挡
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -1720,7 +1721,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .padding(horizontal = 18.dp, vertical = 20.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    // iOS 系统文字色
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
@@ -5975,7 +5975,7 @@ internal fun restoreDeviceModel(ctx: android.content.Context) {
 
 // 游戏清理：先选应用再清理该应用缓存
 internal fun gameCleanCache(ctx: android.content.Context) {
-    // 立即打开抽屉（先空列表，加载完再填），避免点完等一秒
+    // 立即打开抽屉（先空列表，加载完再填）
     uiPickerTitle = "选择要重置的应用"
     uiPicker = emptyList()
     uiPickerIcons = null
@@ -6025,7 +6025,6 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 bmp.asImageBitmap()
             } catch (t: Throwable) { null }
         }
-        // 加载完成：主线程回填列表和图标（抽屉已经打开）
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             uiPicker = labels
             uiPickerIcons = icons
