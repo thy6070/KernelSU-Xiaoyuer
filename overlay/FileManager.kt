@@ -409,6 +409,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // iOS 风格长按上下文菜单（记录长按位置决定展开方向）
     var ctxMenuPath by remember { mutableStateOf<String?>(null) }
     var ctxMenuRight by remember { mutableStateOf(false) }
+    // 长按行在列表中的序号（菜单贴在那一行分割线附近展开）
+    var ctxMenuRow by remember { mutableStateOf(-1) }
+    // 长按背景截图（模拟 iOS 背景模糊）
+    var ctxBlurBmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    val ctxMenuView = androidx.compose.ui.platform.LocalView.current
     var forceSoPanelTick by remember { mutableStateOf(0) }
     var shareFailTick by remember { mutableStateOf(0) }
     var longPressFromRight by remember { mutableStateOf(false) }
@@ -476,6 +481,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 path = leftPath,
                 dirScroll = dirScroll,
                 pressedPath = longPressPath,
+                onLongPressRow = { _, idx -> ctxMenuRow = idx },
                 onNavigate = { np ->
                     longPressFromRight = false
                     // 切目录：清残留选中（防解压旧包/操作错文件）
@@ -507,6 +513,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 左半屏向右展开，右半屏向左展开
                     ctxMenuRight = false
                     ctxMenuPath = lp
+                    // 截图背景（供菜单弹层做 iOS 式模糊）
+                    try {
+                        val v = (ctxMenuView.parent as? android.view.View) ?: ctxMenuView
+                        val wv = ctxMenuView.rootView
+                        if (wv.width > 0 && wv.height > 0) {
+                            val full = android.graphics.Bitmap.createBitmap(wv.width, wv.height, android.graphics.Bitmap.Config.ARGB_8888)
+                            val cv = android.graphics.Canvas(full)
+                            wv.draw(cv)
+                            val small = android.graphics.Bitmap.createScaledBitmap(
+                                full, (wv.width / 12).coerceAtLeast(1), (wv.height / 12).coerceAtLeast(1), true
+                            )
+                            ctxBlurBmp = android.graphics.Bitmap.createScaledBitmap(small, wv.width, wv.height, true)
+                            full.recycle()
+                        }
+                    } catch (t: Throwable) {}
                 },
                 onFileClick = { picked ->
                     longPressFromRight = false
@@ -538,6 +559,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 path = rightPath,
                 dirScroll = dirScroll,
                 pressedPath = longPressPath,
+                onLongPressRow = { _, idx -> ctxMenuRow = idx },
                 onNavigate = { np2 ->
                     longPressFromRight = true
                     selectedFile = null
@@ -566,8 +588,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     termText = ""
                     longPressPath = lp
                     // 左半屏向右展开，右半屏向左展开
-                    ctxMenuRight = false
+                    ctxMenuRight = true
                     ctxMenuPath = lp
+                    // 截图背景（供菜单弹层做 iOS 式模糊）
+                    try {
+                        val v = (ctxMenuView.parent as? android.view.View) ?: ctxMenuView
+                        val wv = ctxMenuView.rootView
+                        if (wv.width > 0 && wv.height > 0) {
+                            val full = android.graphics.Bitmap.createBitmap(wv.width, wv.height, android.graphics.Bitmap.Config.ARGB_8888)
+                            val cv = android.graphics.Canvas(full)
+                            wv.draw(cv)
+                            val small = android.graphics.Bitmap.createScaledBitmap(
+                                full, (wv.width / 12).coerceAtLeast(1), (wv.height / 12).coerceAtLeast(1), true
+                            )
+                            ctxBlurBmp = android.graphics.Bitmap.createScaledBitmap(small, wv.width, wv.height, true)
+                            full.recycle()
+                        }
+                    } catch (t: Throwable) {}
                 },
                 onFileClick = { picked ->
                     longPressFromRight = true
@@ -1123,12 +1160,43 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { ctxMenuPath = null },
             properties = androidx.compose.ui.window.DialogProperties(
                 dismissOnClickOutside = true,
-                dismissOnBackPress = true
+                dismissOnBackPress = true,
+                usePlatformDefaultWidth = false
             )
         ) {
+            // 去掉系统暗色遮罩：不能盖住被长按放大的那一行
+            val cmView = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                try {
+                    val w = (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+                    w?.setDimAmount(0f)
+                    // 窗口背景透明，露出下面的模糊背景
+                    w?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                } catch (t: Throwable) {}
+            }
             val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier.fillMaxSize()) {
+            // iOS 式背景：整个界面截图模糊铺底
+            val blurBmp = ctxBlurBmp
+            if (blurBmp != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = blurBmp.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0x99000000)))
+            }
+            // 菜单贴在长按行的分割线附近：优先下方，空间不够则上方，避免遮住放大的行
+            val cmRowH = 61.dp
+            val cmTop = (ctxMenuRow.coerceAtLeast(0) * 61).dp
+            val cmMenuH = 6 * 44.dp
+            val cmScreenH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+            val cmBelow = cmTop + cmRowH
+            val cmPlaceBelow = (cmBelow + cmMenuH) < cmScreenH - 40.dp
+            val cmOffsetY = if (cmPlaceBelow) cmBelow else (cmTop - cmMenuH - 4.dp)
             // 从长按位置（右下角）展开：scale 0.86 → 1 + 淡入
             val cmScale = remember { androidx.compose.animation.core.Animatable(0.86f) }
             val cmAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -1140,7 +1208,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
             Column(
                 modifier = Modifier
-                    .align(if (ctxMenuRight) Alignment.CenterStart else Alignment.CenterEnd)
+                    // 顶部对齐；左区域→靠右（往右上/右下），右区域→靠左（往左上/左下）
+                    .align(if (ctxMenuRight) Alignment.TopStart else Alignment.TopEnd)
+                    .offset(y = cmOffsetY.coerceAtLeast(0.dp))
                     .padding(horizontal = 16.dp)
                     .width(260.dp)
                     .graphicsLayer {
@@ -1158,18 +1228,80 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 操作行
                 data class CmItem(val label: String, val red: Boolean = false, val act: () -> Unit)
                 val items = ArrayList<CmItem>()
-                // 菜单动作：设置长按目标后走原面板流程（Screen 内没有 onFileOp 的局部引用）
-                fun cmAct(op: String) {
+                // 直接执行（不弹面板）
+                fun shOp(cmd: String) {
+                    uiScope.launch {
+                        withContext(Dispatchers.IO) {
+                            runCatching {
+                                com.topjohnwu.superuser.Shell.cmd(cmd).exec()
+                            }
+                        }
+                        refreshTick += 1
+                    }
+                }
+                fun quote(p: String) = "'" + p.replace("'", "'\''") + "'"
+                // 删除（直接删）
+                items.add(CmItem("删除", red = true) {
+                    val p = cmPath
+                    ctxMenuPath = null
+                    pendingUndo = null
+                    shOp("rm -rf " + quote(p))
+                })
+                // 分享（直接调系统分享）
+                items.add(CmItem("分享") {
+                    val p = cmPath
+                    ctxMenuPath = null
+                    uiScope.launch {
+                        try {
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                appCtx, appCtx.packageName + ".fileprovider", java.io.File(p)
+                            )
+                            val it = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "*/*"
+                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            appCtx.startActivity(android.content.Intent.createChooser(it, "分享").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                        } catch (t: Throwable) {
+                            android.widget.Toast.makeText(appCtx, "分享失败: " + t.message, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                })
+                // 编辑（文本文件直接打开编辑器）
+                if (!isDirCm) {
+                    items.add(CmItem("编辑") {
+                        val p = cmPath
+                        ctxMenuPath = null
+                        uiScope.launch {
+                            val content = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    com.topjohnwu.superuser.Shell.cmd("cat " + quote(p)).exec().out.joinToString("\n")
+                                }.getOrDefault("")
+                            }
+                            editPath = p
+                            editText = content
+                        }
+                    })
+                }
+                // 重命名 / 复制 / 移动：需要输入或选目标，走原面板
+                items.add(CmItem("重命名") {
                     longPressPath = cmPath
                     longPressIsDir = isDirCm
-                    longPressTick += 1
                     ctxMenuPath = null
-                }
-                items.add(CmItem("删除", red = true) { cmAct("delete") })
-                items.add(CmItem("分享") { cmAct("share") })
-                items.add(CmItem(if (isDirCm) "压缩" else "编辑") { cmAct(if (isDirCm) "zip" else "edit") })
-                items.add(CmItem("复制") { cmAct("copy") })
-                items.add(CmItem("移动") { cmAct("move") })
+                    longPressTick += 1
+                })
+                items.add(CmItem("复制") {
+                    longPressPath = cmPath
+                    longPressIsDir = isDirCm
+                    ctxMenuPath = null
+                    longPressTick += 1
+                })
+                items.add(CmItem("移动") {
+                    longPressPath = cmPath
+                    longPressIsDir = isDirCm
+                    ctxMenuPath = null
+                    longPressTick += 1
+                })
                 items.forEachIndexed { i, it ->
                     Row(
                         modifier = Modifier
@@ -1939,9 +2071,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 if (ms.isNotEmpty()) {
                     val r = ms[findIdx.coerceIn(0, ms.size - 1)]
-                    val layout = et.layout
-                    if (layout != null) {
-                        et.post { et.scrollTo(0, layout.getLineTop(layout.getLineForOffset(r.first))) }
+                    // setSelection 会自动把光标滚到可见区域（比手动 scrollTo 可靠）
+                    et.post {
+                        try { et.setSelection(r.first) } catch (t: Throwable) {}
+                        val layout = et.layout
+                        if (layout != null) {
+                            et.scrollTo(0, (layout.getLineTop(layout.getLineForOffset(r.first)) - et.height / 3).coerceAtLeast(0))
+                        }
                     }
                 }
             }
@@ -2067,6 +2203,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         android.widget.EditText(vctx).apply {
                             editView = this
                             setText(editText)
+                            // 双指缩放字号（Compose 手势被 AndroidView 拦截，这里用原生检测）
+                            val sg = android.view.ScaleGestureDetector(vctx,
+                                object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                                    override fun onScale(d: android.view.ScaleGestureDetector): Boolean {
+                                        editFontScale = (editFontScale * d.scaleFactor).coerceIn(0.6f, 3f)
+                                        textSize = 12f * editFontScale
+                                        return true
+                                    }
+                                })
+                            setOnTouchListener { v, ev ->
+                                sg.onTouchEvent(ev)
+                                false
+                            }
                             setTextColor(android.graphics.Color.WHITE)
                             setBackgroundColor(android.graphics.Color.TRANSPARENT)
                             textSize = 12f * editFontScale
@@ -5207,6 +5356,7 @@ private fun BrowserPane(
     selectedPath: String? = null,
     highlightName: String? = null,
     onLongPress: (String) -> Unit = {},
+    onLongPressRow: (String, Int) -> Unit = { _, _ -> },
     pressedPath: String? = null,
     onRefresh: () -> Unit = {},
     multiSel: Set<String> = emptySet(),
@@ -5347,7 +5497,11 @@ private fun BrowserPane(
                 onClick = {
                     if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
-                onLongClick = { onLongPress(rowPath) }
+                onLongClick = {
+                    // 先记录行号再开菜单，否则菜单会先用旧位置出现再跳
+                    onLongPressRow(rowPath, idx)
+                    onLongPress(rowPath)
+                }
             )
         }
     }
@@ -5491,8 +5645,8 @@ private fun FsRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer {
-                    // 长按时这一行放大一点
-                    val sc = if (isPressed) 1.03f else 1f
+                    // 长按时整行放大（1.06）
+                    val sc = if (isPressed) 1.06f else 1f
                     scaleX = sc
                     scaleY = sc
                 }
