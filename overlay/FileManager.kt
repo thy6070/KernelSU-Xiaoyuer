@@ -1,5 +1,6 @@
 package me.weishu.kernelsu.ui.screen
 
+import androidx.compose.foundation.layout.imePadding
 import android.os.Build
 import android.graphics.Typeface
 import android.view.MotionEvent
@@ -2086,7 +2087,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0x66000000))
-                .then(androidx.compose.foundation.layout.imePadding())
+                .imePadding()
                 .padding(24.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
