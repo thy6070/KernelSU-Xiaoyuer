@@ -163,7 +163,7 @@ jobs:
               os.makedirs(base, exist_ok=True)
               im = src.resize((s, s), Image.LANCZOS)
               im.save(f'{base}/ic_launcher.png')
-              im.save(f'{base}/mod_icon.png')
+              # 与 #1182 一致：App 图标 + 分岛图标换 troll，胶囊 mod_icon 保持原样
               im.save(f'{base}/ic_modules_foreground.png')
               for jp in glob.glob(f'{base}/ic_modules_foreground.jpg'):
                   os.remove(jp)
