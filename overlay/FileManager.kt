@@ -424,6 +424,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // 打开底部面板/Dialog 时重设沉浸式（否则系统栏会被唤出）
     val immersiveView = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.LaunchedEffect(uiPicker != null, showSearch, appMenuPkg != null) {
+        // 面板打开时系统可能重新显示栏：立即 + 延迟各重设一次（sheet 动画期间也会重置）
+        reapplyImmersiveActivity(immersiveView)
+        kotlinx.coroutines.delay(120)
+        reapplyImmersiveActivity(immersiveView)
+        kotlinx.coroutines.delay(220)
         reapplyImmersiveActivity(immersiveView)
     }
     // 长按行在列表中的序号（菜单贴在那一行分割线附近展开）
@@ -1474,12 +1479,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 关闭：ease-in 150ms 缩回淡出后再关（点空白/返回也走这里）
             LaunchedEffect(ctxMenuClosing) {
                 if (ctxMenuClosing) {
-                    // 收起：绕左下角向左下缩回（先缩，再淡出，最后移除 → 不卡顿）
-                    cmScale.animateTo(
-                        0.7f,
-                        tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                    )
-                    cmAlpha.animateTo(0f, tween(140, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                    // 收起：iOS 式干脆（160ms，轻微加速）
+                    kotlinx.coroutines.coroutineScope {
+                        launch {
+                            cmScale.animateTo(
+                                0.7f,
+                                tween(160, easing = androidx.compose.animation.core.FastOutLinearInEasing)
+                            )
+                        }
+                        launch {
+                            cmAlpha.animateTo(0f, tween(160, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                        }
+                    }
                     ctxMenuClosing = false
                     ctxMenuPath = null
                 }
@@ -2007,36 +2018,38 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
-        val pickScope = rememberCoroutineScope()
         val closePick: () -> Unit = {
-            pickScope.launch {
-                try {
-                    pickSheetState.hide()
-                } catch (t: Throwable) {
-                }
-                uiPicker = null
-                uiPickerSelected = null
-                uiPickerIcons = null
-            }
+            uiPicker = null
+            uiPickerSelected = null
+            uiPickerIcons = null
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
-        androidx.compose.material3.ModalBottomSheet(
+        // 自定义 Dialog 抽屉（独立窗口也能保持沉浸式，不唤出系统导航栏）
+        androidx.compose.ui.window.Dialog(
             onDismissRequest = { closePick() },
-            sheetState = pickSheetState,
-            containerColor = Color(0xFFF2F2F7),
-            // 小连续曲率
-            shape = SmoothCornerShape(12.dp),
-            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            // 允许下拉关闭（skipPartiallyExpanded 保证不会半展开）
-            sheetGesturesEnabled = true,
-            // 去掉 sheet 自带的导航栏 insets（否则和下面的 navigationBarsPadding 叠加出双倍白条）
-            contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
-            dragHandle = null
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
         ) {
+            val pickView = androidx.compose.ui.platform.LocalView.current
+            LaunchedEffect(Unit) { applyImmersiveToDialog(pickView) }
+            val pickIn = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(Unit) {
+                pickIn.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            }
+            Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .navigationBarsPadding()
+                    .graphicsLayer {
+                        translationY = (1f - pickIn.value) * 700f
+                        alpha = pickIn.value
+                    }
+                    .clip(SmoothCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .background(Color(0xFFF2F2F7))
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
@@ -2178,6 +2191,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+            }
             }
         }
     }
