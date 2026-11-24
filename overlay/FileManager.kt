@@ -1191,12 +1191,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
             // 菜单贴在长按行的分割线附近：优先下方，空间不够则上方，避免遮住放大的行
             val cmRowH = 61.dp
-            val cmTop = (ctxMenuRow.coerceAtLeast(0) * 61).dp
-            val cmMenuH = 6 * 44.dp
-            val cmScreenH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-            val cmBelow = cmTop + cmRowH
-            val cmPlaceBelow = (cmBelow + cmMenuH) < cmScreenH - 40.dp
-            val cmOffsetY = if (cmPlaceBelow) cmBelow else (cmTop - cmMenuH - 4.dp)
+            val cmTop: androidx.compose.ui.unit.Dp = (ctxMenuRow.coerceAtLeast(0) * 61).toFloat().dp
+            val cmMenuH: androidx.compose.ui.unit.Dp = (6 * 44).toFloat().dp
+            val cmScreenH: androidx.compose.ui.unit.Dp = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.toFloat().dp
+            val cmBelow: androidx.compose.ui.unit.Dp = cmTop + cmRowH
+            val cmPlaceBelow = (cmBelow + cmMenuH) < (cmScreenH - 40.dp)
+            val cmOffsetY: androidx.compose.ui.unit.Dp = if (cmPlaceBelow) cmBelow else (cmTop - cmMenuH - 4.dp)
             // 从长按位置（右下角）展开：scale 0.86 → 1 + 淡入
             val cmScale = remember { androidx.compose.animation.core.Animatable(0.86f) }
             val cmAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
