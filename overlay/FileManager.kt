@@ -210,7 +210,7 @@ private const val FILE_ICON = 0xFF9A9A9A.toInt()
 private val apkIconCache = ConcurrentHashMap<String, ImageBitmap?>()
 private val apkIconMutex = Mutex()
 
-data class ModItem(val id: String, val name: String, val version: String, val desc: String, val disabled: Boolean, val author: String = "")
+data class ModItem(val id: String, val name: String, val version: String, val desc: String, val disabled: Boolean, val author: String = "", val hasWeb: Boolean = false, val hasAction: Boolean = false)
 
 data class SuApp(val pkg: String, val label: String, val uid: Int, val allowed: Boolean, val icon: android.graphics.Bitmap? = null)
 
@@ -946,8 +946,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val content = try {
                             java.io.File(srcPath).readText()
                         } catch (t1: Throwable) {
+                            // 无权限：su 复制到 cache 再本地读（大文件用 cat 管道会卡死）
                             try {
-                                Shell.cmd("cat " + q(srcPath)).exec().out.joinToString("\n")
+                                val tmp = java.io.File(appCtx.cacheDir, "edit_tmp")
+                                Shell.cmd("cat " + q(srcPath) + " > '" + tmp.absolutePath + "'").exec()
+                                val t2 = if (tmp.exists()) tmp.readText() else ""
+                                try { tmp.delete() } catch (e: Throwable) {}
+                                t2
                             } catch (t: Throwable) {
                                 ""
                             }
@@ -1274,16 +1279,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .clip(SmoothCornerShape(14.dp))
                     .background(Color(0xFFF2F2F7))
                     .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
-                    .padding(14.dp)
             ) {
                 Text(
                     "重命名",
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
                 Spacer(modifier = Modifier.height(10.dp))
                 androidx.compose.foundation.text.BasicTextField(
                     value = cmRenameText,
@@ -1292,11 +1297,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1C1C1E), fontSize = 14.sp),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
                         .clip(SmoothCornerShape(8.dp))
                         .background(Color(0x11000000))
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).height(0.5.dp).background(Color(0x22000000)))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         "取消",
@@ -1565,7 +1571,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         } catch (t: Throwable) {}
                         "edit" -> uiScope.launch {
                             val content = withContext(Dispatchers.IO) {
-                                runCatching { com.topjohnwu.superuser.Shell.cmd("cat '" + p.replace("'", "'\\''") + "'").exec().out.joinToString("\n") }.getOrDefault("")
+                                runCatching {
+                                    fun q2(x: String) = "'" + x.replace("'", "'\\''") + "'"
+                                    val tmp = java.io.File(appCtx.cacheDir, "edit_tmp2")
+                                    com.topjohnwu.superuser.Shell.cmd("cat " + q2(p) + " > '" + tmp.absolutePath + "'").exec()
+                                    val t2 = if (tmp.exists()) tmp.readText() else ""
+                                    try { tmp.delete() } catch (e: Throwable) {}
+                                    t2
+                                }.getOrDefault("")
                             }
                             editPath = p; editText = content
                         }
@@ -2024,32 +2037,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             uiPickerIcons = null
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
-        // 自定义 Dialog 抽屉（独立窗口也能保持沉浸式，不唤出系统导航栏）
-        androidx.compose.ui.window.Dialog(
+        // 底部抽屉（恢复 ModalBottomSheet）
+        androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
-            properties = androidx.compose.ui.window.DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnClickOutside = true,
-                dismissOnBackPress = true
-            )
+            sheetState = pickSheetState,
+            containerColor = Color(0xFFF2F2F7),
+            shape = SmoothCornerShape(12.dp),
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            sheetGesturesEnabled = true,
+            contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
+            dragHandle = null
         ) {
-            val pickView = androidx.compose.ui.platform.LocalView.current
-            LaunchedEffect(Unit) { applyImmersiveToDialog(pickView) }
-            val pickIn = remember { androidx.compose.animation.core.Animatable(0f) }
-            LaunchedEffect(Unit) {
-                pickIn.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-            }
-            Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .graphicsLayer {
-                        translationY = (1f - pickIn.value) * 700f
-                        alpha = pickIn.value
-                    }
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                    .background(Color(0xFFF2F2F7))
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
@@ -2191,7 +2192,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-            }
             }
         }
     }
@@ -2836,15 +2836,23 @@ private fun ProMaxIsland(
                                 val i = line.indexOf('=')
                                 if (i > 0) line.substring(0, i).trim() to line.substring(i + 1).trim() else null
                             }.toMap()
-                            val disabled = Shell.cmd("test -e /data/adb/modules/$id/disable && echo yes").exec()
-                                .out.joinToString("").contains("yes")
+                            val flags = Shell.cmd(
+                                "test -e /data/adb/modules/$id/disable && echo D; " +
+                                    "test -d /data/adb/modules/$id/webroot && echo W; " +
+                                    "test -f /data/adb/modules/$id/action.sh && echo A"
+                            ).exec().out.joinToString("")
+                            val disabled = flags.contains("D")
+                            val hasWeb = flags.contains("W")
+                            val hasAction = flags.contains("A")
                             ModItem(
                                 id = id,
                                 name = map["name"] ?: id,
                                 version = map["version"] ?: "",
                                 desc = map["description"] ?: "",
                                 disabled = disabled,
-                                author = map["author"] ?: ""
+                                author = map["author"] ?: "",
+                                hasWeb = hasWeb,
+                                hasAction = hasAction
                             )
                         }
                     }
@@ -3873,16 +3881,7 @@ private fun ProMaxIsland(
                                                             .background(Color(0x33FFFFFF))
                                                             .clickable {
                                                                 navScope.launch {
-                                                                    val exists = withContext(Dispatchers.IO) {
-                                                                        runCatching {
-                                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                                "test -f \"/data/adb/modules/${m.id}/action.sh\" && echo y")).let { pr ->
-                                                                                val o = pr.inputStream.bufferedReader().readText()
-                                                                                pr.waitFor()
-                                                                                o.trim() == "y"
-                                                                            }
-                                                                        }.getOrDefault(false)
-                                                                    }
+                                                                    val exists = m.hasAction
                                                                     if (!exists) {
                                                                         withContext(Dispatchers.Main) {
                                                                             android.widget.Toast.makeText(navCtx, "该模块没有 action.sh", android.widget.Toast.LENGTH_SHORT).show()
@@ -3917,17 +3916,7 @@ private fun ProMaxIsland(
                                                             modifier = Modifier.size(18.dp)
                                                         )
                                                     }
-                                                    // 只查一次（避免每帧 shell 导致卡顿）
-                                                    val hasWeb = remember(m.id) {
-                                                        runCatching {
-                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                "test -d \"/data/adb/modules/${m.id}/webroot\" && echo y")).let { pr ->
-                                                                val o = pr.inputStream.bufferedReader().readText()
-                                                                pr.waitFor()
-                                                                o.trim() == "y"
-                                                            }
-                                                        }.getOrDefault(false)
-                                                    }
+                                                    val hasWeb = m.hasWeb
                                                     if (hasWeb) {
                                                         // 与「执行」一致的灰色圆球底
                                                         Box(
@@ -6459,14 +6448,8 @@ private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatche
         FsEntry(name, isDir, sizeText, "$dateShort $time")
     }
 
-    if (fromShell.isNotEmpty()) {
-        fromShell.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
-    } else {
-        runCatching { File(norm).listFiles() }.getOrNull()
-            ?.map { FsEntry(it.name, it.isDirectory) }
-            ?.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
-            ?: emptyList()
-    }
+    // 统一走 shell 结果（fallback 用 File.isDirectory 在无权限时会误判文件/文件夹）
+    fromShell.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
 }
 
 private fun parentOf(path: String): String {
