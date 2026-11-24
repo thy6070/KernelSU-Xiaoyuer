@@ -2052,8 +2052,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
         // 抽屉出现：音效 + 振动
+        val pickFxCtx = androidx.compose.ui.platform.LocalContext.current
         LaunchedEffect(uiPicker) {
-            if (uiPicker != null) playPopupFx(androidx.compose.ui.platform.LocalContext.current)
+            if (uiPicker != null) playPopupFx(pickFxCtx)
         }
         // 底部抽屉（恢复 ModalBottomSheet）
         androidx.compose.material3.ModalBottomSheet(
