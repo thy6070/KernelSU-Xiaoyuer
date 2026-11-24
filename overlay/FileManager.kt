@@ -406,6 +406,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var longPressPath by remember { mutableStateOf<String?>(null) }
     var longPressIsDir by remember { mutableStateOf(false) }
     var longPressTick by remember { mutableStateOf(0) }
+    // iOS 风格长按上下文菜单（记录长按位置决定展开方向）
+    var ctxMenuPath by remember { mutableStateOf<String?>(null) }
+    var ctxMenuRight by remember { mutableStateOf(false) }
     var forceSoPanelTick by remember { mutableStateOf(0) }
     var shareFailTick by remember { mutableStateOf(0) }
     var longPressFromRight by remember { mutableStateOf(false) }
@@ -457,120 +460,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // 目录滚动位置（根层共享，避免 key 重建丢状态）
     val dirScroll = remember { mutableStateMapOf<String, Int>() }
 
-    // 默认白色背景；只有设置了背景图/视频才显示
+    // 纯白背景（已删除自定义背景功能）
     Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
-        // 视频背景（TextureView + MediaPlayer，循环静音，裁切填满）
-        androidx.compose.ui.viewinterop.AndroidView(
-            factory = { ctx ->
-                // 图片背景（bg_image.img）优先，否则播视频（bg_video.mp4）
-                val imgCached = java.io.File(ctx.filesDir, "bg_image.img")
-                if (imgCached.exists() && imgCached.length() > 0L) {
-                    val iv = android.widget.ImageView(ctx)
-                    // default=等比例撑满；landscape=把图片旋转成横屏再撑满
-                    val bgMode = try {
-                        ctx.getSharedPreferences("settings", 0).getString("bg_mode", "default") ?: "default"
-                    } catch (t: Throwable) { "default" }
-                    iv.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                    iv.background = android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)
-                    try {
-                        if (bgMode == "landscape") {
-                            // 横屏模式：把图片旋转 90°
-                            val raw = android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath)
-                            if (raw != null) {
-                                val mtx = android.graphics.Matrix()
-                                mtx.postRotate(-90f)
-                                val rotated = android.graphics.Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, mtx, true)
-                                iv.setImageBitmap(rotated)
-                            } else {
-                                iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
-                            }
-                        } else {
-                            iv.setImageBitmap(android.graphics.BitmapFactory.decodeFile(imgCached.absolutePath))
-                        }
-                    } catch (t: Throwable) {}
-                    iv
-                } else if (!java.io.File(ctx.filesDir, "bg_video.mp4").exists()) {
-                    // 未设置任何背景 → 透明（露出白色底）
-                    android.view.View(ctx)
-                } else {
-                val tv = android.view.TextureView(ctx)
-                // 横屏模式：视频旋转 90°
-                val bgModeV = try {
-                    ctx.getSharedPreferences("settings", 0).getString("bg_mode", "default") ?: "default"
-                } catch (t: Throwable) { "default" }
-                if (bgModeV == "landscape") {
-                    tv.rotation = 90f
-                    tv.scaleX = 1.25f
-                    tv.scaleY = 1.25f
-                }
-                val cached = java.io.File(ctx.filesDir, "bg_video.mp4")
-                if (!cached.exists() || cached.length() == 0L) {
-                    // 1) 优先从 小鱼儿/bg.mp4 复制
-                    try {
-                        val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "mkdir -p '" + ctx.filesDir.absolutePath + "' && cp '/storage/emulated/0/小鱼儿/bg.mp4' '" + cached.absolutePath + "' && chmod 644 '" + cached.absolutePath + "'"))
-                        p.waitFor()
-                    } catch (t: Throwable) {}
-                }
-                if (!cached.exists() || cached.length() == 0L) {
-                    // 2) 回退：从 APK 内置 assets/bg.mp4 释放
-                    try {
-                        ctx.assets.open("bg.mp4").use { input ->
-                            cached.outputStream().use { out -> input.copyTo(out) }
-                        }
-                    } catch (t: Throwable) {
-                        android.util.Log.e("BG", "asset: " + (t.message ?: ""))
-                    }
-                }
-                tv.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-                    var mp: android.media.MediaPlayer? = null
-                    override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
-                        try {
-                            val m = android.media.MediaPlayer()
-                            m.setDataSource(cached.absolutePath)
-                            m.setSurface(android.view.Surface(st))
-                            m.isLooping = true
-                            m.setVolume(0f, 0f)
-                            m.setOnErrorListener { _, what, extra ->
-                                android.widget.Toast.makeText(ctx, "视频错误 " + what + "/" + extra, android.widget.Toast.LENGTH_LONG).show()
-                                true
-                            }
-                            m.prepare()
-                            m.start()
-                            mp = m
-                        } catch (t: Throwable) {
-                            // 播放失败：删掉缓存，下次启动重新复制（可能缓存损坏/编码不兼容）
-                            try { cached.delete() } catch (t2: Throwable) {}
-                            android.widget.Toast.makeText(ctx, "视频异常[" + t.javaClass.simpleName + "]: " + (t.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
-                            try {
-                                val lf = java.io.File("/storage/emulated/0/小鱼儿/bg_error.log")
-                                lf.appendText(java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) +
-                                    " " + t.javaClass.simpleName + ": " + (t.message ?: "") +
-                                    " | file=" + cached.absolutePath + " | len=" + cached.length() +
-                                    " | exists=" + cached.exists() + "\n")
-                            } catch (t2: Throwable) {}
-                        }
-                    }
-                    override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
-                    override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
-                        try { mp?.release() } catch (t: Throwable) {}
-                        mp = null
-                        return true
-                    }
-                    override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
-                }
-                tv
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-                .blur(
-                    // 编辑/终端/预览/能量守恒界面 30dp；其余时间按「背景模糊」开关 20dp
-                    if (editPath != null || termFull || previewPath != null || panel) 30.dp
-                    else if (try { appCtx.getSharedPreferences("settings", 0).getBoolean("bg_blur", true) }
-                             catch (t: Throwable) { true }) 20.dp
-                    else 0.dp
-                )
-        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -584,6 +475,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = leftPath,
                 dirScroll = dirScroll,
+                pressedPath = longPressPath,
                 onNavigate = { np ->
                     longPressFromRight = false
                     // 切目录：清残留选中（防解压旧包/操作错文件）
@@ -612,7 +504,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     showTerminal = false
                     termText = ""
                     longPressPath = lp
-                    longPressTick += 1
+                    // 左半屏向右展开，右半屏向左展开
+                    ctxMenuRight = false
+                    ctxMenuPath = lp
                 },
                 onFileClick = { picked ->
                     longPressFromRight = false
@@ -643,6 +537,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = rightPath,
                 dirScroll = dirScroll,
+                pressedPath = longPressPath,
                 onNavigate = { np2 ->
                     longPressFromRight = true
                     selectedFile = null
@@ -670,7 +565,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     showTerminal = false
                     termText = ""
                     longPressPath = lp
-                    longPressTick += 1
+                    // 左半屏向右展开，右半屏向左展开
+                    ctxMenuRight = false
+                    ctxMenuPath = lp
                 },
                 onFileClick = { picked ->
                     longPressFromRight = true
@@ -1732,6 +1629,103 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
 
+    // iOS 风格长按菜单（白色圆角卡片 + 选项行 + 图标）
+    val cmPath = ctxMenuPath
+    if (cmPath != null) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { ctxMenuPath = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
+        ) {
+            val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
+            val cmName = cmPath.substringAfterLast('/')
+            Box(modifier = Modifier.fillMaxSize()) {
+            // 从长按位置（右下角）展开：scale 0.86 → 1 + 淡入
+            val cmScale = remember { androidx.compose.animation.core.Animatable(0.86f) }
+            val cmAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(Unit) {
+                cmScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 700f))
+            }
+            LaunchedEffect(Unit) {
+                cmAlpha.animateTo(1f, tween(140))
+            }
+            Column(
+                modifier = Modifier
+                    .align(if (ctxMenuRight) Alignment.CenterStart else Alignment.CenterEnd)
+                    .padding(horizontal = 16.dp)
+                    .width(260.dp)
+                    .graphicsLayer {
+                        scaleX = cmScale.value
+                        scaleY = cmScale.value
+                        alpha = cmAlpha.value
+                        // 动画原点：菜单靠近长按文件的那一侧的底角
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
+                            if (ctxMenuRight) 0f else 1f, 1f
+                        )
+                    }
+                    .clip(SmoothCornerShape(14.dp))
+                    .background(Color(0xFFF2F2F7))
+            ) {
+                // 操作行
+                data class CmItem(val label: String, val red: Boolean = false, val act: () -> Unit)
+                val items = ArrayList<CmItem>()
+                items.add(CmItem("删除", red = true) {
+                    longPressPath = cmPath
+                    pendingUndo = null
+                    switchStep(12)
+                    ctxMenuPath = null
+                })
+                items.add(CmItem("分享") {
+                    longPressPath = cmPath
+                    onFileOp("share", "")
+                    ctxMenuPath = null
+                })
+                items.add(CmItem(if (isDirCm) "压缩" else "编辑") {
+                    longPressPath = cmPath
+                    if (isDirCm) onFileOp("zip", "") else onFileOp("edit", "")
+                    ctxMenuPath = null
+                })
+                items.add(CmItem("重命名") {
+                    longPressPath = cmPath
+                    switchStep(6)
+                    ctxMenuPath = null
+                })
+                items.add(CmItem("复制") {
+                    longPressPath = cmPath
+                    onFileOp("copy", "")
+                    ctxMenuPath = null
+                })
+                items.add(CmItem("移动") {
+                    longPressPath = cmPath
+                    onFileOp("move", "")
+                    ctxMenuPath = null
+                })
+                items.forEachIndexed { i, it ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .clickable { it.act() }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            it.label,
+                            fontSize = 16.sp,
+                            color = if (it.red) Color(0xFFFF3B30) else Color(0xFF1C1C1E)
+                        )
+                    }
+                    if (i < items.size - 1) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(Color(0x22000000)))
+                    }
+                }
+            }
+            }
+        }
+    }
+
     // 抽屉「确定/取消」的确认弹窗（iOS Alert 样式：文案 + 分割线 + 左红取消/右蓝确定）
     val pc = pickConfirm
     if (pc != null) {
@@ -1963,7 +1957,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val r = ms[findIdx.coerceIn(0, ms.size - 1)]
                     val layout = et.layout
                     if (layout != null) {
-                        et.scrollTo(0, layout.getLineTop(layout.getLineForOffset(r.first)))
+                        et.post { et.scrollTo(0, layout.getLineTop(layout.getLineForOffset(r.first))) }
                     }
                 }
             }
@@ -1986,6 +1980,62 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier.weight(1f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = findQ,
+                        onValueChange = { findQ = it; findIdx = 0 },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 11.sp),
+                        modifier = Modifier
+                            .width(110.dp)
+                            .clip(SmoothCornerShape(6.dp))
+                            .background(Color(0x33FFFFFF))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    )
+                    Text(
+                        "确认",
+                        color = Color(0xFF0A84FF),
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .clickable {
+                                val et = editView
+                                if (et != null) {
+                                    val ms = findAllMatches(et.text.toString(), findQ)
+                                    if (ms.isNotEmpty()) findIdx = (findIdx + 1).coerceAtMost(ms.size - 1)
+                                }
+                                doFind()
+                            }
+                            .padding(horizontal = 4.dp, vertical = 3.dp)
+                    )
+                    Text(
+                        "上一个",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .clickable {
+                                val et = editView
+                                if (et != null) {
+                                    val ms = findAllMatches(et.text.toString(), findQ)
+                                    if (ms.isNotEmpty()) findIdx = (findIdx - 1 + ms.size) % ms.size
+                                }
+                                doFind()
+                            }
+                            .padding(horizontal = 3.dp, vertical = 3.dp)
+                    )
+                    Text(
+                        "下一个",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .clickable {
+                                val et = editView
+                                if (et != null) {
+                                    val ms = findAllMatches(et.text.toString(), findQ)
+                                    if (ms.isNotEmpty()) findIdx = (findIdx + 1) % ms.size
+                                }
+                                doFind()
+                            }
+                            .padding(horizontal = 3.dp, vertical = 3.dp)
                     )
                     Text(
                         text = "取消",
@@ -2025,68 +2075,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 }
                             }
                             .padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-                // 查找栏：输入框 + 确认 / 上一个 / 下一个
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    androidx.compose.foundation.text.BasicTextField(
-                        value = findQ,
-                        onValueChange = { findQ = it; findIdx = 0 },
-                        singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 12.sp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(SmoothCornerShape(8.dp))
-                            .background(Color(0x33FFFFFF))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                    Text(
-                        "确认",
-                        color = Color(0xFF0A84FF),
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .clickable {
-                                val et = editView
-                                if (et != null) {
-                                    val ms = findAllMatches(et.text.toString(), findQ)
-                                    if (ms.isNotEmpty()) findIdx = (findIdx + 1).coerceAtMost(ms.size - 1)
-                                }
-                                doFind()
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                    Text(
-                        "上一个",
-                        color = Color(0xFFAAAAAA),
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .clickable {
-                                val et = editView
-                                if (et != null) {
-                                    val ms = findAllMatches(et.text.toString(), findQ)
-                                    if (ms.isNotEmpty()) findIdx = (findIdx - 1 + ms.size) % ms.size
-                                }
-                                doFind()
-                            }
-                            .padding(horizontal = 6.dp, vertical = 4.dp)
-                    )
-                    Text(
-                        "下一个",
-                        color = Color(0xFFAAAAAA),
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .clickable {
-                                val et = editView
-                                if (et != null) {
-                                    val ms = findAllMatches(et.text.toString(), findQ)
-                                    if (ms.isNotEmpty()) findIdx = (findIdx + 1) % ms.size
-                                }
-                                doFind()
-                            }
-                            .padding(horizontal = 6.dp, vertical = 4.dp)
                     )
                 }
                 // 原生 EditText：大文件也能编辑（BasicTextField 会卡死）
@@ -2900,15 +2888,16 @@ private fun ProMaxIsland(
                     animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
                     expandFrom = Alignment.Bottom
                 ) + fadeIn(tween(180)),
+                // 收起动画要看得见（原来 spring 520 太快，像瞬间消失）
                 exit = shrinkVertically(
-                    animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
+                    animationSpec = tween(280, easing = zyEase),
                     shrinkTowards = Alignment.Bottom
-                ) + fadeOut(tween(90))
+                ) + fadeOut(tween(200))
             ) {
                 // 收起时内容淡出（能看到当前层按钮的收起，又不闪回上一级）
                 val contentAlpha by androidx.compose.animation.core.animateFloatAsState(
                     targetValue = if (navClosing) 0f else 1f,
-                    animationSpec = tween(140),
+                    animationSpec = tween(220),
                     label = "contentAlpha"
                 )
                 Column(
@@ -3515,50 +3504,6 @@ private fun ProMaxIsland(
                                         }
                                     }
                                 }
-                                13 -> {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Box(modifier = Modifier.weight(1f)) {
-                                                IslandActionButton("默认", Color(0xFF3A3A3C)) {
-                                                    setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "default")
-                                                    bgModePick = null
-                                                    onClearLongPress()
-                                                    closeIsland()
-                                                }
-                                            }
-                                            Box(modifier = Modifier.weight(1f)) {
-                                                IslandActionButton("横屏", Color(0xFF0A84FF)) {
-                                                    setBgBackground(navCtx, bgModePick ?: "", bgModeIsImg, "landscape")
-                                                    bgModePick = null
-                                                    onClearLongPress()
-                                                    closeIsland()
-                                                }
-                                            }
-                                        }
-                                        // 背景模糊开关（默认开）
-                                        IslandActionButton(
-                                            if (bgBlurOn) "背景模糊  开" else "背景模糊  关",
-                                            Color(0xFF3A3A3C)
-                                        ) {
-                                            bgBlurOn = !bgBlurOn
-                                            try {
-                                                navCtx.getSharedPreferences("settings", 0).edit()
-                                                    .putBoolean("bg_blur", bgBlurOn).apply()
-                                            } catch (t: Throwable) {}
-                                            android.widget.Toast.makeText(
-                                                navCtx,
-                                                if (bgBlurOn) "背景模糊：已开启" else "背景模糊：已关闭",
-                                                android.widget.Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                }
                                 9 -> {
                                     val lp = longPressPath ?: ""
                                     val lowerLp = lp.lowercase()
@@ -3607,20 +3552,6 @@ private fun ProMaxIsland(
                                             IslandActionButton("分享", Color(0xFF0A84FF)) {
                                                 onFileOp("share", "")
                                                 closeIsland()
-                                            }
-                                            // 图片/视频设为背景
-                                            if (!longPressIsDir && longPressPath != null) {
-                                                val lp = longPressPath.lowercase()
-                                                val isImg = lp.endsWith(".jpg") || lp.endsWith(".jpeg") || lp.endsWith(".png") || lp.endsWith(".webp") || lp.endsWith(".bmp")
-                                                val isVid = lp.endsWith(".mp4") || lp.endsWith(".mkv") || lp.endsWith(".avi") || lp.endsWith(".mov") || lp.endsWith(".webm") || lp.endsWith(".3gp")
-                                                if (isImg || isVid) {
-                                                    // 点「设为背景」→ 收起岛 → 展开 → 显示两个模式按钮
-                                                    IslandActionButton("设为背景", Color(0xFF0A84FF)) {
-                                                        bgModePick = longPressPath
-                                                        bgModeIsImg = isImg
-                                                        switchStep(13)
-                                                    }
-                                                }
                                             }
                                         }
                                         if (!longPressIsDir) {
@@ -5289,6 +5220,7 @@ private fun BrowserPane(
     selectedPath: String? = null,
     highlightName: String? = null,
     onLongPress: (String) -> Unit = {},
+    pressedPath: String? = null,
     onRefresh: () -> Unit = {},
     multiSel: Set<String> = emptySet(),
     onMultiSelect: (String) -> Unit = {},
@@ -5424,6 +5356,7 @@ private fun BrowserPane(
                 onSwipeSelect = { onMultiSelect(rowPath) },
                 onSwipeDeselect = { onMultiDeselect(rowPath) },
                 onLongPressEnterMulti = { multiMode = true },
+                isPressed = pressedPath == rowPath,
                 onClick = {
                     if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
@@ -5561,6 +5494,7 @@ private fun FsRow(
     onSwipeSelect: () -> Unit = {},
     onSwipeDeselect: () -> Unit = {},
     onLongPressEnterMulti: () -> Unit = {},
+    isPressed: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
@@ -5569,6 +5503,12 @@ private fun FsRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer {
+                    // 长按时这一行放大一点
+                    val sc = if (isPressed) 1.03f else 1f
+                    scaleX = sc
+                    scaleY = sc
+                }
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
@@ -6334,23 +6274,6 @@ internal fun gameCleanCache(ctx: android.content.Context) {
         android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
     }
     }.start()
-}
-
-// 设置背景（图片/视频），mode = default / landscape
-internal fun setBgBackground(ctx: android.content.Context, src: String, isImg: Boolean, mode: String) {
-    try {
-        ctx.getSharedPreferences("settings", 0).edit().putString("bg_mode", mode).apply()
-        val dstName = if (isImg) "bg_image.img" else "bg_video.mp4"
-        val otherName = if (isImg) "bg_video.mp4" else "bg_image.img"
-        val dst = java.io.File(ctx.filesDir, dstName).absolutePath
-        val other = java.io.File(ctx.filesDir, otherName).absolutePath
-        val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-            "rm -f '" + other + "' && cp -f '" + src.replace("'", "'\\''") + "' '" + dst + "' && chmod 644 '" + dst + "'"))
-        pr.waitFor()
-        android.widget.Toast.makeText(ctx, "已设为背景（" + (if (mode == "default") "默认" else "横屏") + "），重进生效", android.widget.Toast.LENGTH_SHORT).show()
-    } catch (t: Throwable) {
-        android.widget.Toast.makeText(ctx, "设置失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
-    }
 }
 
 internal fun queryDisplayName(ctx: android.content.Context, uri: android.net.Uri): String? {
