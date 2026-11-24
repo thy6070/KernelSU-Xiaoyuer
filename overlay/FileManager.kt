@@ -5323,7 +5323,8 @@ private fun BrowserPane(
                         .fillMaxWidth()
                         .padding(start = 14.dp)
                         .height(0.5.dp)
-                        .background(Color(0x33FFFFFF))
+                        // 白底下用深色分割线
+                        .background(Color(0x22000000))
                 )
             }
             }
@@ -5541,7 +5542,8 @@ private fun FsRow(
                     .fillMaxWidth()
                     .padding(start = 14.dp)
                     .height(0.5.dp)
-                    .background(Color(0x33FFFFFF))
+                    // 白底下用深色分割线
+                    .background(Color(0x22000000))
             )
         }
     }
