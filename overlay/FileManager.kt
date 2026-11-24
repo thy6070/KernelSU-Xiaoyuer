@@ -1940,6 +1940,40 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     if (editPath != null) {
         var editFontScale by remember { mutableStateOf(1f) }
+        // 查找：输入/当前匹配
+        var findQ by remember { mutableStateOf("") }
+        var findIdx by remember { mutableStateOf(0) }
+        // 自动滚动到当前匹配
+        var editView by remember { mutableStateOf<android.widget.EditText?>(null) }
+        // 原生 EditText 上的查找：高亮（BackgroundColorSpan）+ 滚动定位
+        val scrollToMatch: () -> Unit = {
+            val et = editView
+            val q = findQ
+            if (et != null && q.isNotEmpty()) {
+                val text = et.text
+                val ms = findAllMatches(text.toString(), q)
+                // 清旧高亮
+                text.getSpans(0, text.length, android.text.style.BackgroundColorSpan::class.java)
+                    .forEach { text.removeSpan(it) }
+                ms.forEachIndexed { i, r ->
+                    text.setSpan(
+                        android.text.style.BackgroundColorSpan(
+                            if (i == findIdx.coerceIn(0, ms.size - 1)) 0xFFFFCC00.toInt() else 0x66FFCC00
+                        ),
+                        r.first, r.second, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
+                // 滚动到当前匹配
+                if (ms.isNotEmpty()) {
+                    val r = ms[findIdx.coerceIn(0, ms.size - 1)]
+                    val layout = et.layout
+                    if (layout != null) {
+                        val line = layout.getLineForOffset(r.first)
+                        et.scrollTo(0, layout.getLineTop(line))
+                    }
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1975,6 +2009,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier
                             .clickable {
                                 val target = editPath
+                                // 保存时从 EditText 取最新内容（编辑过程不同步状态）
+                                editText = editView?.text?.toString() ?: editText
                                 if (target != null) {
                                     uiScope.launch {
                                         withContext(Dispatchers.IO) {
@@ -1998,34 +2034,79 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
-                androidx.compose.foundation.text.BasicTextField(
-                    value = editText,
-                    onValueChange = { editText = it },
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = Color.White,
-                        fontSize = (12f * editFontScale).sp,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            // 只在双指时缩放，单指放行给滚动
-                            awaitEachGesture {
-                                awaitFirstDown(requireUnconsumed = false)
-                                do {
-                                    val ev = awaitPointerEvent()
-                                    if (ev.changes.size >= 2) {
-                                        val zoom = ev.calculateZoom()
-                                        if (zoom != 1f && zoom > 0f) {
-                                            editFontScale = (editFontScale * zoom).coerceIn(0.6f, 3f)
-                                            ev.changes.forEach { it.consume() }
-                                        }
+                // 查找栏：居中正上方（输入框 + 确认 + 上一个/下一个）
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = findQ,
+                        onValueChange = { findQ = it; findIdx = 0 },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 12.sp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(SmoothCornerShape(8.dp))
+                            .background(Color(0x33FFFFFF))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                    Text(
+                        "确认",
+                        color = Color(0xFF0A84FF),
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .clickable {
+                                if (findQ.isNotEmpty()) {
+                                    val ms = findAllMatches(editText, findQ)
+                                    if (ms.isNotEmpty()) {
+                                        findIdx = (findIdx + 1).coerceAtMost(ms.size - 1)
                                     }
-                                } while (ev.changes.any { it.pressed })
+                                }
+                                scrollToMatch()
                             }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                    Text(
+                        "上一个",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .clickable {
+                                val ms = findAllMatches(editText, findQ)
+                                if (ms.isNotEmpty()) findIdx = (findIdx - 1 + ms.size) % ms.size
+                                scrollToMatch()
+                            }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                    Text(
+                        "下一个",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .clickable {
+                                val ms = findAllMatches(editText, findQ)
+                                if (ms.isNotEmpty()) findIdx = (findIdx + 1) % ms.size
+                                scrollToMatch()
+                            }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                }
+                // 编辑器：原生 EditText（大文件也能打开，BasicTextField 会卡死）
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { vctx ->
+                        android.widget.EditText(vctx).apply {
+                            editView = this
+                            setText(editText)
+                            setTextColor(android.graphics.Color.WHITE)
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            textSize = 12f * editFontScale
+                            typeface = android.graphics.Typeface.MONOSPACE
+                            setPadding(10, 10, 10, 10)
+                            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                            // 不在编辑过程中同步状态（会触发重组导致跳顶），保存时再取内容
                         }
-                        .padding(10.dp)
+                    },
+                    modifier = Modifier.weight(1f).fillMaxWidth()
                 )
             }
         }
@@ -2716,22 +2797,9 @@ private fun ProMaxIsland(
                 }
             }
 
-            // 撤回按钮：独立浮层（不放进导航栏面板，收起只收它自己）
-            AnimatedVisibility(
-                // 只在展开面板时显示（删除后收起面板不直接弹撤回按钮）
-                visible = (navMode || navTarget != null) && navTarget == null && pendingUndo != null,
-                // 与其他按钮/面板同一套：高度伸缩 + 淡入淡出
-                enter = androidx.compose.animation.expandVertically(
-                    animationSpec = tween(260, easing = zyEase),
-                    expandFrom = Alignment.Bottom
-                ) + fadeIn(tween(160)),
-                exit = androidx.compose.animation.shrinkVertically(
-                    animationSpec = tween(260, easing = zyEase),
-                    shrinkTowards = Alignment.Bottom
-                ) + fadeOut(tween(160))
-            ) {
-            // 有可撤销操作：展开面板顶部显示蓝色大按钮
-            if (navTarget == null && pendingUndo != null) {
+            // 撤回按钮：条件渲染（不用独立动画），收起由面板收起动画接管（同确认删除）
+            if ((navMode || navTarget != null) && navTarget == null && pendingUndo != null) {
+            // 有可撤销操作：展开面板顶部显示蓝色大按钮（可见性由外层 AnimatedVisibility 控制）
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -6050,6 +6118,18 @@ internal fun restoreDeviceModel(ctx: android.content.Context) {
     }
 }
 
+// 编辑界面查找：返回所有匹配区间 [start, end)
+private fun findAllMatches(text: String, q: String): List<Pair<Int, Int>> {
+    if (q.isEmpty() || text.isEmpty()) return emptyList()
+    val out = ArrayList<Pair<Int, Int>>()
+    var i = text.indexOf(q, 0, ignoreCase = true)
+    while (i >= 0) {
+        out.add(i to i + q.length)
+        i = text.indexOf(q, i + 1, ignoreCase = true)
+    }
+    return out
+}
+
 // 游戏清理：先选应用再清理该应用缓存
 internal fun gameCleanCache(ctx: android.content.Context) {
     // 立即打开抽屉（先空列表，加载完再填）
@@ -6502,24 +6582,24 @@ private val perfGameScript = listOf(
     "echo \"机型: \$MODEL (\$SOC) -> \$NAME\"",
     "",
     "# ---------- 机型参数（CPU min 百分比 / 刷新率 / GPU 类型）----------",
-    "CPU_MIN_PCT=30",
+    "CPU_MIN_PCT=70",
     "HZ_TARGET=0",
     "GPU_TYPE=\"auto\"",
     "case \"\$NAME\" in",
     "  \"一加 Ace5 竞速版\")",
-    "    CPU_MIN_PCT=30          # MTK sugov_ext 焊不住太低，给 30%",
+    "    CPU_MIN_PCT=70          # 统一 70%",
     "    HZ_TARGET=120",
     "    GPU_TYPE=\"mtk\" ;;",
     "  \"小米 Pad8 Pro\"|\"小米 Pad8\")",
-    "    CPU_MIN_PCT=33          # 8 Elite/8Gen4，文档实测 1152000/3532800≈32.6%",
+    "    CPU_MIN_PCT=70          # 统一 70%",
     "    HZ_TARGET=144",
     "    GPU_TYPE=\"kgsl\" ;;",
     "  \"红米 K Pad\")",
-    "    CPU_MIN_PCT=30",
+    "    CPU_MIN_PCT=70",
     "    HZ_TARGET=165",
     "    GPU_TYPE=\"mtk\" ;;",
     "  \"小米 Pad6 Pro\")",
-    "    CPU_MIN_PCT=30",
+    "    CPU_MIN_PCT=70",
     "    HZ_TARGET=144",
     "    GPU_TYPE=\"kgsl\" ;;",
     "esac",
@@ -6664,10 +6744,11 @@ private val perfGameScript = listOf(
     "      K=/sys/class/kgsl/kgsl-3d0",
     "      _mx=\$(cat \"\$K/devfreq/max_freq\" 2>/dev/null)",
     "      if [ -n \"\$_mx\" ]; then",
+    "        _gx=\$((_mx * 95 / 100))",
     "        chmod 0666 \"\$K/devfreq/min_freq\" \"\$K/devfreq/max_freq\" 2>/dev/null",
-    "        echo \"\$_mx\" > \"\$K/devfreq/min_freq\" 2>/dev/null",
-    "        echo \"\$_mx\" > \"\$K/devfreq/max_freq\" 2>/dev/null",
-    "        echo \"  GPU(kgsl) 锁定 \$_mx\"",
+    "        echo \"\$_gx\" > \"\$K/devfreq/min_freq\" 2>/dev/null",
+    "        echo \"\$_gx\" > \"\$K/devfreq/max_freq\" 2>/dev/null",
+    "        echo \"  GPU(kgsl) 锁定 \$_gx (95%)\"",
     "      fi ;;",
     "    mtk)",
     "      if [ -f /proc/gpufreqv2/fix_target_opp_index ]; then",
@@ -6677,16 +6758,17 @@ private val perfGameScript = listOf(
     "      fi ;;",
     "  esac",
     "",
-    "  # 4.4 CPU：max = 硬件最高，min 抬高到 35%（减少爬坡）",
+    "  # 4.4 CPU：max = 硬件最高 95%（不拉满），min 70%",
     "  for p in /sys/devices/system/cpu/cpufreq/policy[0-9]*/; do",
     "    [ -d \"\$p\" ] || continue",
     "    hw=\$(cat \"\$p/cpuinfo_max_freq\" 2>/dev/null)",
     "    [ -n \"\$hw\" ] || continue",
+    "    mx=\$((hw * 95 / 100))",
     "    mn=\$((hw * CPU_MIN_PCT / 100))",
     "    chmod 0666 \"\$p/scaling_max_freq\" \"\$p/scaling_min_freq\" 2>/dev/null",
-    "    echo \"\$hw\" > \"\$p/scaling_max_freq\" 2>/dev/null",
+    "    echo \"\$mx\" > \"\$p/scaling_max_freq\" 2>/dev/null",
     "    echo \"\$mn\" > \"\$p/scaling_min_freq\" 2>/dev/null",
-    "    echo \"  \$(basename \"\$p\"): max=\$hw min=\$mn\"",
+    "    echo \"  \$(basename \"\$p\"): max=\$mx (95%) min=\$mn\"",
     "  done",
     "",
     "  # 4.5 刷新率：优先机型目标值，没有则取面板最高",
@@ -7388,6 +7470,64 @@ class FpsOverlayService : Service() {
     private var daemonLayer: String? = null
     private var daemonStartedAt = 0L
 
+    // ===== 常驻 root shell（省 fork）：调频/读频率等高频命令走这里 =====
+    private var rootProc: Process? = null
+    private var rootReader: java.io.BufferedReader? = null
+    private val rootLock = Object()
+
+    private fun ensureRoot(): Boolean {
+        synchronized(rootLock) {
+            val p = rootProc
+            if (p != null && p.isAlive && rootReader != null) return true
+            return try {
+                val np = ProcessBuilder(suBin(), "--mount-master", "-c", "sh").start()
+                rootProc = np
+                rootReader = java.io.BufferedReader(java.io.InputStreamReader(np.inputStream))
+                true
+            } catch (t: Throwable) {
+                rootProc = null
+                rootReader = null
+                false
+            }
+        }
+    }
+
+    // 走常驻 shell 执行（返回输出；失败回退一次独立 sh）
+    private fun shFast(cmd: String, fallbackTimeout: Long = 3L): String {
+        if (!ensureRoot()) return sh(cmd, fallbackTimeout)
+        synchronized(rootLock) {
+            val p = rootProc ?: return sh(cmd, fallbackTimeout)
+            val r = rootReader ?: return sh(cmd, fallbackTimeout)
+            return try {
+                val marker = "__XY_END_" + System.nanoTime() + "__"
+                val w = p.outputStream
+                w.write((cmd + "\necho " + marker + "\n").toByteArray())
+                w.flush()
+                val sb = StringBuilder()
+                val deadline = System.currentTimeMillis() + fallbackTimeout * 1000
+                while (System.currentTimeMillis() < deadline) {
+                    val line = try { r.readLine() } catch (e: Throwable) { null } ?: break
+                    if (line.contains(marker)) break
+                    sb.append(line).append('\n')
+                }
+                sb.toString()
+            } catch (t: Throwable) {
+                try { p.destroyForcibly() } catch (e: Throwable) {}
+                rootProc = null
+                rootReader = null
+                sh(cmd, fallbackTimeout)
+            }
+        }
+    }
+
+    private fun closeRootShell() {
+        synchronized(rootLock) {
+            try { rootProc?.destroyForcibly() } catch (t: Throwable) {}
+            rootProc = null
+            rootReader = null
+        }
+    }
+
     private fun stopDaemon() {
         try {
             val d = filesDir.absolutePath
@@ -7768,6 +7908,9 @@ class FpsOverlayService : Service() {
                         if (fpOnB && fpsBindStarted && sh("pidof system_bg 2>/dev/null", 3L).trim().isEmpty()) {
                             logLine("system_bg 已退出，重新拉起绑核")
                             fpsBindStarted = false
+                            // 立即重绑（等下一 tick 会因 activePkg 变化/停顿错过）
+                            startCpuBind()
+                            fpsBindStarted = true
                         }
                     }
                 } catch (t: Throwable) {}
@@ -8054,17 +8197,28 @@ class FpsOverlayService : Service() {
                     " 档位=" + adaptIdx + "%")
             }
         } else {
-            // 降频更慢：每 2 个周期（2 秒）才降 1%
-            adaptDownTick++
-            if (adaptDownTick >= 2) {
-                adaptDownTick = 0
-                adaptIdx = (adaptIdx - 1).coerceAtLeast(75)
-            }
+            // 降频：每周期 -2%（100→60 约 20 秒，省电更快）
+            adaptIdx = (adaptIdx - 2).coerceAtLeast(70)
         }
         val pct = adaptIdx
-        sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
+        shFast("for p in /sys/devices/system/cpu/cpufreq/policy*/; do " +
            "mn=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); mx=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); " +
-           "[ -n \"\$mn\" ] && [ -n \"\$mx\" ] && echo \$(( mn + (mx - mn) * " + pct + " / 100 )) > \$p/scaling_max_freq 2>/dev/null; done", 1L)
+           "[ -n \"\$mn\" ] && [ -n \"\$mx\" ] && echo \$(( mn + (mx - mn) * " + pct + " / 100 )) > \$p/scaling_max_freq 2>/dev/null; done; " +
+           // GPU 也动态：kgsl 的 max_freq 按同一 pct 调（mtk 走 OPP，这里只动 kgsl）
+           "K=/sys/class/kgsl/kgsl-3d0; " +
+           "if [ -d \"\$K\" ] && [ -f \"\$K/devfreq/max_freq\" ]; then " +
+           "gx=\$(cat \"\$K/devfreq/max_freq\" 2>/dev/null); " +
+           "gh=\$(cat \"\$K/devfreq/available_frequencies\" 2>/dev/null | tr ' ' '\n' | sort -n | tail -1); " +
+           "[ -n \"\$gh\" ] && [ \"\$gh\" -gt 0 ] 2>/dev/null && { " +
+           "cap=\$(( gh * " + pct + " / 100 )); chmod 0666 \"\$K/devfreq/max_freq\" 2>/dev/null; echo \"\$cap\" > \"\$K/devfreq/max_freq\" 2>/dev/null; }; " +
+           "fi; " +
+           // 天玑（mtk）：按 pct 选 OPP 索引（0=最高频，数值越大频率越低）
+           "if [ -f /proc/gpufreqv2/fix_target_opp_index ]; then " +
+           "cnt=\$(grep -c . /proc/gpufreqv2/gpu_working_opp 2>/dev/null); " +
+           "[ \"\$cnt\" -gt 0 ] 2>/dev/null && { " +
+           "idx=\$(( (100 - " + pct + ") * cnt / 100 )); [ \"\$idx\" -lt 0 ] && idx=0; [ \"\$idx\" -ge \"\$cnt\" ] && idx=\$((cnt - 1)); " +
+           "chmod 0666 /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; echo \"\$idx\" > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; }; " +
+           "fi", 1L)
     }
 
     private fun maybeFpsPlusBoost(fps: Double) {
