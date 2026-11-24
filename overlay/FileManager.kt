@@ -519,8 +519,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .blur(
-                    // 编辑/终端/预览/能量守恒时对文件管理器固定 30dp 模糊（不受开关控制）
-                    if (panel || termFull || editPath != null || previewPath != null) 30.dp else 0.dp
+                    // 背景模糊统一 15dp
+                    if (panel || termFull || editPath != null || previewPath != null) 15.dp else 0.dp
                 )
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
@@ -560,9 +560,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     showTerminal = false
                     termText = ""
                     // 只开菜单，不设 longPressPath（避免灵动岛显示文件名/切换图标）
+                    // 先响提示音，再弹菜单（80ms 间隔）
+                    playPopupFx(appCtx)
                     ctxMenuRight = false
                     ctxMenuClosing = false
-                    ctxMenuPath = lp
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        ctxMenuPath = lp
+                    }, 80)
                     // 截图背景（供菜单弹层做 iOS 式模糊）
                     try {
                         val v = (ctxMenuView.parent as? android.view.View) ?: ctxMenuView
@@ -638,9 +642,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     showTerminal = false
                     termText = ""
                     // 只开菜单，不设 longPressPath（避免灵动岛显示文件名/切换图标）
+                    // 先响提示音，再弹菜单（80ms 间隔）
+                    playPopupFx(appCtx)
                     ctxMenuRight = true
                     ctxMenuClosing = false
-                    ctxMenuPath = lp
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        ctxMenuPath = lp
+                    }, 80)
                     // 截图背景（供菜单弹层做 iOS 式模糊）
                     try {
                         val v = (ctxMenuView.parent as? android.view.View) ?: ctxMenuView
@@ -869,6 +877,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         "delete" -> "rm -rf " + q(srcPath)
                         "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
                         "edit" -> "chmod 644 " + q(srcPath)
+                        "execute" -> "cd " + q(dir) + " && sh " + q(srcPath) + " 2>&1
                         else -> ""
                     }
                     var ok = true
@@ -1355,7 +1364,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         ) {
             // 与长按菜单同款：背景变暗 + 左下角向右上弹出 + 丝滑弹簧
             val amView = androidx.compose.ui.platform.LocalView.current
-            LaunchedEffect(Unit) { applyImmersiveToDialog(amView); playPopupFx(amView.context) }
+            LaunchedEffect(Unit) { applyImmersiveToDialog(amView) }
             val amScale = remember { androidx.compose.animation.core.Animatable(0.84f) }
             val amAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
             LaunchedEffect(Unit) {
@@ -1453,7 +1462,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val cmView = androidx.compose.ui.platform.LocalView.current
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 applyImmersiveToDialog(cmView)
-                playPopupFx(cmView.context)
                 try {
                     val w = (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
                     w?.setDimAmount(0f)
@@ -1631,8 +1639,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 archiveTick += 1
                             }
                             cmIsExec -> cmFile("edit")
-                            // 执行：拉起脚本执行
-                            else -> cmFile("edit")
+                            // 执行：直接调用原执行逻辑（终端显示输出）
+                            else -> {
+                                longPressPath = cmPath
+                                longPressIsDir = false
+                                ctxMenuClosing = true
+                                doActionFile(cmPath)
+                            }
                         }
                     })
                 }
@@ -2051,11 +2064,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             uiPickerIcons = null
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
-        // 抽屉出现：音效 + 振动
-        val pickFxCtx = androidx.compose.ui.platform.LocalContext.current
-        LaunchedEffect(uiPicker) {
-            if (uiPicker != null) playPopupFx(pickFxCtx)
-        }
         // 底部抽屉（恢复 ModalBottomSheet）
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
@@ -2123,6 +2131,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Text(
                             "确定",
                             modifier = Modifier.clickable {
+                                playPopupFx(appCtx)
                                 val sel = uiPickerSelected
                                 if (sel != null) {
                                     when (pickTitle) {
@@ -2231,7 +2240,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val popView = androidx.compose.ui.platform.LocalView.current
             LaunchedEffect(Unit) {
                 applyImmersiveToDialog(popView)
-                playPopupFx(popView.context)
                 pop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
             }
             Column(
@@ -2628,7 +2636,8 @@ private fun reapplyImmersiveActivity(view: android.view.View) {
 
 
 // 弹窗出现：播放音效 + 轻微振动（assets/sound.mp4 的音频轨）
-private var popPlayer: android.media.MediaPlayer? = null
+private var popSoundPool: android.media.SoundPool? = null
+private var popSoundId: Int = 0
 private fun playPopupFx(ctx: android.content.Context) {
     try {
         val vib = ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
@@ -2641,18 +2650,24 @@ private fun playPopupFx(ctx: android.content.Context) {
         }
     } catch (t: Throwable) {}
     try {
-        popPlayer?.release()
-        // assets 里的 mp4 可能被压缩，openFd 会失败 → 先复制到 cache 再播
-        val tmp = java.io.File(ctx.cacheDir, "popup_sound.mp4")
-        if (!tmp.exists() || tmp.length() == 0L) {
-            ctx.assets.open("sound.mp4").use { input -> tmp.outputStream().use { input.copyTo(it) } }
+        // SoundPool 预加载：低延迟（MediaPlayer 每次 prepare 会延迟）
+        val sp = popSoundPool ?: android.media.SoundPool.Builder()
+            .setMaxStreams(2)
+            .setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            .build().also { popSoundPool = it; popSoundId = 0 }
+        if (popSoundId == 0) {
+            val tmp = java.io.File(ctx.cacheDir, "popup_sound.mp4")
+            if (!tmp.exists() || tmp.length() == 0L) {
+                ctx.assets.open("sound.mp4").use { input -> tmp.outputStream().use { input.copyTo(it) } }
+            }
+            popSoundId = sp.load(tmp.absolutePath, 1)
         }
-        popPlayer = android.media.MediaPlayer().apply {
-            setDataSource(tmp.absolutePath)
-            setOnCompletionListener { release() }
-            prepare()
-            start()
-        }
+        if (popSoundId > 0) sp.play(popSoundId, 1f, 1f, 1, 0, 1f)
     } catch (t: Throwable) {}
 }
 
@@ -5385,7 +5400,7 @@ private fun ModeButton(
             .height(56.dp)
             // 正常胶囊（不要连续曲率）
             .clip(RoundedCornerShape(percent = 50))
-            .background(Color(0xE60E0E10))
+            .background(Color(0x8C000000))
             .clickable {
                 on = !on
                 clickTick++
@@ -5702,7 +5717,8 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
             Text(
                 text = subtitle ?: (execPath ?: latencyMsg)
                     ?: (if (title == "执行此文件") (execPath ?: "暂无设置") else ""),
-                color = Color(0x77000000),
+                // 深色面板底 → 浅灰字
+                color = Color(0x99FFFFFF),
                 fontSize = 9.sp,
                 maxLines = 1,
                 modifier = Modifier
