@@ -34,14 +34,6 @@ jobs:
           echo "hash=$HASH" >> "$GITHUB_OUTPUT"
           echo "cert $SIZE $HASH"
 
-  lkm:
-    needs: [prepare]
-    uses: ./.github/workflows/build-lkm.yml
-    with:
-      package_name: com.tencent.THY
-      expected_size: ${{ needs.prepare.outputs.cert_size }}
-      expected_hash: ${{ needs.prepare.outputs.cert_hash }}
-
   ksud:
     needs: prepare
     runs-on: ubuntu-latest
