@@ -418,6 +418,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
     var appMenuLabel by remember { mutableStateOf("") }
+    // 打开底部面板/Dialog 时重设沉浸式（否则系统栏会被唤出）
+    val immersiveView = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.LaunchedEffect(uiPicker != null, showSearch, appMenuPkg != null) {
+        reapplyImmersiveActivity(immersiveView)
+    }
     // 长按行在列表中的序号（菜单贴在那一行分割线附近展开）
     var ctxMenuRow by remember { mutableStateOf(-1) }
     // 各行在屏幕上的真实 y（px），长按时取目标行
@@ -513,6 +518,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = leftPath,
                 dirScroll = dirScroll,
+                pathAlignRight = false,
                 pressedPath = longPressPath,
                 onLongPressRow = { _, idx -> ctxMenuRow = idx },
                 onRowPos = { p, y -> rowYs[p] = y },
@@ -543,9 +549,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
                     termText = ""
-                    longPressPath = lp
-                    // 左半屏向右展开，右半屏向左展开
+                    // 只开菜单，不设 longPressPath（避免灵动岛显示文件名/切换图标）
                     ctxMenuRight = false
+                    ctxMenuClosing = false
                     ctxMenuPath = lp
                     // 截图背景（供菜单弹层做 iOS 式模糊）
                     try {
@@ -591,6 +597,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             BrowserPane(
                 path = rightPath,
                 dirScroll = dirScroll,
+                pathAlignRight = true,
                 pressedPath = longPressPath,
                 onLongPressRow = { _, idx -> ctxMenuRow = idx },
                 onRowPos = { p, y -> rowYs[p] = y },
@@ -620,9 +627,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
                     termText = ""
-                    longPressPath = lp
-                    // 左半屏向右展开，右半屏向左展开
+                    // 只开菜单，不设 longPressPath（避免灵动岛显示文件名/切换图标）
                     ctxMenuRight = true
+                    ctxMenuClosing = false
                     ctxMenuPath = lp
                     // 截图背景（供菜单弹层做 iOS 式模糊）
                     try {
@@ -1248,25 +1255,55 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { appMenuPkg = null },
             properties = androidx.compose.ui.window.DialogProperties(
                 dismissOnClickOutside = true,
-                dismissOnBackPress = true
+                dismissOnBackPress = true,
+                usePlatformDefaultWidth = false
             )
         ) {
+            // 与长按菜单同款：背景变暗 + 左下角向右上弹出 + 丝滑弹簧
+            val amView = androidx.compose.ui.platform.LocalView.current
+            LaunchedEffect(Unit) { applyImmersiveToDialog(amView) }
+            val amScale = remember { androidx.compose.animation.core.Animatable(0.84f) }
+            val amAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(Unit) {
+                amScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 380f))
+            }
+            LaunchedEffect(Unit) { amAlpha.animateTo(1f, tween(140)) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x66000000))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { appMenuPkg = null },
+                contentAlignment = Alignment.Center
+            ) {
             Column(
                 modifier = Modifier
-                    .width(280.dp)
+                    .graphicsLayer {
+                        scaleX = amScale.value
+                        scaleY = amScale.value
+                        alpha = amAlpha.value
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
+                    }
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { }
+                    .width(260.dp)
                     .clip(SmoothCornerShape(14.dp))
                     .background(Color(0xFFF2F2F7))
                     .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
             ) {
-                // 标题：应用名（居中）
+                // 标题：应用名（居中，与长按菜单同字号）
                 Text(
                     text = appMenuLabel,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
@@ -1307,6 +1344,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     Text("取消", fontSize = 16.sp, color = Color(0xFF007AFF), textAlign = TextAlign.Center)
                 }
             }
+            }
         }
     }
 
@@ -1324,6 +1362,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 去掉系统暗色遮罩：不能盖住被长按放大的那一行
             val cmView = androidx.compose.ui.platform.LocalView.current
             androidx.compose.runtime.LaunchedEffect(Unit) {
+                applyImmersiveToDialog(cmView)
                 try {
                     val w = (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
                     w?.setDimAmount(0f)
@@ -1344,10 +1383,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 不铺截图/不压暗（长按时只放大那一行，背景保持原样清晰）
             // 菜单贴在长按行的分割线附近：优先下方，空间不够则上方，避免遮住放大的行
             // 从长按位置（右下角）展开：scale 0.86 → 1 + 淡入
-            val cmScale = remember { androidx.compose.animation.core.Animatable(0.86f) }
+            val cmScale = remember { androidx.compose.animation.core.Animatable(0.84f) }
             val cmAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
             LaunchedEffect(Unit) {
-                cmScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 700f))
+                // iOS 那种丝滑：轻阻尼弹簧，从左下角向右上弹出
+                cmScale.animateTo(
+                    1f,
+                    androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 380f)
+                )
             }
             LaunchedEffect(Unit) {
                 cmAlpha.animateTo(1f, tween(140))
@@ -1355,7 +1398,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 关闭：ease-in 150ms 缩回淡出后再关（点空白/返回也走这里）
             LaunchedEffect(ctxMenuClosing) {
                 if (ctxMenuClosing) {
-                    cmScale.animateTo(0.9f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                    cmScale.animateTo(
+                        0.84f,
+                        androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 500f)
+                    )
                     cmAlpha.animateTo(0f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
                     ctxMenuClosing = false
                     ctxMenuPath = null
@@ -1377,7 +1423,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         alpha = cmAlpha.value
                         // 动画原点：菜单靠近长按文件的那一侧的底角
                         transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
-                            if (ctxMenuRight) 0f else 1f, 1f
+                            // 展开从左下角向右上；收起从右上角向左下
+                            if (ctxMenuClosing) 1f else 0f,
+                            if (ctxMenuClosing) 0f else 1f
                         )
                     }
                     .clip(SmoothCornerShape(14.dp))
@@ -1482,10 +1530,28 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 items.add(CmItem("复制路径") { cmAct("copypath") })
                 // 删除 / 分享
                 if (isDirCm) {
-                    items.add(CmItem("删除", red = true) { cmAct("delete") })
+                    items.add(CmItem("删除", red = true) {
+                        val p = cmPath
+                        val nm = cmPath.substringAfterLast('/')
+                        ctxMenuClosing = true
+                        // 与"重置应用"同款确认弹窗
+                        pickConfirm = "确认删除 $nm" to {
+                            uiScope.launch {
+                                withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
+                                        com.topjohnwu.superuser.Shell.cmd(
+                                            "mkdir -p /data/local/tmp/xy_trash/last && cp -a " + q(p) + " /data/local/tmp/xy_trash/last/ 2>/dev/null; rm -rf " + q(p)
+                                        ).exec()
+                                    }
+                                }
+                                pendingUndo = UndoOp("delete", listOf(p))
+                                refreshTick += 1
+                            }
+                        }
+                    })
                 } else {
                     items.add(CmItem("分享") { cmAct("share") })
-                    items.add(CmItem("删除", red = true) { cmAct("delete") })
                 }
                 items.forEachIndexed { i, it ->
                     Row(
@@ -2046,11 +2112,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             )
         ) {
             val pop = remember { androidx.compose.animation.core.Animatable(0.92f) }
+            val popView = androidx.compose.ui.platform.LocalView.current
             LaunchedEffect(Unit) {
-                pop.animateTo(
-                    1f,
-                    androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 600f)
-                )
+                applyImmersiveToDialog(popView)
+                pop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
             }
             Column(
                 modifier = Modifier
@@ -2426,6 +2491,35 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     }
+}
+
+
+
+// 重新把当前 Activity 窗口设为沉浸式（ModalBottomSheet 打开时会重置系统栏）
+private fun reapplyImmersiveActivity(view: android.view.View) {
+    try {
+        val act = (view.context as? android.app.Activity) ?: return
+        val w = act.window
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
+        androidx.core.view.WindowCompat.getInsetsController(w, view).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    } catch (t: Throwable) {}
+}
+
+// 让 Dialog 自己的窗口也保持沉浸式（否则弹窗出现时会唤出系统栏）
+private fun applyImmersiveToDialog(view: android.view.View) {
+    try {
+        val w = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window ?: return
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
+        androidx.core.view.WindowCompat.getInsetsController(w, view).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    } catch (t: Throwable) {}
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -3665,7 +3759,14 @@ private fun ProMaxIsland(
                                                             .clickable {
                                                                 navScope.launch {
                                                                     val exists = withContext(Dispatchers.IO) {
-                                                                        runCatching { java.io.File("/data/adb/modules/${m.id}/action.sh").exists() }.getOrDefault(false)
+                                                                        runCatching {
+                                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                                                                "test -f \"/data/adb/modules/${m.id}/action.sh\" && echo y")).let { pr ->
+                                                                                val o = pr.inputStream.bufferedReader().readText()
+                                                                                pr.waitFor()
+                                                                                o.trim() == "y"
+                                                                            }
+                                                                        }.getOrDefault(false)
                                                                     }
                                                                     if (!exists) {
                                                                         withContext(Dispatchers.Main) {
@@ -3694,7 +3795,12 @@ private fun ProMaxIsland(
                                                         )
                                                     }
                                                     val hasWeb = runCatching {
-                                                        java.io.File("/data/adb/modules/${m.id}/webroot").isDirectory
+                                                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                                            "test -d \"/data/adb/modules/${m.id}/webroot\" && echo y")).let { pr ->
+                                                            val o = pr.inputStream.bufferedReader().readText()
+                                                            pr.waitFor()
+                                                            o.trim() == "y"
+                                                        }
                                                     }.getOrDefault(false)
                                                     if (hasWeb) {
                                                         Icon(
@@ -5613,6 +5719,7 @@ private fun BrowserPane(
     onLongPress: (String) -> Unit = {},
     onLongPressRow: (String, Int) -> Unit = { _, _ -> },
     onRowPos: (String, Float) -> Unit = { _, _ -> },
+    pathAlignRight: Boolean = false,
     pressedPath: String? = null,
     onRefresh: () -> Unit = {},
     multiSel: Set<String> = emptySet(),
@@ -5704,23 +5811,21 @@ private fun BrowserPane(
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(SmoothCornerShape(8.dp))
-                        .background(Color(TILE_COLOR)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Folder,
-                        contentDescription = null,
-                        tint = Color(FOLDER_ICON),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
+                // 返回上一级：只保留三个点（去掉文件夹图标）
                 Text(text = "..", color = Color(TEXT_COLOR), fontSize = 15.sp)
             }
+            // 当前路径小字：左栏左上角，右栏右上角
+            Text(
+                text = path,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 2.dp),
+                fontSize = 9.sp,
+                color = Color(0x99000000),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = if (pathAlignRight) TextAlign.End else TextAlign.Start
+            )
             if (entries.isNotEmpty()) {
                 Box(
                     modifier = Modifier
