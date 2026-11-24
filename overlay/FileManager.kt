@@ -412,6 +412,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var ctxMenuRight by remember { mutableStateOf(false) }
     // 长按行在列表中的序号（菜单贴在那一行分割线附近展开）
     var ctxMenuRow by remember { mutableStateOf(-1) }
+    // 各行在屏幕上的真实 y（px），长按时取目标行
+    val rowYs = remember { mutableStateMapOf<String, Float>() }
     // 长按背景截图（模拟 iOS 背景模糊）
     var ctxBlurBmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val ctxMenuView = androidx.compose.ui.platform.LocalView.current
@@ -483,6 +485,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 dirScroll = dirScroll,
                 pressedPath = longPressPath,
                 onLongPressRow = { _, idx -> ctxMenuRow = idx },
+                onRowPos = { p, y -> rowYs[p] = y },
                 onNavigate = { np ->
                     longPressFromRight = false
                     // 切目录：清残留选中（防解压旧包/操作错文件）
@@ -525,7 +528,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             val small = android.graphics.Bitmap.createScaledBitmap(
                                 full, (wv.width / 12).coerceAtLeast(1), (wv.height / 12).coerceAtLeast(1), true
                             )
-                            ctxBlurBmp = android.graphics.Bitmap.createScaledBitmap(small, wv.width, wv.height, true)
                             full.recycle()
                         }
                     } catch (t: Throwable) {}
@@ -561,6 +563,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 dirScroll = dirScroll,
                 pressedPath = longPressPath,
                 onLongPressRow = { _, idx -> ctxMenuRow = idx },
+                onRowPos = { p, y -> rowYs[p] = y },
                 onNavigate = { np2 ->
                     longPressFromRight = true
                     selectedFile = null
@@ -602,7 +605,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             val small = android.graphics.Bitmap.createScaledBitmap(
                                 full, (wv.width / 12).coerceAtLeast(1), (wv.height / 12).coerceAtLeast(1), true
                             )
-                            ctxBlurBmp = android.graphics.Bitmap.createScaledBitmap(small, wv.width, wv.height, true)
                             full.recycle()
                         }
                     } catch (t: Throwable) {}
@@ -1178,24 +1180,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier.fillMaxSize()) {
-            // iOS 式背景：整个界面截图模糊铺底
-            val blurBmp = ctxBlurBmp
-            if (blurBmp != null) {
-                androidx.compose.foundation.Image(
-                    bitmap = blurBmp.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Box(modifier = Modifier.fillMaxSize().background(Color(0x99000000)))
-            }
+            // 不铺截图/不压暗（长按时只放大那一行，背景保持原样清晰）
             // 菜单贴在长按行的分割线附近：优先下方，空间不够则上方，避免遮住放大的行
-            val cmRowH = 61.dp
-            val cmTop: androidx.compose.ui.unit.Dp = (ctxMenuRow.coerceAtLeast(0) * 61).toFloat().dp
-            val cmMenuH: androidx.compose.ui.unit.Dp = (6 * 44).toFloat().dp
+            // 菜单：贴长按行的分割线（下方优先，不够放上方）；用真实行 y
+            val cmDensity = androidx.compose.ui.platform.LocalDensity.current
+            val cmRowYpx = rowYs[cmPath] ?: 0f
+            val cmRowH = with(cmDensity) { 66.dp.toPx() }
+            val cmTop: androidx.compose.ui.unit.Dp = with(cmDensity) { (cmRowYpx / density).dp }
+            val cmMenuH: androidx.compose.ui.unit.Dp = (7 * 44).toFloat().dp
             val cmScreenH: androidx.compose.ui.unit.Dp = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.toFloat().dp
-            val cmBelow: androidx.compose.ui.unit.Dp = cmTop + cmRowH
+            val cmBelow: androidx.compose.ui.unit.Dp = cmTop + with(cmDensity) { (cmRowH / density).dp }
             val cmPlaceBelow = (cmBelow + cmMenuH) < (cmScreenH - 40.dp)
             val cmOffsetY: androidx.compose.ui.unit.Dp = if (cmPlaceBelow) cmBelow else (cmTop - cmMenuH - 4.dp)
             // 从长按位置（右下角）展开：scale 0.86 → 1 + 淡入
@@ -1209,8 +1203,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
             Column(
                 modifier = Modifier
-                    // 顶部对齐；左区域→靠右（往右上/右下），右区域→靠左（往左上/左下）
-                    .align(if (ctxMenuRight) Alignment.TopStart else Alignment.TopEnd)
+                    // 水平居中 + 按行位置在下方展开（贴在选中行下面，不遮住它）
+                    .align(Alignment.TopCenter)
                     .offset(y = cmOffsetY.coerceAtLeast(0.dp))
                     .padding(horizontal = 16.dp)
                     .width(260.dp)
@@ -5360,6 +5354,7 @@ private fun BrowserPane(
     highlightName: String? = null,
     onLongPress: (String) -> Unit = {},
     onLongPressRow: (String, Int) -> Unit = { _, _ -> },
+    onRowPos: (String, Float) -> Unit = { _, _ -> },
     pressedPath: String? = null,
     onRefresh: () -> Unit = {},
     multiSel: Set<String> = emptySet(),
@@ -5496,6 +5491,7 @@ private fun BrowserPane(
                 onSwipeSelect = { onMultiSelect(rowPath) },
                 onSwipeDeselect = { onMultiDeselect(rowPath) },
                 onLongPressEnterMulti = { multiMode = true },
+                onRowPos = { y -> onRowPos(rowPath, y) },
                 isPressed = pressedPath == rowPath,
                 onClick = {
                     if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
@@ -5638,6 +5634,7 @@ private fun FsRow(
     onSwipeSelect: () -> Unit = {},
     onSwipeDeselect: () -> Unit = {},
     onLongPressEnterMulti: () -> Unit = {},
+    onRowPos: (Float) -> Unit = {},
     isPressed: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
@@ -5647,6 +5644,10 @@ private fun FsRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coords ->
+                    // 上报该行在屏幕上的 y（菜单贴分割线用）
+                    onRowPos(coords.positionInWindow().y)
+                }
                 .graphicsLayer {
                     // 长按时整行放大（1.06）
                     val sc = if (isPressed) 1.06f else 1f
