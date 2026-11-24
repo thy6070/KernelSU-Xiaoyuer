@@ -150,6 +150,29 @@ jobs:
           mkdir -p src/manager/app/src/main/assets
           cp -r manager/app/src/main/assets/. src/manager/app/src/main/assets/ 2>/dev/null || true
 
+      - name: Troll icons (troll face as app icon / module icon / pill icon)
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 - <<'PYEOF'
+          from PIL import Image
+          import os, glob
+          src = Image.open('manager/app/src/main/assets/troll.jpg').convert('RGBA')
+          sizes = {'mdpi':48,'hdpi':72,'xhdpi':96,'xxhdpi':144,'xxxhdpi':192}
+          for d, s in sizes.items():
+              base = f'src/manager/app/src/main/res/mipmap-{d}'
+              os.makedirs(base, exist_ok=True)
+              im = src.resize((s, s), Image.LANCZOS)
+              im.save(f'{base}/ic_launcher.png')
+              im.save(f'{base}/mod_icon.png')
+              im.save(f'{base}/ic_modules_foreground.png')
+              for jp in glob.glob(f'{base}/ic_modules_foreground.jpg'):
+                  os.remove(jp)
+          # adaptive icon xml 删掉，直接用 png
+          for f in glob.glob('src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml'):
+              os.remove(f)
+          print('troll icons done')
+          PYEOF
+
       - name: Spoof namespace
         run: |
           cd src
