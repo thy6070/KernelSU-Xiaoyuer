@@ -411,7 +411,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var ctxMenuRight by remember { mutableStateOf(false) }
     // 长按行在列表中的序号（菜单贴在那一行分割线附近展开）
     var ctxMenuRow by remember { mutableStateOf(-1) }
-    var ctxMenuClosing by remember { mutableStateOf(false) }
     // 长按背景截图（模拟 iOS 背景模糊）
     var ctxBlurBmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val ctxMenuView = androidx.compose.ui.platform.LocalView.current
@@ -513,7 +512,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressPath = lp
                     // 左半屏向右展开，右半屏向左展开
                     ctxMenuRight = false
-                    ctxMenuClosing = false
                     ctxMenuPath = lp
                     // 截图背景（供菜单弹层做 iOS 式模糊）
                     try {
@@ -591,7 +589,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressPath = lp
                     // 左半屏向右展开，右半屏向左展开
                     ctxMenuRight = true
-                    ctxMenuClosing = false
                     ctxMenuPath = lp
                     // 截图背景（供菜单弹层做 iOS 式模糊）
                     try {
@@ -1160,7 +1157,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     val cmPath = ctxMenuPath
     if (cmPath != null) {
         androidx.compose.ui.window.Dialog(
-            onDismissRequest = { ctxMenuClosing = true },
+            onDismissRequest = { ctxMenuPath = null },
             properties = androidx.compose.ui.window.DialogProperties(
                 dismissOnClickOutside = true,
                 dismissOnBackPress = true,
@@ -1180,7 +1177,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier.fillMaxSize()) {
-            // 背景不做遮罩（列表已在下面模糊），只保留菜单
+            // iOS 式背景：整个界面截图模糊铺底
+            val blurBmp = ctxBlurBmp
+            if (blurBmp != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = blurBmp.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0x99000000)))
+            }
             // 菜单贴在长按行的分割线附近：优先下方，空间不够则上方，避免遮住放大的行
             val cmRowH = 61.dp
             val cmTop: androidx.compose.ui.unit.Dp = (ctxMenuRow.coerceAtLeast(0) * 61).toFloat().dp
@@ -1193,18 +1201,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val cmScale = remember { androidx.compose.animation.core.Animatable(0.86f) }
             val cmAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
             LaunchedEffect(Unit) {
-                cmScale.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                cmScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 700f))
             }
             LaunchedEffect(Unit) {
                 cmAlpha.animateTo(1f, tween(140))
-            }
-            // 关闭：ease-in 150ms 缩回淡出后再关
-            LaunchedEffect(ctxMenuClosing) {
-                if (ctxMenuClosing) {
-                    kotlinx.coroutines.launch { cmScale.animateTo(0.9f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing)) }
-                    cmAlpha.animateTo(0f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
-                    ctxMenuPath = null
-                }
             }
             Column(
                 modifier = Modifier
@@ -1670,44 +1670,35 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             skipPartiallyExpanded = true
         )
         val pickScope = rememberCoroutineScope()
-        // 关闭：先 ease-in 150ms 滑出，再真正关闭
-        val pickCloseAnim = remember { androidx.compose.animation.core.Animatable(1f) }
         val closePick: () -> Unit = {
             pickScope.launch {
-                try { pickCloseAnim.animateTo(0f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing)) } catch (t: Throwable) {}
+                try {
+                    pickSheetState.hide()
+                } catch (t: Throwable) {
+                }
                 uiPicker = null
                 uiPickerSelected = null
                 uiPickerIcons = null
             }
         }
-        // 自定义底部弹层（ease-out 250ms 滑入，替代 ModalBottomSheet）
-        androidx.compose.ui.window.Dialog(
+        val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
+        androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
-            properties = androidx.compose.ui.window.DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnClickOutside = false,
-                dismissOnBackPress = true
-            )
+            sheetState = pickSheetState,
+            containerColor = Color(0xFFF2F2F7),
+            // 小连续曲率
+            shape = SmoothCornerShape(12.dp),
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            // 允许下拉关闭（skipPartiallyExpanded 保证不会半展开）
+            sheetGesturesEnabled = true,
+            // 去掉 sheet 自带的导航栏 insets（否则和下面的 navigationBarsPadding 叠加出双倍白条）
+            contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
+            dragHandle = null
         ) {
-            val pickIn = remember { androidx.compose.animation.core.Animatable(0f) }
-            LaunchedEffect(Unit) {
-                pickIn.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-            }
-            Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        translationY = (1f - pickIn.value) * 600f + (1f - pickCloseAnim.value) * 600f
-                        alpha = pickIn.value * pickCloseAnim.value
-                    }
-                    .clip(SmoothCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                    .background(Color(0xFFF2F2F7))
-            ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
@@ -1846,7 +1837,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            }
         }
     }
 
@@ -1862,18 +1852,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 dismissOnBackPress = false
             )
         ) {
-            // 出现：ease-out 250ms（0.92 → 1）
             val pop = remember { androidx.compose.animation.core.Animatable(0.92f) }
             LaunchedEffect(Unit) {
-                pop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-            }
-            // 关闭：ease-in 150ms
-            var pcClosing by remember { mutableStateOf(false) }
-            LaunchedEffect(pcClosing) {
-                if (pcClosing) {
-                    pop.animateTo(0.92f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
-                    pickConfirm = null
-                }
+                pop.animateTo(
+                    1f,
+                    androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 600f)
+                )
             }
             Column(
                 modifier = Modifier
@@ -1907,7 +1891,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clickable { pcClosing = true },
+                            .clickable { pickConfirm = null },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
@@ -1924,7 +1908,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .fillMaxHeight()
                             .clickable {
                                 val action = pc.second
-                                pcClosing = true
+                                pickConfirm = null
                                 action()
                             },
                         contentAlignment = Alignment.Center
@@ -2102,7 +2086,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0x66000000))
-                // 键盘弹出时上移，避免被输入法顶乱/出现编辑浮层
                 .imePadding()
                 .padding(24.dp)
         ) {
@@ -2674,8 +2657,6 @@ private fun ProMaxIsland(
         }
     }
 
-    // 液态形变（Liquid Stretch）：收起瞬间按"速度"拉伸/压扁，随后弹簧恢复
-    val liquid = remember { Animatable(1f) }
     // Island.kt motion: 1s bump/sway/lift envelope（#1119 原样：展开/选中也晃）
     val bounce = remember { Animatable(0f) }
     LaunchedEffect(expanded, selectedFile) {
@@ -2822,11 +2803,8 @@ private fun ProMaxIsland(
                 .zIndex(1f)
                 .width(pillW)
                 .graphicsLayer {
-                    // 液态形变：收起时先横向拉伸、纵向压扁，弹簧回正（最大 15%）
-                    val liq = liquid.value
-                    val stretch = (1f - liq) * 0.15f
-                    scaleX = bump * (1f + stretch)
-                    scaleY = bump * (1f - stretch * 0.75f)
+                    scaleX = bump
+                    scaleY = bump
                     translationX = with(density) { sway.dp.toPx() }
                     translationY = with(density) { lift.dp.toPx() }
                 }
@@ -2835,16 +2813,6 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(34.dp))
                 .combinedClickable(
                     onClick = {
-                        // 收起：液态形变（拉伸 → 弹簧恢复）
-                        reopenScope.launch {
-                            liquid.snapTo(0f)
-                            liquid.animateTo(
-                                1f,
-                                androidx.compose.animation.core.spring(
-                                    dampingRatio = 0.32f, stiffness = 260f
-                                )
-                            )
-                        }
                         if (terminalMode) onTermClose()
                         // 收起时清空撤销事件
                         pendingUndo = null
@@ -3054,13 +3022,12 @@ private fun ProMaxIsland(
             AnimatedVisibility(
                 visible = (navMode || navTarget != null) && !navClosing,
                 enter = expandVertically(
-                    // ease-out 250ms
+                    // 出现：ease-out 250ms
                     animationSpec = tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                     expandFrom = Alignment.Bottom
                 ) + fadeIn(tween(180)),
-                // 收起动画要看得见（原来 spring 520 太快，像瞬间消失）
+                // 关闭：ease-in 150ms
                 exit = shrinkVertically(
-                    // 关闭：ease-in 150ms（比出现短）
                     animationSpec = tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing),
                     shrinkTowards = Alignment.Bottom
                 ) + fadeOut(tween(150))
@@ -5529,7 +5496,6 @@ private fun BrowserPane(
                 onSwipeDeselect = { onMultiDeselect(rowPath) },
                 onLongPressEnterMulti = { multiMode = true },
                 isPressed = pressedPath == rowPath,
-                isShrunk = pressedPath != null && pressedPath != rowPath,
                 onClick = {
                     if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
@@ -5672,32 +5638,19 @@ private fun FsRow(
     onSwipeDeselect: () -> Unit = {},
     onLongPressEnterMulti: () -> Unit = {},
     isPressed: Boolean = false,
-    isShrunk: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
-    // 滚动渐显：首次进入视口时上浮淡入（每行只播一次，始终播放，不跟随系统"减弱动态效果"）
-    val enterP = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(Unit) {
-        enterP.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-    }
     // iOS Inset Grouped：整体卡片 + 行间 0.5dp 分隔线
     Column {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer {
-                    // 长按行放大突出，其余行略微缩小
-                    val sc = when {
-                        isPressed -> 1.06f
-                        isShrunk -> 0.97f
-                        else -> 1f
-                    }
+                    // 长按时整行放大（1.06）
+                    val sc = if (isPressed) 1.06f else 1f
                     scaleX = sc
                     scaleY = sc
-                    // 渐显：上浮 14px + 淡入
-                    alpha = enterP.value
-                    translationY = (1f - enterP.value) * 14f
                 }
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .background(
