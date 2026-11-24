@@ -163,10 +163,8 @@ jobs:
               os.makedirs(base, exist_ok=True)
               im = src.resize((s, s), Image.LANCZOS)
               im.save(f'{base}/ic_launcher.png')
-              # 分岛图标（模块图标）换成 troll；胶囊图标 mod_icon 保持原样
-              im.save(f'{base}/ic_modules_foreground.png')
-              for jp in glob.glob(f'{base}/ic_modules_foreground.jpg'):
-                  os.remove(jp)
+              # 灵动岛左侧图标（mod_icon）换成 troll；模块图标 ic_modules_foreground 保持原样
+              im.save(f'{base}/mod_icon.png')
           # adaptive icon xml 删掉，直接用 png
           for f in glob.glob('src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml'):
               os.remove(f)
