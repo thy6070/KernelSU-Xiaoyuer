@@ -2718,9 +2718,17 @@ private fun ProMaxIsland(
 
             // 撤回按钮：独立浮层（不放进导航栏面板，收起只收它自己）
             AnimatedVisibility(
-                visible = navTarget == null && pendingUndo != null,
-                enter = fadeIn(tween(180)) + androidx.compose.animation.scaleIn(initialScale = 0.9f, animationSpec = tween(180)),
-                exit = fadeOut(tween(150)) + androidx.compose.animation.scaleOut(targetScale = 0.9f, animationSpec = tween(150))
+                // 只在展开面板时显示（删除后收起面板不直接弹撤回按钮）
+                visible = (navMode || navTarget != null) && navTarget == null && pendingUndo != null,
+                // 与其他按钮/面板同一套：高度伸缩 + 淡入淡出
+                enter = androidx.compose.animation.expandVertically(
+                    animationSpec = tween(260, easing = zyEase),
+                    expandFrom = Alignment.Bottom
+                ) + fadeIn(tween(160)),
+                exit = androidx.compose.animation.shrinkVertically(
+                    animationSpec = tween(260, easing = zyEase),
+                    shrinkTowards = Alignment.Bottom
+                ) + fadeOut(tween(160))
             ) {
             // 有可撤销操作：展开面板顶部显示蓝色大按钮
             if (navTarget == null && pendingUndo != null) {
@@ -4678,7 +4686,8 @@ private fun ModeButton(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
-            .clip(SmoothCornerShape(28.dp))
+            // 正常胶囊（不要连续曲率）
+            .clip(RoundedCornerShape(percent = 50))
             .background(Color(0xE60E0E10))
             .clickable {
                 on = !on
