@@ -6102,6 +6102,34 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
         }
         if (saved.isNotEmpty() && key.isEmpty()) key = saved
     }
+    // 卡密正确 → 自动验证并收起（不用手动点激活）
+    LaunchedEffect(key) {
+        if (key.isBlank() || busy) return@LaunchedEffect
+        kotlinx.coroutines.delay(800)
+        if (key.isBlank() || busy) return@LaunchedEffect
+        busy = true
+        msg = "验证中…"
+        val err = withContext(Dispatchers.IO) {
+            try { me.weishu.kernelsu.ui.screen.WeiYan.verify(ctx, key.trim()) } catch (t: Throwable) { t.message ?: "验证失败" }
+        }
+        busy = false
+        if (err == null) {
+            try {
+                ctx.getSharedPreferences("yx_mode", 0).edit().putBoolean("card_ok", true).apply()
+            } catch (t: Throwable) {}
+            try {
+                val k = key.trim().replace("'", "'\\''")
+                com.topjohnwu.superuser.Shell.cmd(
+                    "mkdir -p /storage/emulated/0/小鱼儿; echo '" + k + "' > \"/storage/emulated/0/小鱼儿/小鱼儿密钥\""
+                ).exec()
+            } catch (t: Throwable) {}
+            me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
+            msg = "激活成功"
+            onDone()
+        } else {
+            msg = err
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
