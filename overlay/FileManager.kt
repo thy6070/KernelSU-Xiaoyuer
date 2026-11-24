@@ -1116,6 +1116,99 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
     )
 
+    // iOS 风格长按菜单（白色圆角卡片 + 选项行 + 图标）
+    val cmPath = ctxMenuPath
+    if (cmPath != null) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { ctxMenuPath = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
+        ) {
+            val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
+            val cmName = cmPath.substringAfterLast('/')
+            Box(modifier = Modifier.fillMaxSize()) {
+            // 从长按位置（右下角）展开：scale 0.86 → 1 + 淡入
+            val cmScale = remember { androidx.compose.animation.core.Animatable(0.86f) }
+            val cmAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(Unit) {
+                cmScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 700f))
+            }
+            LaunchedEffect(Unit) {
+                cmAlpha.animateTo(1f, tween(140))
+            }
+            Column(
+                modifier = Modifier
+                    .align(if (ctxMenuRight) Alignment.CenterStart else Alignment.CenterEnd)
+                    .padding(horizontal = 16.dp)
+                    .width(260.dp)
+                    .graphicsLayer {
+                        scaleX = cmScale.value
+                        scaleY = cmScale.value
+                        alpha = cmAlpha.value
+                        // 动画原点：菜单靠近长按文件的那一侧的底角
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
+                            if (ctxMenuRight) 0f else 1f, 1f
+                        )
+                    }
+                    .clip(SmoothCornerShape(14.dp))
+                    .background(Color(0xFFF2F2F7))
+            ) {
+                // 操作行
+                data class CmItem(val label: String, val red: Boolean = false, val act: () -> Unit)
+                val items = ArrayList<CmItem>()
+                items.add(CmItem("删除", red = true) {
+                    longPressPath = cmPath
+                    pendingUndo = null
+                    ctxMenuPath = null
+                    onFileOp("delete", "")
+                })
+                items.add(CmItem("分享") {
+                    longPressPath = cmPath
+                    onFileOp("share", "")
+                    ctxMenuPath = null
+                })
+                items.add(CmItem(if (isDirCm) "压缩" else "编辑") {
+                    longPressPath = cmPath
+                    ctxMenuPath = null
+                    if (isDirCm) onFileOp("zip", "") else onFileOp("edit", "")
+                })
+                items.add(CmItem("复制") {
+                    longPressPath = cmPath
+                    onFileOp("copy", "")
+                    ctxMenuPath = null
+                })
+                items.add(CmItem("移动") {
+                    longPressPath = cmPath
+                    onFileOp("move", "")
+                    ctxMenuPath = null
+                })
+                items.forEachIndexed { i, it ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .clickable { it.act() }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            it.label,
+                            fontSize = 16.sp,
+                            color = if (it.red) Color(0xFFFF3B30) else Color(0xFF1C1C1E)
+                        )
+                    }
+                    if (i < items.size - 1) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(Color(0x22000000)))
+                    }
+                }
+            }
+            }
+        }
+    }
+
+
         }
 
     // ===== 搜索文件 =====
@@ -2369,102 +2462,7 @@ private fun ProMaxIsland(
         }
     }
 
-    // iOS 风格长按菜单（白色圆角卡片 + 选项行 + 图标）
-    val cmPath = ctxMenuPath
-    if (cmPath != null) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { ctxMenuPath = null },
-            properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnClickOutside = true,
-                dismissOnBackPress = true
-            )
-        ) {
-            val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
-            val cmName = cmPath.substringAfterLast('/')
-            Box(modifier = Modifier.fillMaxSize()) {
-            // 从长按位置（右下角）展开：scale 0.86 → 1 + 淡入
-            val cmScale = remember { androidx.compose.animation.core.Animatable(0.86f) }
-            val cmAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
-            LaunchedEffect(Unit) {
-                cmScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 700f))
-            }
-            LaunchedEffect(Unit) {
-                cmAlpha.animateTo(1f, tween(140))
-            }
-            Column(
-                modifier = Modifier
-                    .align(if (ctxMenuRight) Alignment.CenterStart else Alignment.CenterEnd)
-                    .padding(horizontal = 16.dp)
-                    .width(260.dp)
-                    .graphicsLayer {
-                        scaleX = cmScale.value
-                        scaleY = cmScale.value
-                        alpha = cmAlpha.value
-                        // 动画原点：菜单靠近长按文件的那一侧的底角
-                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
-                            if (ctxMenuRight) 0f else 1f, 1f
-                        )
-                    }
-                    .clip(SmoothCornerShape(14.dp))
-                    .background(Color(0xFFF2F2F7))
-            ) {
-                // 操作行
-                data class CmItem(val label: String, val red: Boolean = false, val act: () -> Unit)
-                val items = ArrayList<CmItem>()
-                items.add(CmItem("删除", red = true) {
-                    longPressPath = cmPath
-                    pendingUndo = null
-                    switchStep(12)
-                    ctxMenuPath = null
-                })
-                items.add(CmItem("分享") {
-                    longPressPath = cmPath
-                    onFileOp("share", "")
-                    ctxMenuPath = null
-                })
-                items.add(CmItem(if (isDirCm) "压缩" else "编辑") {
-                    longPressPath = cmPath
-                    if (isDirCm) onFileOp("zip", "") else onFileOp("edit", "")
-                    ctxMenuPath = null
-                })
-                items.add(CmItem("重命名") {
-                    longPressPath = cmPath
-                    switchStep(6)
-                    ctxMenuPath = null
-                })
-                items.add(CmItem("复制") {
-                    longPressPath = cmPath
-                    onFileOp("copy", "")
-                    ctxMenuPath = null
-                })
-                items.add(CmItem("移动") {
-                    longPressPath = cmPath
-                    onFileOp("move", "")
-                    ctxMenuPath = null
-                })
-                items.forEachIndexed { i, it ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp)
-                            .clickable { it.act() }
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            it.label,
-                            fontSize = 16.sp,
-                            color = if (it.red) Color(0xFFFF3B30) else Color(0xFF1C1C1E)
-                        )
-                    }
-                    if (i < items.size - 1) {
-                        Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(Color(0x22000000)))
-                    }
-                }
-            }
-            }
-        }
-    }
+
 
 
     LaunchedEffect(longPressPath) {
