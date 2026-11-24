@@ -79,6 +79,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.Person
@@ -412,30 +414,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // iOS 风格长按上下文菜单（记录长按位置决定展开方向）
     var ctxMenuPath by remember { mutableStateOf<String?>(null) }
     var ctxMenuRight by remember { mutableStateOf(false) }
+    var ctxMenuClosing by remember { mutableStateOf(false) }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
     var appMenuLabel by remember { mutableStateOf("") }
-    val appMenuExtract: (String, String) -> Unit = { pkg, label ->
-        uiScope.launch {
-            withContext(Dispatchers.IO) {
-                try {
-                    val safe = label.replace("/", "_").replace("\"", "_")
-                    val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
-                        "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
-                        "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
-                        "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
-                    ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
-                } catch (t: Throwable) {}
-            }
-            try {
-                val safe = label.replace("/", "_").replace("\"", "_")
-                FileLocate.side = "L"
-                FileLocate.path = "/storage/emulated/0/小鱼儿/" + safe + ".apk"
-                FileLocate.tick += 1
-            } catch (t: Throwable) {}
-            refreshTick += 1
-        }
-    }
     // 长按行在列表中的序号（菜单贴在那一行分割线附近展开）
     var ctxMenuRow by remember { mutableStateOf(-1) }
     // 各行在屏幕上的真实 y（px），长按时取目标行
@@ -468,6 +450,28 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var activeProc by remember { mutableStateOf<Process?>(null) }
     val panelP = remember { Animatable(0f) }
     val uiScope = rememberCoroutineScope()
+    val appMenuExtract: (String, String) -> Unit = { pkg, label ->
+        uiScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    val safe = label.replace("/", "_").replace("\"", "_")
+                    val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
+                        "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
+                        "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
+                        "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
+                    ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
+                } catch (t: Throwable) {}
+            }
+            try {
+                val safe = label.replace("/", "_").replace("\"", "_")
+                FileLocate.side = "L"
+                FileLocate.path = "/storage/emulated/0/小鱼儿/" + safe + ".apk"
+                FileLocate.tick += 1
+            } catch (t: Throwable) {}
+            refreshTick += 1
+        }
+    }
+
 
     // 执行命令（岛内和全屏共用）
     fun termRun() {
