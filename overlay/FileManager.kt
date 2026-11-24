@@ -2727,9 +2727,18 @@ private fun ProMaxIsland(
                     shrinkTowards = Alignment.Bottom
                 ) + fadeOut(tween(90))
             ) {
+                // 收起时内容淡出（能看到当前层按钮的收起，又不闪回上一级）
+                val contentAlpha by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = if (navClosing) 0f else 1f,
+                    animationSpec = tween(140),
+                    label = "contentAlpha"
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = contentAlpha
+                        }
                         .animateContentSize(animationSpec = tween(260, easing = zyEase))
                 ) {
                 // 有可撤销操作：展开面板顶部显示蓝色大按钮
@@ -2747,14 +2756,15 @@ private fun ProMaxIsland(
                                 .background(Color(0xFF007AFF))
                                 .clickable {
                                     val op = pendingUndo
-                                    // 撤回：按钮和面板一起收起（面板直接收，不经过导航栏状态）
-                                    pendingUndo = null
+                                    // 先淡出（此时内容还是撤回按钮本身），淡完再清状态
                                     navClosing = true
-                                    navMode = false
-                                    navTarget = null
-                                    expanded = false
                                     reopenScope.launch {
-                                        kotlinx.coroutines.delay(220)
+                                        kotlinx.coroutines.delay(140)
+                                        pendingUndo = null
+                                        navMode = false
+                                        navTarget = null
+                                        expanded = false
+                                        kotlinx.coroutines.delay(80)
                                         navClosing = false
                                     }
                                     if (op != null) {
@@ -3503,6 +3513,7 @@ private fun ProMaxIsland(
                                         }
                                         if (longPressIsDir) {
                                             IslandActionButton("删除", Color(0xFFFF3B30)) {
+                                                pendingUndo = null
                                                 switchStep(12)
                                             }
                                         } else {
@@ -3857,7 +3868,11 @@ private fun ProMaxIsland(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
-                            IslandActionButton("删除", Color(0xFFFF3B30)) { switchStep(12) }
+                            IslandActionButton("删除", Color(0xFFFF3B30)) {
+                                // 进入确认删除：上一个事件先清掉
+                                pendingUndo = null
+                                switchStep(12)
+                            }
                         }
                         Box(modifier = Modifier.weight(1f)) {
                             IslandActionButton(actionLabel, actionColor) {
