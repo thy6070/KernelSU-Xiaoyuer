@@ -2716,6 +2716,105 @@ private fun ProMaxIsland(
                 }
             }
 
+            // 撤回按钮：独立浮层（不放进导航栏面板，收起只收它自己）
+            AnimatedVisibility(
+                visible = navTarget == null && pendingUndo != null,
+                enter = fadeIn(tween(180)) + androidx.compose.animation.scaleIn(initialScale = 0.9f, animationSpec = tween(180)),
+                exit = fadeOut(tween(150)) + androidx.compose.animation.scaleOut(targetScale = 0.9f, animationSpec = tween(150))
+            ) {
+            // 有可撤销操作：展开面板顶部显示蓝色大按钮
+            if (navTarget == null && pendingUndo != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // 提取同款胶囊按钮
+                            .clip(RoundedCornerShape(percent = 50))
+                            .background(Color(0xFF007AFF))
+                            .clickable {
+                                val op = pendingUndo
+                                // 先淡出（此时内容还是撤回按钮本身），淡完再清状态
+                                navClosing = true
+                                reopenScope.launch {
+                                    kotlinx.coroutines.delay(140)
+                                    pendingUndo = null
+                                    navMode = false
+                                    navTarget = null
+                                    expanded = false
+                                    kotlinx.coroutines.delay(80)
+                                    navClosing = false
+                                }
+                                if (op != null) {
+                                    navScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            try {
+                                                fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
+                                                val trash = "/data/local/tmp/xy_trash/last"
+                                                when (op.kind) {
+                                                    "delete" -> {
+                                                        op.src.forEach { src ->
+                                                            val name = src.substringAfterLast('/')
+                                                            val dir = src.substringBeforeLast('/', "/")
+                                                            ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                "cp -a " + q(trash + "/" + name) + " " + q(dir + "/") + " 2>/dev/null || true")
+                                                                .redirectErrorStream(true).start().waitFor()
+                                                        }
+                                                        // 撤销完成：清空回收站
+                                                        ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                            "rm -rf " + q(trash))
+                                                            .redirectErrorStream(true).start().waitFor()
+                                                    }
+                                                    "move" -> {
+                                                        op.src.forEachIndexed { i, src ->
+                                                            val name = src.substringAfterLast('/')
+                                                            val target = op.dst.getOrElse(i) { op.dst.firstOrNull() ?: "" }
+                                                            ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                "mv -f " + q(target + "/" + name) + " " + q(src))
+                                                                .redirectErrorStream(true).start().waitFor()
+                                                        }
+                                                    }
+                                                    "copy" -> {
+                                                        op.src.forEach { src ->
+                                                            val name = src.substringAfterLast('/')
+                                                            val target = op.dst.firstOrNull() ?: ""
+                                                            ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                "rm -rf " + q(target + "/" + name))
+                                                                .redirectErrorStream(true).start().waitFor()
+                                                        }
+                                                    }
+                                                    "rename" -> {
+                                                        val oldP = op.src.firstOrNull() ?: ""
+                                                        val newP = op.dst.firstOrNull() ?: ""
+                                                        if (oldP.isNotEmpty() && newP.isNotEmpty()) {
+                                                            ProcessBuilder(suBin(), "--mount-master", "-c",
+                                                                "mv -f " + q(newP) + " " + q(oldP))
+                                                                .redirectErrorStream(true).start().waitFor()
+                                                        }
+                                                    }
+                                                }
+                                            } catch (t: Throwable) {}
+                                        }
+                                        // 不调用 onRefresh：它的尾随 lambda 是"打开 ModePanel"，会误开面板
+                                    }
+                                }
+                            }
+                            .padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "撤回上一个事件",
+                            fontSize = 14.sp,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            }
             AnimatedVisibility(
                 visible = (navMode || navTarget != null) && !navClosing,
                 enter = expandVertically(
@@ -2741,98 +2840,7 @@ private fun ProMaxIsland(
                         }
                         .animateContentSize(animationSpec = tween(260, easing = zyEase))
                 ) {
-                // 有可撤销操作：展开面板顶部显示蓝色大按钮
-                if (navTarget == null && pendingUndo != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                // 提取同款胶囊按钮
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(Color(0xFF007AFF))
-                                .clickable {
-                                    val op = pendingUndo
-                                    // 先淡出（此时内容还是撤回按钮本身），淡完再清状态
-                                    navClosing = true
-                                    reopenScope.launch {
-                                        kotlinx.coroutines.delay(140)
-                                        pendingUndo = null
-                                        navMode = false
-                                        navTarget = null
-                                        expanded = false
-                                        kotlinx.coroutines.delay(80)
-                                        navClosing = false
-                                    }
-                                    if (op != null) {
-                                        navScope.launch {
-                                            withContext(Dispatchers.IO) {
-                                                try {
-                                                    fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
-                                                    val trash = "/data/local/tmp/xy_trash/last"
-                                                    when (op.kind) {
-                                                        "delete" -> {
-                                                            op.src.forEach { src ->
-                                                                val name = src.substringAfterLast('/')
-                                                                val dir = src.substringBeforeLast('/', "/")
-                                                                ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                                    "cp -a " + q(trash + "/" + name) + " " + q(dir + "/") + " 2>/dev/null || true")
-                                                                    .redirectErrorStream(true).start().waitFor()
-                                                            }
-                                                            // 撤销完成：清空回收站
-                                                            ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                                "rm -rf " + q(trash))
-                                                                .redirectErrorStream(true).start().waitFor()
-                                                        }
-                                                        "move" -> {
-                                                            op.src.forEachIndexed { i, src ->
-                                                                val name = src.substringAfterLast('/')
-                                                                val target = op.dst.getOrElse(i) { op.dst.firstOrNull() ?: "" }
-                                                                ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                                    "mv -f " + q(target + "/" + name) + " " + q(src))
-                                                                    .redirectErrorStream(true).start().waitFor()
-                                                            }
-                                                        }
-                                                        "copy" -> {
-                                                            op.src.forEach { src ->
-                                                                val name = src.substringAfterLast('/')
-                                                                val target = op.dst.firstOrNull() ?: ""
-                                                                ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                                    "rm -rf " + q(target + "/" + name))
-                                                                    .redirectErrorStream(true).start().waitFor()
-                                                            }
-                                                        }
-                                                        "rename" -> {
-                                                            val oldP = op.src.firstOrNull() ?: ""
-                                                            val newP = op.dst.firstOrNull() ?: ""
-                                                            if (oldP.isNotEmpty() && newP.isNotEmpty()) {
-                                                                ProcessBuilder(suBin(), "--mount-master", "-c",
-                                                                    "mv -f " + q(newP) + " " + q(oldP))
-                                                                    .redirectErrorStream(true).start().waitFor()
-                                                            }
-                                                        }
-                                                    }
-                                                } catch (t: Throwable) {}
-                                            }
-                                            // 不调用 onRefresh：它的尾随 lambda 是"打开 ModePanel"，会误开面板
-                                        }
-                                    }
-                                }
-                                .padding(vertical = 11.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "撤回上一个事件",
-                                fontSize = 14.sp,
-                                color = Color.White,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
+
                 if (navTarget == null && pendingUndo == null) Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
