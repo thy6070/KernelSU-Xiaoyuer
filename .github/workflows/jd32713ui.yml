@@ -163,7 +163,8 @@ jobs:
               os.makedirs(base, exist_ok=True)
               im = src.resize((s, s), Image.LANCZOS)
               im.save(f'{base}/ic_launcher.png')
-              # 胶囊/分岛（fps+ 入口）图标都保持原样，只换 App 图标
+              # 胶囊左侧图标 mod_icon 换成 troll；分岛/模块图标保持原样
+              im.save(f'{base}/mod_icon.png')
           # adaptive icon xml 删掉，直接用 png
           for f in glob.glob('src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml'):
               os.remove(f)
