@@ -122,6 +122,19 @@ jobs:
             mkdir -p src/manager/app/src/main/res/mipmap-$d
             cp manager/app/src/main/res/mipmap-$d/ic_modules_foreground.jpg src/manager/app/src/main/res/mipmap-$d/ 2>/dev/null || cp old/manager/app/src/main/res/mipmap-$d/ic_modules_foreground.png src/manager/app/src/main/res/mipmap-$d/ 2>/dev/null || true
           done
+          # 软件名改成 Emperor Weapon（官方 strings 里的 app_name）
+          python3 - <<'PYEOF'
+          import re, io
+          p='src/manager/app/src/main/res/values/strings.xml'
+          t=io.open(p,encoding='utf-8').read()
+          if 'name="app_name"' in t:
+              t=re.sub(r'<string name="app_name">.*?</string>', '<string name="app_name">Emperor Weapon</string>', t)
+          else:
+              t=t.replace('<resources>', '<resources>\n    <string name="app_name">Emperor Weapon</string>', 1)
+          io.open(p,'w',encoding='utf-8').write(t)
+          print('app_name -> Emperor Weapon')
+          PYEOF
+
           mkdir -p src/manager/app/src/main/res/xml src/manager/app/src/main/res/drawable-nodpi
           cp old/kernel/feature/selinux_hide.c src/kernel/feature/
           echo overlay-ok
