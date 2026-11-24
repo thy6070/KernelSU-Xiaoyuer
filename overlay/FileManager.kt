@@ -1158,32 +1158,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 操作行
                 data class CmItem(val label: String, val red: Boolean = false, val act: () -> Unit)
                 val items = ArrayList<CmItem>()
-                items.add(CmItem("删除", red = true) {
+                // 菜单动作：设置长按目标后走原面板流程（Screen 内没有 onFileOp 的局部引用）
+                fun cmAct(op: String) {
                     longPressPath = cmPath
-                    pendingUndo = null
+                    longPressIsDir = isDirCm
+                    longPressTick += 1
                     ctxMenuPath = null
-                    onFileOp("delete", "")
-                })
-                items.add(CmItem("分享") {
-                    longPressPath = cmPath
-                    onFileOp("share", "")
-                    ctxMenuPath = null
-                })
-                items.add(CmItem(if (isDirCm) "压缩" else "编辑") {
-                    longPressPath = cmPath
-                    ctxMenuPath = null
-                    if (isDirCm) onFileOp("zip", "") else onFileOp("edit", "")
-                })
-                items.add(CmItem("复制") {
-                    longPressPath = cmPath
-                    onFileOp("copy", "")
-                    ctxMenuPath = null
-                })
-                items.add(CmItem("移动") {
-                    longPressPath = cmPath
-                    onFileOp("move", "")
-                    ctxMenuPath = null
-                })
+                }
+                items.add(CmItem("删除", red = true) { cmAct("delete") })
+                items.add(CmItem("分享") { cmAct("share") })
+                items.add(CmItem(if (isDirCm) "压缩" else "编辑") { cmAct(if (isDirCm) "zip" else "edit") })
+                items.add(CmItem("复制") { cmAct("copy") })
+                items.add(CmItem("移动") { cmAct("move") })
                 items.forEachIndexed { i, it ->
                     Row(
                         modifier = Modifier
