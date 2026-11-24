@@ -1862,12 +1862,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 dismissOnBackPress = false
             )
         ) {
+            // 出现：ease-out 250ms（0.92 → 1）
             val pop = remember { androidx.compose.animation.core.Animatable(0.92f) }
             LaunchedEffect(Unit) {
-                pop.animateTo(
-                    1f,
-                    androidx.compose.animation.core.spring(dampingRatio = 0.62f, stiffness = 600f)
-                )
+                pop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            }
+            // 关闭：ease-in 150ms
+            var pcClosing by remember { mutableStateOf(false) }
+            LaunchedEffect(pcClosing) {
+                if (pcClosing) {
+                    pop.animateTo(0.92f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                    pickConfirm = null
+                }
             }
             Column(
                 modifier = Modifier
@@ -1901,7 +1907,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clickable { pickConfirm = null },
+                            .clickable { pcClosing = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
@@ -1918,7 +1924,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .fillMaxHeight()
                             .clickable {
                                 val action = pc.second
-                                pickConfirm = null
+                                pcClosing = true
                                 action()
                             },
                         contentAlignment = Alignment.Center
