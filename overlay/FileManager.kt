@@ -6439,7 +6439,7 @@ private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatche
 
     // go straight through su: libsu may be uninitialised and silently yields an empty list
     // ls -l 顺便拿到大小和修改时间（显示在行右侧小字）
-    val shellOut = suNow("ls -l \"$norm\" 2>/dev/null")
+    val shellOut = suNow("ls -lL \"$norm\" 2>/dev/null")
         .lines().filter { it.isNotBlank() }
 
     val fromShell = shellOut.mapNotNull { raw ->
