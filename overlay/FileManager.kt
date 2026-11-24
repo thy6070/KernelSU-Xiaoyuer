@@ -829,13 +829,31 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Thread {
                 try {
                     val pm = appCtx.packageManager
-                    val apps = pm.getInstalledApplications(0)
-                        .filter { (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != "com.tencent.THY" }
-                        .sortedBy { it.loadLabel(pm).toString() }
-                    val labels = apps.map { it.loadLabel(pm).toString() }
-                    val icons = apps.map { app ->
+                    // 与游戏清理同款：优先超级用户列表（KSU 授权列表）
+                    val suList = try {
+                        val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+                        kotlinx.coroutines.runBlocking { repo.getAppList() }.getOrNull()?.first ?: emptyList()
+                    } catch (t: Throwable) { emptyList() }
+                    val pairs: List<Pair<String, String>> = if (suList.isNotEmpty()) {
+                        suList.filter { ai ->
+                            val aiInfo = ai.packageInfo.applicationInfo
+                            val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                            !isSystem && ai.packageName != "android"
+                        }.sortedBy { it.label }.map { it.packageName to it.label }
+                    } else {
+                        pm.getInstalledApplications(0)
+                            .filter {
+                                val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                                val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
+                                !isSystem && hasCode && it.packageName != "android"
+                            }
+                            .sortedBy { it.loadLabel(pm).toString() }
+                            .map { it.packageName to it.loadLabel(pm).toString() }
+                    }
+                    val labels = pairs.map { it.second }
+                    val icons = pairs.map { (pkg, _) ->
                         try {
-                            val d = pm.getApplicationIcon(app.packageName)
+                            val d = pm.getApplicationIcon(pkg)
                             val bmp = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
                             val cv = android.graphics.Canvas(bmp)
                             d.setBounds(0, 0, 64, 64)
@@ -848,7 +866,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         uiPickerIcons = icons
                     }
                     uiPickerAction = { label ->
-                        val pkg = apps.firstOrNull { it.loadLabel(pm).toString() == label }?.packageName ?: ""
+                        val pkg = pairs.firstOrNull { it.second == label }?.first ?: ""
                         appMenuLabel = label
                         appMenuPkg = pkg
                         uiPicker = null
@@ -1238,6 +1256,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .width(280.dp)
                     .clip(SmoothCornerShape(14.dp))
                     .background(Color(0xFFF2F2F7))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
             ) {
                 // 标题：应用名（居中）
                 Text(
@@ -1316,6 +1335,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier
                 .fillMaxSize()
+                .background(Color(0x66000000))
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = null
@@ -1331,6 +1351,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
             LaunchedEffect(Unit) {
                 cmAlpha.animateTo(1f, tween(140))
+            }
+            // 关闭：ease-in 150ms 缩回淡出后再关（点空白/返回也走这里）
+            LaunchedEffect(ctxMenuClosing) {
+                if (ctxMenuClosing) {
+                    cmScale.animateTo(0.9f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                    cmAlpha.animateTo(0f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                    ctxMenuClosing = false
+                    ctxMenuPath = null
+                }
             }
             Column(
                 modifier = Modifier
@@ -1353,23 +1382,68 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                     .clip(SmoothCornerShape(14.dp))
                     .background(Color(0xFFF2F2F7))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
             ) {
                 // 顶部：文件名（居中）
                 Text(
                     text = cmName,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    fontSize = 13.sp,
-                    color = Color(0xFF8E8E93),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
                 // 操作行
                 data class CmItem(val label: String, val red: Boolean = false, val act: () -> Unit)
                 val items = ArrayList<CmItem>()
-                // 按原长按面板的逻辑补全（文件/文件夹区分；不同扩展名不同动作）
+                // 菜单项直接执行（不展开灵动岛）
                 fun cmPanel() { longPressPath = cmPath; longPressIsDir = isDirCm; ctxMenuPath = null; longPressTick += 1 }
+                fun cmAct(op: String) {
+                    val p = cmPath
+                    ctxMenuClosing = true
+                    when (op) {
+                        "delete" -> uiScope.launch {
+                            withContext(Dispatchers.IO) { runCatching { com.topjohnwu.superuser.Shell.cmd("rm -rf " + "'" + p.replace("'", "'\\''") + "'").exec() } }
+                            refreshTick += 1
+                        }
+                        "share" -> uiScope.launch {
+                            try {
+                                val uri = androidx.core.content.FileProvider.getUriForFile(appCtx, appCtx.packageName + ".fileprovider", java.io.File(p))
+                                val i2 = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "*/*"; putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                appCtx.startActivity(android.content.Intent.createChooser(i2, "分享").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                            } catch (t: Throwable) { android.widget.Toast.makeText(appCtx, "分享失败", android.widget.Toast.LENGTH_SHORT).show() }
+                        }
+                        "copypath" -> try {
+                            val cbm = appCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cbm.setPrimaryClip(android.content.ClipData.newPlainText("path", p))
+                            android.widget.Toast.makeText(appCtx, "路径已复制", android.widget.Toast.LENGTH_SHORT).show()
+                        } catch (t: Throwable) {}
+                        "edit" -> uiScope.launch {
+                            val content = withContext(Dispatchers.IO) {
+                                runCatching { com.topjohnwu.superuser.Shell.cmd("cat '" + p.replace("'", "'\\''") + "'").exec().out.joinToString("\n") }.getOrDefault("")
+                            }
+                            editPath = p; editText = content
+                        }
+                        "install" -> uiScope.launch {
+                            try {
+                                appCtx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                    setDataAndType(androidx.core.content.FileProvider.getUriForFile(appCtx, appCtx.packageName + ".fileprovider", java.io.File(p)), "application/vnd.android.package-archive")
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                })
+                            } catch (t: Throwable) { android.widget.Toast.makeText(appCtx, "安装失败", android.widget.Toast.LENGTH_SHORT).show() }
+                        }
+                        "exec" -> uiScope.launch {
+                            withContext(Dispatchers.IO) { runCatching { Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", "sh '" + p.replace("'", "'\\''") + "' 2>/dev/null")).waitFor() } }
+                        }
+                        else -> cmPanel()
+                    }
+                }
                 fun shOp(cmd: String) {
                     uiScope.launch {
                         withContext(Dispatchers.IO) { runCatching { com.topjohnwu.superuser.Shell.cmd(cmd).exec() } }
@@ -1391,7 +1465,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             cmIsExec -> "编辑"
                             else -> "执行"
                         }
-                    ) { cmPanel() })
+                    ) { cmAct(when {
+                        cmIsApk -> "install"
+                        cmIsArchive -> "zip"
+                        cmIsExec -> "edit"
+                        else -> "exec"
+                    }) })
                 }
                 // 移动/复制
                 items.add(CmItem("移动/复制") { cmPanel() })
@@ -1400,15 +1479,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 重命名
                 items.add(CmItem("重命名") { cmPanel() })
                 // 复制路径
-                items.add(CmItem("复制路径") { cmPanel() })
+                items.add(CmItem("复制路径") { cmAct("copypath") })
                 // 删除 / 分享
                 if (isDirCm) {
-                    items.add(CmItem("删除", red = true) {
-                        cmPanel()
-                    })
+                    items.add(CmItem("删除", red = true) { cmAct("delete") })
                 } else {
-                    items.add(CmItem("分享") { cmPanel() })
-                    items.add(CmItem("删除", red = true) { cmPanel() })
+                    items.add(CmItem("分享") { cmAct("share") })
+                    items.add(CmItem("删除", red = true) { cmAct("delete") })
                 }
                 items.forEachIndexed { i, it ->
                     Row(
@@ -1864,14 +1941,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             modifier = Modifier.clickable {
                                 val sel = uiPickerSelected
                                 if (sel != null) {
-                                    if (pickTitle == "选择机型") {
-                                        pickConfirm = "设为 $sel" to {
+                                    when (pickTitle) {
+                                        "选择机型" -> pickConfirm = "设为 $sel" to {
                                             uiPickerAction?.invoke(sel)
                                             uiPicker = null
                                             uiPickerIcons = null
                                         }
-                                    } else {
-                                        pickConfirm = "重置 $sel" to {
+                                        // 提取：直接打开应用操作菜单，不再弹"重置"确认
+                                        "选择要提取的应用" -> {
+                                            uiPickerAction?.invoke(sel)
+                                            uiPicker = null
+                                            uiPickerIcons = null
+                                            uiPickerSelected = null
+                                        }
+                                        else -> pickConfirm = "重置 $sel" to {
                                             uiPickerAction?.invoke(sel)
                                             uiPicker = null
                                             uiPickerIcons = null
@@ -1979,6 +2062,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                     .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
             ) {
                 Text(
                     text = pc.first,
@@ -3567,30 +3651,48 @@ private fun ProMaxIsland(
                                                         color = Color(0xFF9E9E9E)
                                                     )
                                                 }
-                                                // 官方同款：每个模块直接显示「执行 / 打开UI」
+                                                // 官方同款：每个模块直接显示「执行 / 打开UI」（左移 + 灰色圆球）
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                                                    horizontalArrangement = Arrangement.End,
+                                                    horizontalArrangement = Arrangement.Start,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.PlayArrow,
-                                                        contentDescription = "执行",
-                                                        tint = Color(0xFF0A84FF),
+                                                    Box(
                                                         modifier = Modifier
-                                                            .size(22.dp)
+                                                            .size(30.dp)
+                                                            .clip(RoundedCornerShape(percent = 50))
+                                                            .background(Color(0x33FFFFFF))
                                                             .clickable {
                                                                 navScope.launch {
-                                                                    withContext(Dispatchers.IO) {
-                                                                        try {
-                                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                                "sh \"/data/adb/modules/${m.id}/action.sh\" 2>/dev/null")).waitFor()
-                                                                        } catch (t: Throwable) {}
+                                                                    val exists = withContext(Dispatchers.IO) {
+                                                                        runCatching { java.io.File("/data/adb/modules/${m.id}/action.sh").exists() }.getOrDefault(false)
+                                                                    }
+                                                                    if (!exists) {
+                                                                        withContext(Dispatchers.Main) {
+                                                                            android.widget.Toast.makeText(navCtx, "该模块没有 action.sh", android.widget.Toast.LENGTH_SHORT).show()
+                                                                        }
+                                                                    } else {
+                                                                        withContext(Dispatchers.IO) {
+                                                                            try {
+                                                                                Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                                                                    "sh \"/data/adb/modules/${m.id}/action.sh\" 2>/dev/null")).waitFor()
+                                                                            } catch (t: Throwable) {}
+                                                                        }
+                                                                        withContext(Dispatchers.Main) {
+                                                                            android.widget.Toast.makeText(navCtx, "已执行 ${m.id}", android.widget.Toast.LENGTH_SHORT).show()
+                                                                        }
                                                                     }
                                                                 }
-                                                            }
-                                                            .padding(4.dp)
-                                                    )
+                                                            },
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Outlined.PlayArrow,
+                                                            contentDescription = "执行",
+                                                            tint = Color(0xFF0A84FF),
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
                                                     val hasWeb = runCatching {
                                                         java.io.File("/data/adb/modules/${m.id}/webroot").isDirectory
                                                     }.getOrDefault(false)
