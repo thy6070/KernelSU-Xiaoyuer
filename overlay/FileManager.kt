@@ -2737,17 +2737,9 @@ private fun ProMaxIsland(
                             .background(Color(0xFF007AFF))
                             .clickable {
                                 val op = pendingUndo
-                                // 先淡出（此时内容还是撤回按钮本身），淡完再清状态
-                                navClosing = true
-                                reopenScope.launch {
-                                    kotlinx.coroutines.delay(140)
-                                    pendingUndo = null
-                                    navMode = false
-                                    navTarget = null
-                                    expanded = false
-                                    kotlinx.coroutines.delay(80)
-                                    navClosing = false
-                                }
+                                // 跟其他按钮一样：正常收起面板
+                                pendingUndo = null
+                                closeIsland()
                                 if (op != null) {
                                     navScope.launch {
                                         withContext(Dispatchers.IO) {
