@@ -415,6 +415,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var ctxMenuPath by remember { mutableStateOf<String?>(null) }
     var ctxMenuRight by remember { mutableStateOf(false) }
     var ctxMenuClosing by remember { mutableStateOf(false) }
+    // 长按菜单：重命名输入
+    var cmRenamePath by remember { mutableStateOf<String?>(null) }
+    var cmRenameText by remember { mutableStateOf("") }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
     var appMenuLabel by remember { mutableStateOf("") }
@@ -800,6 +803,179 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
         }
+    // 文件操作（原面板逻辑，菜单与面板共用）
+    val fileOp: (String, String) -> Unit = { op, arg ->
+    // 多选批量：delete/copy/move 对选中列表一起执行
+    val multi = leftMultiSel + rightMultiSel
+    if (multi.size > 1) {
+        val paths = multi.toList()
+        uiScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
+                    val list = paths.joinToString(" ") { q(it) }
+                    val cmd = when (op) {
+                        "delete" -> "rm -rf " + list
+                        "copy" -> if (arg.isNotEmpty()) "cp -rf " + list + " " + q(arg) else ""
+                        "move" -> if (arg.isNotEmpty()) "mv -f " + list + " " + q(arg) else ""
+                        else -> ""
+                    }
+                    if (cmd.isNotEmpty()) {
+                        if (op == "delete") {
+                            // 只保留本次备份：先清空回收站再备份
+                            val trash = "/data/local/tmp/xy_trash/last"
+                            val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; for f in " + list + "; do cp -a \"\$f\" " + q(trash) + "/ 2>/dev/null || true; done"
+                            ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
+                        }
+                        val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
+                            .redirectErrorStream(true).start()
+                        proc.inputStream.bufferedReader().readText()
+                        proc.waitFor()
+                        when (op) {
+                            "delete" -> pendingUndo = UndoOp("delete", paths)
+                            "move" -> pendingUndo = UndoOp("move", paths, listOf(arg))
+                            "copy" -> pendingUndo = UndoOp("copy", paths, listOf(arg))
+                            else -> pendingUndo = null
+                        }
+                    }
+                } catch (t: Throwable) {}
+            }
+            leftMultiSel = emptySet()
+            rightMultiSel = emptySet()
+            refreshTick += 1
+        }
+    } else run {
+    val srcPath = longPressPath ?: selectedFile
+    if (srcPath != null) {
+        uiScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
+                    val dir = srcPath.substringBeforeLast('/', "/")
+                    val name = srcPath.substringAfterLast('/')
+                    val cmd = when (op) {
+                        "move" -> "mv -f " + q(srcPath) + " " + q(arg)
+                        "copy" -> "cp -rf " + q(srcPath) + " " + q(arg)
+                        "zip" -> "cd " + q(dir) + " && tar -czf " + q(name + ".tar.gz") + " " + q(name)
+                        "unzip" -> "unzip -o " + q(srcPath) + " -d " + q(arg)
+                        "rename" -> "mv -f " + q(srcPath) + " " + q(dir + "/" + arg)
+                        "delete" -> "rm -rf " + q(srcPath)
+                        "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
+                        "edit" -> "chmod 644 " + q(srcPath)
+                        else -> ""
+                    }
+                    var ok = true
+                    if (cmd.isNotEmpty()) {
+                        if (op == "delete") {
+                            // 只保留本次备份：先清空回收站再备份
+                            val trash = "/data/local/tmp/xy_trash/last"
+                            val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; cp -a " + q(srcPath) + " " + q(trash) + "/ 2>/dev/null || true"
+                            ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
+                        }
+                        val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
+                            .redirectErrorStream(true).start()
+                        val txt = proc.inputStream.bufferedReader().readText()
+                        proc.waitFor()
+                        ok = true
+                        if (op == "install") ok = txt.contains("Success")
+                        when (op) {
+                            "delete" -> pendingUndo = UndoOp("delete", listOf(srcPath))
+                            "move" -> pendingUndo = UndoOp("move", listOf(srcPath), listOf(arg))
+                            "copy" -> pendingUndo = UndoOp("copy", listOf(srcPath), listOf(arg))
+                            "rename" -> pendingUndo = UndoOp("rename", listOf(srcPath), listOf(dir + "/" + arg))
+                            else -> pendingUndo = null
+                        }
+                    }
+                    if (op == "share") {
+                        // verbatim from the ZySU source: private cache dir works with FileProvider
+                        val shareDir = java.io.File(appCtx.cacheDir, "share")
+                        shareDir.mkdirs()
+                        val dest = java.io.File(shareDir, java.io.File(srcPath).name)
+                        try {
+                            dest.delete()
+                        } catch (t: Throwable) {
+                        }
+                        runCatching {
+                            ProcessBuilder(
+                                suBin(), "--mount-master", "-c",
+                                "cp " + q(srcPath) + " " + q(dest.absolutePath) +
+                                    " ; chmod 644 " + q(dest.absolutePath)
+                            ).redirectErrorStream(true).start().waitFor()
+                        }
+                        var note: String? = null
+                        if (!dest.exists()) {
+                            note = "提取失败"
+                        } else {
+                            val candidates = listOf(appCtx.packageName + ".fileprovider")
+                            var launched = false
+                            for (authority in candidates) {
+                                if (launched) break
+                                try {
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        appCtx, authority, dest
+                                    )
+                                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "application/octet-stream"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        putExtra(android.content.Intent.EXTRA_TITLE, java.io.File(srcPath).name)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        val chooser = android.content.Intent.createChooser(send, "分享")
+                                        chooser.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        appCtx.startActivity(chooser)
+                                    }
+                                    launched = true
+                                } catch (t: Throwable) {
+                                    note = t.message
+                                }
+                            }
+                        }
+                        if (note != null) {
+                            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                runMessage = "分享失败：" + note
+                            }
+                        }
+                    }
+                    if (op == "edit") {
+                        val content = try {
+                            java.io.File(srcPath).readText()
+                        } catch (t1: Throwable) {
+                            try {
+                                Shell.cmd("cat " + q(srcPath)).exec().out.joinToString("\n")
+                            } catch (t: Throwable) {
+                                ""
+                            }
+                        }
+                        withContext(Dispatchers.Main) {
+                            editPath = srcPath
+                            editText = content
+                        }
+                    }
+                } catch (t: Throwable) {
+                }
+            }
+            try {
+                Shell.getShell().close()
+            } catch (t: Throwable) {
+            }
+            // 移动/复制完成后：只高亮目标文件，不选中（否则会展开灵动岛）
+            if (op == "move" || op == "copy") {
+                val dest = arg.trimEnd('/') + "/" + srcPath.substringAfterLast('/')
+                if (arg.trimEnd('/') == leftPath.trimEnd('/')) leftHighlight = dest
+                else if (arg.trimEnd('/') == rightPath.trimEnd('/')) rightHighlight = dest
+            }
+            refreshTick += 1
+            longPressPath = null
+            if (op == "delete") selectedFile = null   // 删除后清掉选中，否则快捷条还挂着
+            runOk = true
+            runMessage = if (op == "share") null else ("已完成")
+
+        }
+    }
+    }
+}
+
     ProMaxIsland(
         onNavigate = onNavigate,
         panelOpen = panel,
@@ -876,8 +1052,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val pkg = pairs.firstOrNull { it.second == label }?.first ?: ""
                         appMenuLabel = label
                         appMenuPkg = pkg
-                        uiPicker = null
-                        uiPickerIcons = null
+                        // 抽屉保持打开，操作菜单叠在上面
                     }
                 } catch (t: Throwable) {}
             }.start()
@@ -1023,177 +1198,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         currentPath = if (longPressFromRight) rightPath else leftPath,
         leftPath = leftPath,
         rightPath = rightPath,
-        onFileOp = { op, arg ->
-            // 多选批量：delete/copy/move 对选中列表一起执行
-            val multi = leftMultiSel + rightMultiSel
-            if (multi.size > 1) {
-                val paths = multi.toList()
-                uiScope.launch {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
-                            val list = paths.joinToString(" ") { q(it) }
-                            val cmd = when (op) {
-                                "delete" -> "rm -rf " + list
-                                "copy" -> if (arg.isNotEmpty()) "cp -rf " + list + " " + q(arg) else ""
-                                "move" -> if (arg.isNotEmpty()) "mv -f " + list + " " + q(arg) else ""
-                                else -> ""
-                            }
-                            if (cmd.isNotEmpty()) {
-                                if (op == "delete") {
-                                    // 只保留本次备份：先清空回收站再备份
-                                    val trash = "/data/local/tmp/xy_trash/last"
-                                    val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; for f in " + list + "; do cp -a \"\$f\" " + q(trash) + "/ 2>/dev/null || true; done"
-                                    ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
-                                }
-                                val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
-                                    .redirectErrorStream(true).start()
-                                proc.inputStream.bufferedReader().readText()
-                                proc.waitFor()
-                                when (op) {
-                                    "delete" -> pendingUndo = UndoOp("delete", paths)
-                                    "move" -> pendingUndo = UndoOp("move", paths, listOf(arg))
-                                    "copy" -> pendingUndo = UndoOp("copy", paths, listOf(arg))
-                                    else -> pendingUndo = null
-                                }
-                            }
-                        } catch (t: Throwable) {}
-                    }
-                    leftMultiSel = emptySet()
-                    rightMultiSel = emptySet()
-                    refreshTick += 1
-                }
-            } else run {
-            val srcPath = longPressPath ?: selectedFile
-            if (srcPath != null) {
-                uiScope.launch {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
-                            val dir = srcPath.substringBeforeLast('/', "/")
-                            val name = srcPath.substringAfterLast('/')
-                            val cmd = when (op) {
-                                "move" -> "mv -f " + q(srcPath) + " " + q(arg)
-                                "copy" -> "cp -rf " + q(srcPath) + " " + q(arg)
-                                "zip" -> "cd " + q(dir) + " && tar -czf " + q(name + ".tar.gz") + " " + q(name)
-                                "unzip" -> "unzip -o " + q(srcPath) + " -d " + q(arg)
-                                "rename" -> "mv -f " + q(srcPath) + " " + q(dir + "/" + arg)
-                                "delete" -> "rm -rf " + q(srcPath)
-                                "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
-                                "edit" -> "chmod 644 " + q(srcPath)
-                                else -> ""
-                            }
-                            var ok = true
-                            if (cmd.isNotEmpty()) {
-                                if (op == "delete") {
-                                    // 只保留本次备份：先清空回收站再备份
-                                    val trash = "/data/local/tmp/xy_trash/last"
-                                    val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; cp -a " + q(srcPath) + " " + q(trash) + "/ 2>/dev/null || true"
-                                    ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
-                                }
-                                val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd)
-                                    .redirectErrorStream(true).start()
-                                val txt = proc.inputStream.bufferedReader().readText()
-                                proc.waitFor()
-                                ok = true
-                                if (op == "install") ok = txt.contains("Success")
-                                when (op) {
-                                    "delete" -> pendingUndo = UndoOp("delete", listOf(srcPath))
-                                    "move" -> pendingUndo = UndoOp("move", listOf(srcPath), listOf(arg))
-                                    "copy" -> pendingUndo = UndoOp("copy", listOf(srcPath), listOf(arg))
-                                    "rename" -> pendingUndo = UndoOp("rename", listOf(srcPath), listOf(dir + "/" + arg))
-                                    else -> pendingUndo = null
-                                }
-                            }
-                            if (op == "share") {
-                                // verbatim from the ZySU source: private cache dir works with FileProvider
-                                val shareDir = java.io.File(appCtx.cacheDir, "share")
-                                shareDir.mkdirs()
-                                val dest = java.io.File(shareDir, java.io.File(srcPath).name)
-                                try {
-                                    dest.delete()
-                                } catch (t: Throwable) {
-                                }
-                                runCatching {
-                                    ProcessBuilder(
-                                        suBin(), "--mount-master", "-c",
-                                        "cp " + q(srcPath) + " " + q(dest.absolutePath) +
-                                            " ; chmod 644 " + q(dest.absolutePath)
-                                    ).redirectErrorStream(true).start().waitFor()
-                                }
-                                var note: String? = null
-                                if (!dest.exists()) {
-                                    note = "提取失败"
-                                } else {
-                                    val candidates = listOf(appCtx.packageName + ".fileprovider")
-                                    var launched = false
-                                    for (authority in candidates) {
-                                        if (launched) break
-                                        try {
-                                            val uri = androidx.core.content.FileProvider.getUriForFile(
-                                                appCtx, authority, dest
-                                            )
-                                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                                type = "application/octet-stream"
-                                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                                                putExtra(android.content.Intent.EXTRA_TITLE, java.io.File(srcPath).name)
-                                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            }
-                                            withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                val chooser = android.content.Intent.createChooser(send, "分享")
-                                                chooser.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                appCtx.startActivity(chooser)
-                                            }
-                                            launched = true
-                                        } catch (t: Throwable) {
-                                            note = t.message
-                                        }
-                                    }
-                                }
-                                if (note != null) {
-                                    withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                        runMessage = "分享失败：" + note
-                                    }
-                                }
-                            }
-                            if (op == "edit") {
-                                val content = try {
-                                    java.io.File(srcPath).readText()
-                                } catch (t1: Throwable) {
-                                    try {
-                                        Shell.cmd("cat " + q(srcPath)).exec().out.joinToString("\n")
-                                    } catch (t: Throwable) {
-                                        ""
-                                    }
-                                }
-                                withContext(Dispatchers.Main) {
-                                    editPath = srcPath
-                                    editText = content
-                                }
-                            }
-                        } catch (t: Throwable) {
-                        }
-                    }
-                    try {
-                        Shell.getShell().close()
-                    } catch (t: Throwable) {
-                    }
-                    // 移动/复制完成后：只高亮目标文件，不选中（否则会展开灵动岛）
-                    if (op == "move" || op == "copy") {
-                        val dest = arg.trimEnd('/') + "/" + srcPath.substringAfterLast('/')
-                        if (arg.trimEnd('/') == leftPath.trimEnd('/')) leftHighlight = dest
-                        else if (arg.trimEnd('/') == rightPath.trimEnd('/')) rightHighlight = dest
-                    }
-                    refreshTick += 1
-                    longPressPath = null
-                    if (op == "delete") selectedFile = null   // 删除后清掉选中，否则快捷条还挂着
-                    runOk = true
-                    runMessage = if (op == "share") null else ("已完成")
-
-                }
-            }
-            }
-        },
+        onFileOp = fileOp,
         onArchiveMount = {
             val p = selectedFile
             if (p != null) {
@@ -1248,13 +1253,88 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
     )
 
+    // 重命名输入弹窗（长按菜单 → 重命名）
+    val rnP = cmRenamePath
+    if (rnP != null) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { cmRenamePath = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = true
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(260.dp)
+                    .clip(SmoothCornerShape(14.dp))
+                    .background(Color(0xFFF2F2F7))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
+                    .padding(14.dp)
+            ) {
+                Text(
+                    "重命名",
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1C1C1E),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                androidx.compose.foundation.text.BasicTextField(
+                    value = cmRenameText,
+                    onValueChange = { cmRenameText = it },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1C1C1E), fontSize = 14.sp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(SmoothCornerShape(8.dp))
+                        .background(Color(0x11000000))
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "取消",
+                        modifier = Modifier.weight(1f).clickable { cmRenamePath = null }.padding(vertical = 8.dp),
+                        fontSize = 15.sp,
+                        color = Color(0xFFFF3B30),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        "确定",
+                        modifier = Modifier.weight(1f).clickable {
+                            val np = cmRenameText.trim()
+                            if (np.isNotEmpty()) {
+                                val old = rnP
+                                val dir = old.substringBeforeLast('/', "/")
+                                cmRenamePath = null
+                                uiScope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
+                                            com.topjohnwu.superuser.Shell.cmd("mv -f " + q(old) + " " + q(dir + "/" + np)).exec()
+                                        }
+                                    }
+                                    refreshTick += 1
+                                }
+                            }
+                        }.padding(vertical = 8.dp),
+                        fontSize = 15.sp,
+                        color = Color(0xFF007AFF),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+
     // 应用操作菜单（提取抽屉确认后）：提取此应用 / 普通目录 / 根目录 / 取消
     val amPkg = appMenuPkg
     if (amPkg != null) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { appMenuPkg = null },
             properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnClickOutside = true,
+                dismissOnClickOutside = false,
                 dismissOnBackPress = true,
                 usePlatformDefaultWidth = false
             )
@@ -1271,11 +1351,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0x66000000))
-                    .clickable(
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                        indication = null
-                    ) { appMenuPkg = null },
+                    .background(Color(0x66000000)),
                 contentAlignment = Alignment.Center
             ) {
             Column(
@@ -1324,7 +1400,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(42.dp)
                             .clickable { act() },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
@@ -1332,12 +1408,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Text(label, fontSize = 16.sp, color = Color(0xFF1C1C1E), textAlign = TextAlign.Center)
                     }
                     if (i < amItems.size - 1) {
-                        Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(Color(0x22000000)))
+                        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
                     }
                 }
                 Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(48.dp).clickable { appMenuPkg = null },
+                    modifier = Modifier.fillMaxWidth().height(42.dp).clickable { appMenuPkg = null },
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1398,11 +1474,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             // 关闭：ease-in 150ms 缩回淡出后再关（点空白/返回也走这里）
             LaunchedEffect(ctxMenuClosing) {
                 if (ctxMenuClosing) {
+                    // 收起：绕左下角向左下缩回（先缩，再淡出，最后移除 → 不卡顿）
                     cmScale.animateTo(
-                        0.84f,
-                        androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 500f)
+                        0.7f,
+                        tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)
                     )
-                    cmAlpha.animateTo(0f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                    cmAlpha.animateTo(0f, tween(140, easing = androidx.compose.animation.core.FastOutSlowInEasing))
                     ctxMenuClosing = false
                     ctxMenuPath = null
                 }
@@ -1422,11 +1499,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         scaleY = cmScale.value
                         alpha = cmAlpha.value
                         // 动画原点：菜单靠近长按文件的那一侧的底角
-                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
-                            // 展开从左下角向右上；收起从右上角向左下
-                            if (ctxMenuClosing) 1f else 0f,
-                            if (ctxMenuClosing) 0f else 1f
-                        )
+                        // 锚点固定左下角：展开向右上弹出，收起向左下缩回
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
                     }
                     .clip(SmoothCornerShape(14.dp))
                     .background(Color(0xFFF2F2F7))
@@ -1447,8 +1521,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 操作行
                 data class CmItem(val label: String, val red: Boolean = false, val act: () -> Unit)
                 val items = ArrayList<CmItem>()
-                // 菜单项直接执行（不展开灵动岛）
+                // 菜单项：复用原面板的 fileOp 实现
                 fun cmPanel() { longPressPath = cmPath; longPressIsDir = isDirCm; ctxMenuPath = null; longPressTick += 1 }
+                fun cmFile(op: String, arg: String = "") {
+                    longPressPath = cmPath
+                    longPressIsDir = isDirCm
+                    ctxMenuClosing = true
+                    fileOp(op, arg)
+                }
                 fun cmAct(op: String) {
                     val p = cmPath
                     ctxMenuClosing = true
@@ -1513,21 +1593,35 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             cmIsExec -> "编辑"
                             else -> "执行"
                         }
-                    ) { cmAct(when {
+                    ) { cmFile(when {
                         cmIsApk -> "install"
-                        cmIsArchive -> "zip"
+                        cmIsArchive -> "unzip"
                         cmIsExec -> "edit"
-                        else -> "exec"
+                        else -> "execute"
                     }) })
                 }
-                // 移动/复制
-                items.add(CmItem("移动/复制") { cmPanel() })
-                // 解压 / 压缩
-                items.add(CmItem(if (cmIsArchive) "解压" else "压缩") { cmPanel() })
-                // 重命名
-                items.add(CmItem("重命名") { cmPanel() })
+                // 参照目录：另一侧当前目录
+                val otherDir = if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) rightPath else leftPath
+                // 移动/复制（直接移到/复制到另一侧目录）
+                items.add(CmItem("移动到另一侧") { cmFile("move", otherDir) })
+                items.add(CmItem("重命名") {
+                    cmRenameText = cmPath.substringAfterLast('/')
+                    cmRenamePath = cmPath
+                    ctxMenuClosing = true
+                })
+                items.add(CmItem("复制到另一侧") { cmFile("copy", otherDir) })
+                // 解压 / 压缩（直接执行）
+                items.add(CmItem(if (cmIsArchive) "解压到当前目录" else "压缩") {
+                    cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
+                })
                 // 复制路径
-                items.add(CmItem("复制路径") { cmAct("copypath") })
+                items.add(CmItem("复制路径") {
+                    try {
+                        val cbm = appCtx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cbm.setPrimaryClip(android.content.ClipData.newPlainText("path", cmPath))
+                    } catch (t: Throwable) {}
+                    ctxMenuClosing = true
+                })
                 // 删除 / 分享
                 if (isDirCm) {
                     items.add(CmItem("删除", red = true) {
@@ -1536,22 +1630,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         ctxMenuClosing = true
                         // 与"重置应用"同款确认弹窗
                         pickConfirm = "确认删除 $nm" to {
-                            uiScope.launch {
-                                withContext(Dispatchers.IO) {
-                                    runCatching {
-                                        fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
-                                        com.topjohnwu.superuser.Shell.cmd(
-                                            "mkdir -p /data/local/tmp/xy_trash/last && cp -a " + q(p) + " /data/local/tmp/xy_trash/last/ 2>/dev/null; rm -rf " + q(p)
-                                        ).exec()
-                                    }
-                                }
-                                pendingUndo = UndoOp("delete", listOf(p))
-                                refreshTick += 1
-                            }
+                            longPressPath = p
+                            longPressIsDir = true
+                            fileOp("delete", "")
                         }
                     })
                 } else {
-                    items.add(CmItem("分享") { cmAct("share") })
+                    items.add(CmItem("分享") { cmFile("share") })
                 }
                 items.forEachIndexed { i, it ->
                     Row(
@@ -1571,7 +1656,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         )
                     }
                     if (i < items.size - 1) {
-                        Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(Color(0x22000000)))
+                        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
                     }
                 }
             }
@@ -2013,12 +2098,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             uiPicker = null
                                             uiPickerIcons = null
                                         }
-                                        // 提取：直接打开应用操作菜单，不再弹"重置"确认
+                                        // 提取：直接打开应用操作菜单（抽屉保留）
                                         "选择要提取的应用" -> {
                                             uiPickerAction?.invoke(sel)
-                                            uiPicker = null
-                                            uiPickerIcons = null
-                                            uiPickerSelected = null
                                         }
                                         else -> pickConfirm = "重置 $sel" to {
                                             uiPickerAction?.invoke(sel)
@@ -2039,9 +2121,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         listAlpha.animateTo(1f, tween(200))
                     }
                     androidx.compose.foundation.lazy.LazyColumn(
-                        // 半屏再低一点
+                        // 半屏再低一点；内容加载后高度变化走动画（不突兀长高）
                         modifier = Modifier
                             .heightIn(max = 180.dp)
+                            .animateContentSize(animationSpec = tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
                             .graphicsLayer { alpha = listAlpha.value }
                     ) {
                         items(pickList.size, key = { pickList[it] }) { i ->
@@ -2512,13 +2595,31 @@ private fun reapplyImmersiveActivity(view: android.view.View) {
 // 让 Dialog 自己的窗口也保持沉浸式（否则弹窗出现时会唤出系统栏）
 private fun applyImmersiveToDialog(view: android.view.View) {
     try {
-        val w = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window ?: return
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
-        androidx.core.view.WindowCompat.getInsetsController(w, view).apply {
-            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior =
-                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        // 1) Dialog 自己的窗口（必须单独设，Dialog window 不继承 Activity）
+        val w = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        if (w != null) {
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
+            androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
+                hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
         }
+        // 2) Activity 窗口（Dialog 透明时，底下 Activity 的栏仍会露出来）
+        try {
+            var c: android.content.Context? = view.context
+            while (c != null && c !is android.app.Activity) c = (c as? android.content.ContextWrapper)?.baseContext
+            val act = c as? android.app.Activity
+            if (act != null) {
+                val aw = act.window
+                androidx.core.view.WindowCompat.setDecorFitsSystemWindows(aw, false)
+                androidx.core.view.WindowCompat.getInsetsController(aw, aw.decorView).apply {
+                    hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    systemBarsBehavior =
+                        androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            }
+        } catch (t: Throwable) {}
     } catch (t: Throwable) {}
 }
 
@@ -3773,14 +3874,22 @@ private fun ProMaxIsland(
                                                                             android.widget.Toast.makeText(navCtx, "该模块没有 action.sh", android.widget.Toast.LENGTH_SHORT).show()
                                                                         }
                                                                     } else {
-                                                                        withContext(Dispatchers.IO) {
-                                                                            try {
-                                                                                Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                                    "sh \"/data/adb/modules/${m.id}/action.sh\" 2>/dev/null")).waitFor()
-                                                                            } catch (t: Throwable) {}
+                                                                        // 官方做法：用普通 su shell 执行 action.sh（--mount-master 会因命名空间失败）
+                                                                        val out = withContext(Dispatchers.IO) {
+                                                                            runCatching {
+                                                                                val pr = Runtime.getRuntime().exec(arrayOf("su", "-c",
+                                                                                    "cd \"/data/adb/modules/${m.id}\" && sh action.sh 2>&1"))
+                                                                                val t = pr.inputStream.bufferedReader().readText()
+                                                                                pr.waitFor()
+                                                                                t
+                                                                            }.getOrDefault("")
                                                                         }
                                                                         withContext(Dispatchers.Main) {
-                                                                            android.widget.Toast.makeText(navCtx, "已执行 ${m.id}", android.widget.Toast.LENGTH_SHORT).show()
+                                                                            android.widget.Toast.makeText(
+                                                                                navCtx,
+                                                                                if (out.isBlank()) "已执行 ${m.id}" else out.take(120),
+                                                                                android.widget.Toast.LENGTH_LONG
+                                                                            ).show()
                                                                         }
                                                                     }
                                                                 }
@@ -3794,21 +3903,24 @@ private fun ProMaxIsland(
                                                             modifier = Modifier.size(18.dp)
                                                         )
                                                     }
-                                                    val hasWeb = runCatching {
-                                                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                            "test -d \"/data/adb/modules/${m.id}/webroot\" && echo y")).let { pr ->
-                                                            val o = pr.inputStream.bufferedReader().readText()
-                                                            pr.waitFor()
-                                                            o.trim() == "y"
-                                                        }
-                                                    }.getOrDefault(false)
+                                                    // 只查一次（避免每帧 shell 导致卡顿）
+                                                    val hasWeb = remember(m.id) {
+                                                        runCatching {
+                                                            Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                                                "test -d \"/data/adb/modules/${m.id}/webroot\" && echo y")).let { pr ->
+                                                                val o = pr.inputStream.bufferedReader().readText()
+                                                                pr.waitFor()
+                                                                o.trim() == "y"
+                                                            }
+                                                        }.getOrDefault(false)
+                                                    }
                                                     if (hasWeb) {
-                                                        Icon(
-                                                            imageVector = Icons.Outlined.OpenInNew,
-                                                            contentDescription = "打开UI",
-                                                            tint = Color(0xFF0A84FF),
+                                                        // 与「执行」一致的灰色圆球底
+                                                        Box(
                                                             modifier = Modifier
-                                                                .size(22.dp)
+                                                                .size(30.dp)
+                                                                .clip(RoundedCornerShape(percent = 50))
+                                                                .background(Color(0x33FFFFFF))
                                                                 .clickable {
                                                                     try {
                                                                         val token = me.weishu.kernelsu.data.repository.SettingsRepositoryImpl().intentToken
@@ -3823,9 +3935,16 @@ private fun ProMaxIsland(
                                                                         }
                                                                         navCtx.startActivity(it2)
                                                                     } catch (t: Throwable) {}
-                                                                }
-                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                        )
+                                                                },
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Outlined.OpenInNew,
+                                                                contentDescription = "打开UI",
+                                                                tint = Color(0xFF0A84FF),
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -6020,7 +6139,7 @@ private fun FsRow(
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
-                    else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x8800BCD4)
+                    else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x4D007AFF)
                     else Color.Transparent
                 )
                 // 右侧不留内边距：大小/时间小字正好贴在分割线尽头
