@@ -411,6 +411,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var longPressPath by remember { mutableStateOf<String?>(null) }
     var longPressIsDir by remember { mutableStateOf(false) }
     var longPressTick by remember { mutableStateOf(0) }
+    // 打开压缩包（进入）触发
+    var archiveTick by remember { mutableStateOf(0) }
     // iOS 风格长按上下文菜单（记录长按位置决定展开方向）
     var ctxMenuPath by remember { mutableStateOf<String?>(null) }
     var ctxMenuRight by remember { mutableStateOf(false) }
@@ -1201,6 +1203,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         longPressPath = longPressPath,
         longPressIsDir = longPressIsDir,
         longPressTick = longPressTick,
+        archiveTick = archiveTick,
         forceSoPanelTick = forceSoPanelTick,
         shareFailTick = shareFailTick,
         onClearLongPress = { longPressPath = null },
@@ -1352,7 +1355,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         ) {
             // 与长按菜单同款：背景变暗 + 左下角向右上弹出 + 丝滑弹簧
             val amView = androidx.compose.ui.platform.LocalView.current
-            LaunchedEffect(Unit) { applyImmersiveToDialog(amView) }
+            LaunchedEffect(Unit) { applyImmersiveToDialog(amView); playPopupFx(amView.context) }
             val amScale = remember { androidx.compose.animation.core.Animatable(0.84f) }
             val amAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
             LaunchedEffect(Unit) {
@@ -1450,6 +1453,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val cmView = androidx.compose.ui.platform.LocalView.current
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 applyImmersiveToDialog(cmView)
+                playPopupFx(cmView.context)
                 try {
                     val w = (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
                     w?.setDimAmount(0f)
@@ -1617,12 +1621,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             cmIsExec -> "编辑"
                             else -> "执行"
                         }
-                    ) { cmFile(when {
-                        cmIsApk -> "install"
-                        cmIsArchive -> "unzip"
-                        cmIsExec -> "edit"
-                        else -> "execute"
-                    }) })
+                    ) {
+                        when {
+                            cmIsApk -> cmFile("install")
+                            // 进入：打开压缩包浏览（面板 jumpStep 8）
+                            cmIsArchive -> {
+                                longPressPath = cmPath
+                                ctxMenuClosing = true
+                                archiveTick += 1
+                            }
+                            cmIsExec -> cmFile("edit")
+                            // 执行：拉起脚本执行
+                            else -> cmFile("edit")
+                        }
+                    })
                 }
                 // 参照目录：另一侧当前目录
                 val otherDir = if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) rightPath else leftPath
@@ -1636,7 +1648,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 items.add(CmItem("复制到另一侧") { cmFile("copy", otherDir) })
                 // 解压 / 压缩（直接执行）
                 items.add(CmItem(if (cmIsArchive) "解压到当前目录" else "压缩") {
-                    cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
+                    val p = cmPath
+                    val dir = p.substringBeforeLast('/', "/")
+                    cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) dir else "")
                 })
                 // 复制路径
                 items.add(CmItem("复制路径") {
@@ -2037,6 +2051,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             uiPickerIcons = null
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
+        // 抽屉出现：音效 + 振动
+        LaunchedEffect(uiPicker) {
+            if (uiPicker != null) playPopupFx(androidx.compose.ui.platform.LocalContext.current)
+        }
         // 底部抽屉（恢复 ModalBottomSheet）
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
@@ -2212,6 +2230,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val popView = androidx.compose.ui.platform.LocalView.current
             LaunchedEffect(Unit) {
                 applyImmersiveToDialog(popView)
+                playPopupFx(popView.context)
                 pop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
             }
             Column(
@@ -2606,6 +2625,36 @@ private fun reapplyImmersiveActivity(view: android.view.View) {
     } catch (t: Throwable) {}
 }
 
+
+// 弹窗出现：播放音效 + 轻微振动（assets/sound.mp4 的音频轨）
+private var popPlayer: android.media.MediaPlayer? = null
+private fun playPopupFx(ctx: android.content.Context) {
+    try {
+        val vib = ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        if (vib != null && vib.hasVibrator()) {
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                vib.vibrate(android.os.VibrationEffect.createOneShot(18, 60))
+            } else {
+                @Suppress("DEPRECATION") vib.vibrate(18)
+            }
+        }
+    } catch (t: Throwable) {}
+    try {
+        popPlayer?.release()
+        // assets 里的 mp4 可能被压缩，openFd 会失败 → 先复制到 cache 再播
+        val tmp = java.io.File(ctx.cacheDir, "popup_sound.mp4")
+        if (!tmp.exists() || tmp.length() == 0L) {
+            ctx.assets.open("sound.mp4").use { input -> tmp.outputStream().use { input.copyTo(it) } }
+        }
+        popPlayer = android.media.MediaPlayer().apply {
+            setDataSource(tmp.absolutePath)
+            setOnCompletionListener { release() }
+            prepare()
+            start()
+        }
+    } catch (t: Throwable) {}
+}
+
 // 让 Dialog 自己的窗口也保持沉浸式（否则弹窗出现时会唤出系统栏）
 private fun applyImmersiveToDialog(view: android.view.View) {
     try {
@@ -2741,6 +2790,7 @@ private fun ProMaxIsland(
     longPressPath: String?,
     longPressIsDir: Boolean,
     longPressTick: Int,
+    archiveTick: Int,
     forceSoPanelTick: Int,
     shareFailTick: Int,
     onClearLongPress: () -> Unit,
@@ -3040,6 +3090,23 @@ private fun ProMaxIsland(
             navMode = true
             navTarget = "home"
             jumpStep = 9
+            renameInput = lp.substringAfterLast('/')
+            navClosing = false
+            expanded = true
+        }
+    }
+
+    LaunchedEffect(archiveTick) {
+        if (archiveTick <= 0) return@LaunchedEffect
+        val lp = longPressPath ?: selectedFile ?: return@LaunchedEffect
+        if (lp.isNotEmpty()) {
+            navClosing = true
+            expanded = false
+            jumpStep = 0
+            kotlinx.coroutines.delay(110)
+            navMode = true
+            navTarget = "home"
+            jumpStep = 8
             renameInput = lp.substringAfterLast('/')
             navClosing = false
             expanded = true
@@ -5634,7 +5701,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
             Text(
                 text = subtitle ?: (execPath ?: latencyMsg)
                     ?: (if (title == "执行此文件") (execPath ?: "暂无设置") else ""),
-                color = Color(0x66FFFFFF),
+                color = Color(0x77000000),
                 fontSize = 9.sp,
                 maxLines = 1,
                 modifier = Modifier
@@ -6160,30 +6227,7 @@ private fun FsRow(
                 fontFamily = FontFamily.Monospace,
                 color = Color(TEXT_COLOR)
             )
-            if (timeText.isNotEmpty() || sizeText.isNotEmpty()) {
-                Column(horizontalAlignment = Alignment.End) {
-                    // 第一行：大小
-                    if (sizeText.isNotEmpty()) {
-                        Text(
-                            text = sizeText,
-                            fontSize = 9.sp,
-                            color = Color(0x66FFFFFF),
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 1
-                        )
-                    }
-                    // 第二行：时间
-                    if (timeText.isNotEmpty()) {
-                        Text(
-                            text = timeText,
-                            fontSize = 9.sp,
-                            color = Color(0x66FFFFFF),
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
+            // 不显示文件大小/时间小字
         }
         if (!isLast) {
             Box(
