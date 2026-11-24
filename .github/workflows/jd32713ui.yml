@@ -147,6 +147,8 @@ jobs:
           cp manager/app/src/main/AndroidManifest.xml src/manager/app/src/main/AndroidManifest.xml
           # 加 PACKAGE_USAGE_STATS（前台检测免 su）
           sed -i 's|</manifest>|<uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
+          # 弹窗音效需要的振动权限
+          sed -i 's|</manifest>|<uses-permission android:name="android.permission.VIBRATE"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
           grep -c "PACKAGE_USAGE_STATS" src/manager/app/src/main/AndroidManifest.xml || true
           # 云更新：安装权限 + FileProvider
           sed -i 's|</application>|<provider android:name="androidx.core.content.FileProvider" android:authorities="com.tencent.THY.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/></provider></application>|' src/manager/app/src/main/AndroidManifest.xml
