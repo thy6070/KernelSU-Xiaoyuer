@@ -6129,6 +6129,18 @@ internal fun restoreDeviceModel(ctx: android.content.Context) {
     }
 }
 
+// 编辑界面查找：返回所有匹配区间 [start, end)
+private fun findAllMatches(text: String, q: String): List<Pair<Int, Int>> {
+    if (q.isEmpty() || text.isEmpty()) return emptyList()
+    val out = ArrayList<Pair<Int, Int>>()
+    var i = text.indexOf(q, 0, ignoreCase = true)
+    while (i >= 0) {
+        out.add(i to i + q.length)
+        i = text.indexOf(q, i + 1, ignoreCase = true)
+    }
+    return out
+}
+
 // 游戏清理：先选应用再清理该应用缓存
 internal fun gameCleanCache(ctx: android.content.Context) {
     // 立即打开抽屉（先空列表，加载完再填）
