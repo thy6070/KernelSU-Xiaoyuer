@@ -164,9 +164,7 @@ jobs:
               im = src.resize((s, s), Image.LANCZOS)
               im.save(f'{base}/ic_launcher.png')
               im.save(f'{base}/mod_icon.png')
-              im.save(f'{base}/ic_modules_foreground.png')
-              for jp in glob.glob(f'{base}/ic_modules_foreground.jpg'):
-                  os.remove(jp)
+              # 模块图标 ic_modules_foreground 保持原样（不换）
           # adaptive icon xml 删掉，直接用 png
           for f in glob.glob('src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml'):
               os.remove(f)
