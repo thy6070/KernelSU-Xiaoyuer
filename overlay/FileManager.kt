@@ -2086,7 +2086,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0x66000000))
-                .imePadding()
+                .then(androidx.compose.foundation.layout.imePadding())
                 .padding(24.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
