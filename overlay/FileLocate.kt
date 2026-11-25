@@ -131,7 +131,7 @@ internal fun resolveUri(context: Context, uri: Uri, referrerPackage: String? = n
         "/storage/emulated/0/Android/data/org.telegram.messenger",
         "/storage/emulated/0/Android/media/org.telegram.messenger",
         "/storage/emulated/0/UCDownloads",
-        "/storage/emulated/0/小鱼儿"
+        "/data/user/0/com.tencent.THY/files"
     )
     for (root in quick) {
         val hit = runCatching {
