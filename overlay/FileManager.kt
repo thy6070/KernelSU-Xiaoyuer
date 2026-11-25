@@ -486,15 +486,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val safe = label.replace("/", "_").replace("\"", "_")
                     val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
                         "mkdir -p \"/data/user/0/com.tencent.THY/files\"; " +
-                        "cp \"\$P\" \"/data/user/0/com.tencent.THY/files/$safe.apk\" && " +
-                        "chmod 644 \"/data/user/0/com.tencent.THY/files/$safe.apk\""
+                        "mkdir -p \"/data/user/0/com.tencent.THY/files/提取\" ; cp \"\$P\" \"/data/user/0/com.tencent.THY/files/提取/$safe.apk\" && " +
+                        "chmod 644 \"/data/user/0/com.tencent.THY/files/提取/$safe.apk\""
                     ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
                 } catch (t: Throwable) {}
             }
             try {
                 val safe = label.replace("/", "_").replace("\"", "_")
                 FileLocate.side = "L"
-                FileLocate.path = "/data/user/0/com.tencent.THY/files/" + safe + ".apk"
+                FileLocate.path = "/data/user/0/com.tencent.THY/files/提取/" + safe + ".apk"
                 FileLocate.tick += 1
             } catch (t: Throwable) {}
             refreshTick += 1
@@ -877,7 +877,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         "move" -> "mv -f " + q(srcPath) + " " + q(arg)
                         "copy" -> "cp -rf " + q(srcPath) + " " + q(arg)
                         "zip" -> "cd " + q(dir) + " && tar -czf " + q(name + ".tar.gz") + " " + q(name)
-                        "unzip" -> "unzip -o " + q(srcPath) + " -d " + q(arg) + " 2>&1 | tail -n 5"
+                        "unzip" -> "echo '=== unzip ' \"\$SRC\" \"\$(date)\" >> /data/local/tmp/xy_archive_log.txt ; " +
+                            "unzip -o " + q(srcPath) + " -d " + q(arg) + " >> /data/local/tmp/xy_archive_log.txt 2>&1"
                         "rename" -> "mv -f " + q(srcPath) + " " + q(dir + "/" + arg)
                         "delete" -> "rm -rf " + q(srcPath)
                         "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
@@ -898,6 +899,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         proc.waitFor()
                         ok = true
                         if (op == "install") ok = txt.contains("Success")
+                        if (op == "unzip") {
+                            // 解压只写日志，不展开终端
+                            runCatching {
+                                val lg = java.io.File("/data/local/tmp/xy_archive_log.txt")
+                                if (lg.exists()) {
+                                    val tail = lg.readLines().takeLast(3).joinToString(" ")
+                                    if (tail.isNotBlank()) runMessage = tail.take(80)
+                                }
+                            }
+                        }
                         when (op) {
                             "delete" -> pendingUndo = UndoOp("delete", listOf(srcPath))
                             "move" -> pendingUndo = UndoOp("move", listOf(srcPath), listOf(arg))
@@ -1105,8 +1116,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val safe = label.replace("/", "_").replace("\"", "_")
                         val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
                             "mkdir -p \"/data/user/0/com.tencent.THY/files\"; " +
-                            "cp \"\$P\" \"/data/user/0/com.tencent.THY/files/$safe.apk\" && " +
-                            "chmod 644 \"/data/user/0/com.tencent.THY/files/$safe.apk\""
+                            "mkdir -p \"/data/user/0/com.tencent.THY/files/提取\" ; cp \"\$P\" \"/data/user/0/com.tencent.THY/files/提取/$safe.apk\" && " +
+                            "chmod 644 \"/data/user/0/com.tencent.THY/files/提取/$safe.apk\""
                         ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
                     } catch (t: Throwable) {
                     }
@@ -1115,7 +1126,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 try {
                     val safe = label.replace("/", "_").replace("\"", "_")
                     FileLocate.side = if (longPressFromRight) "R" else "L"
-                    FileLocate.path = "/data/user/0/com.tencent.THY/files/" + safe + ".apk"
+                    FileLocate.path = "/data/user/0/com.tencent.THY/files/提取/" + safe + ".apk"
                     FileLocate.tick += 1
                 } catch (t: Throwable) {}
                 refreshTick += 1
