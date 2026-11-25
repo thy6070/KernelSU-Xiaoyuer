@@ -425,38 +425,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // 修补镜像：输出日志（抽屉显示）+ 输出路径
     var patchOut by remember { mutableStateOf("") }
     var patchOutPath by remember { mutableStateOf<String?>(null) }
-    val patchLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.GetContent()
-    ) { uri ->
-        val u = uri ?: return@rememberLauncherForActivityResult
-        uiScope.launch {
-            patchOut = "开始修补…\n"
-            uiPickerTitle = "修补输出"
-            uiPicker = listOf("开始修补…")
-            uiPickerIcons = null
-            uiPickerSelected = null
-            val res = withContext(Dispatchers.IO) {
-                runCatching {
-                    // 复制选中的镜像到 cache
-                    val name = "img_in_${System.currentTimeMillis()}.img"
-                    val tmp = java.io.File(appCtx.cacheDir, name)
-                    appCtx.contentResolver.openInputStream(u)?.use { input -> tmp.outputStream().use { input.copyTo(it) } }
-                    val outDir = appCtx.cacheDir
-                    val outName = "极道帝兵_" + (queryDisplayName(appCtx, u) ?: "image.img")
-                    val cmd = "/data/adb/ksud boot-patch '" + tmp.absolutePath + "' -o '" + outDir.absolutePath + "/" + outName.replace("'", "'\\''") + "' 2>&1"
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
-                    val text = pr.inputStream.bufferedReader().readText()
-                    pr.waitFor()
-                    patchOut = text
-                    patchOutPath = outDir.absolutePath + "/" + outName
-                    text.lines().filter { it.isNotBlank() }.takeLast(30).ifEmpty { listOf("(无输出)") }
-                }.getOrElse { listOf("修补失败: " + (it.message ?: "")) }
-            }
-            uiPicker = res
-        }
-    }
-    // 长按菜单：重命名输入
-    var cmRenamePath by remember { mutableStateOf<String?>(null) }
+ }
     var cmRenameText by remember { mutableStateOf("") }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
@@ -503,6 +472,38 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var activeProc by remember { mutableStateOf<Process?>(null) }
     val panelP = remember { Animatable(0f) }
     val uiScope = rememberCoroutineScope()
+    val patchLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        val u = uri ?: return@rememberLauncherForActivityResult
+        uiScope.launch {
+            patchOut = "开始修补…\n"
+            uiPickerTitle = "修补输出"
+            uiPicker = listOf("开始修补…")
+            uiPickerIcons = null
+            uiPickerSelected = null
+            val res = withContext(Dispatchers.IO) {
+                runCatching {
+                    // 复制选中的镜像到 cache
+                    val name = "img_in_${System.currentTimeMillis()}.img"
+                    val tmp = java.io.File(appCtx.cacheDir, name)
+                    appCtx.contentResolver.openInputStream(u)?.use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                    val outDir = appCtx.cacheDir
+                    val outName = "极道帝兵_" + (queryDisplayName(appCtx, u) ?: "image.img")
+                    val cmd = "/data/adb/ksud boot-patch '" + tmp.absolutePath + "' -o '" + outDir.absolutePath + "/" + outName.replace("'", "'\\''") + "' 2>&1"
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+                    val text = pr.inputStream.bufferedReader().readText()
+                    pr.waitFor()
+                    patchOut = text
+                    patchOutPath = outDir.absolutePath + "/" + outName
+                    text.lines().filter { it.isNotBlank() }.takeLast(30).ifEmpty { listOf("(无输出)") }
+                }.getOrElse { listOf("修补失败: " + (it.message ?: "")) }
+            }
+            uiPicker = res
+        }
+    }
+    // 长按菜单：重命名输入
+    var cmRenamePath by remember { mutableStateOf<String?>(null)
     val appMenuExtract: (String, String) -> Unit = { pkg, label ->
         uiScope.launch {
             withContext(Dispatchers.IO) {
