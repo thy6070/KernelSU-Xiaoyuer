@@ -877,7 +877,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         "move" -> "mv -f " + q(srcPath) + " " + q(arg)
                         "copy" -> "cp -rf " + q(srcPath) + " " + q(arg)
                         "zip" -> "cd " + q(dir) + " && tar -czf " + q(name + ".tar.gz") + " " + q(name)
-                        "unzip" -> "unzip -o " + q(srcPath) + " -d " + q(arg)
+                        "unzip" -> "unzip -o " + q(srcPath) + " -d " + q(if (arg.isBlank()) srcPath.substringBeforeLast('/', "/") else arg)
                         "rename" -> "mv -f " + q(srcPath) + " " + q(dir + "/" + arg)
                         "delete" -> "rm -rf " + q(srcPath)
                         "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
@@ -1670,6 +1670,25 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     cmRenamePath = cmPath
                     ctxMenuClosing = true
                 })
+                // 进入压缩包（解压到临时目录后浏览）
+                if (cmIsArchive) {
+                    items.add(CmItem("进入压缩包") {
+                        val dst = "/data/local/tmp/xy_browse/" + cmPath.substringAfterLast('/').substringBeforeLast('.')
+                        uiScope.launch {
+                            withContext(Dispatchers.IO) {
+                                runCatching {
+                                    com.topjohnwu.superuser.Shell.cmd(
+                                        "rm -rf " + quote(dst) + " ; mkdir -p " + quote(dst) + " ; " +
+                                            "unzip -o " + quote(cmPath) + " -d " + quote(dst) + " 2>&1"
+                                    ).exec()
+                                }
+                            }
+                            if (ctxMenuPath?.startsWith(leftPath.trimEnd('/') + "/") == true) leftPath = dst else rightPath = dst
+                            ctxMenuPath = null
+                            refreshTick += 1
+                        }
+                    })
+                }
                 // 解压 / 压缩（直接执行）
                 items.add(CmItem(if (cmIsArchive) "解压到当前目录" else "压缩") {
                     cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
@@ -2071,12 +2090,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         )
         val pickScope = androidx.compose.runtime.rememberCoroutineScope()
         val closePick: () -> Unit = {
-            // 先播收起动画（ModalBottomSheet 自带下滑），再清状态
+            // 先播收起动画（内容完整滑下），动画结束再清空
             pickScope.launch {
                 try { pickSheetState.hide() } catch (t: Throwable) {}
                 uiPicker = null
                 uiPickerSelected = null
                 uiPickerIcons = null
+                uiPickerMarks = emptyMap()
             }
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
@@ -2162,11 +2182,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "选择要提取的应用" -> {
                                             uiPickerAction?.invoke(sel)
                                         }
-                                        // 超级用户：确定 → 卸载签名确认
-                                        "超级用户" -> {
+                                        // 超级用户：确定 → 卸载签名确认（标题带数量，用前缀匹配）
+                                        else -> if ((pickTitle ?: "").startsWith("超级用户")) {
                                             uiPickerAction?.invoke(sel)
-                                        }
-                                        else -> pickConfirm = "重置 $sel" to {
+                                        } else pickConfirm = "重置 $sel" to {
                                             uiPickerAction?.invoke(sel)
                                             uiPicker = null
                                             uiPickerIcons = null
@@ -2265,6 +2284,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val pcCtx = androidx.compose.ui.platform.LocalContext.current
             LaunchedEffect(Unit) {
                 applyImmersiveToDialog(popView)
+                try {
+                    (popView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.setDimAmount(0f)
+                } catch (t: Throwable) {}
                 pop.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 320f))
             }
             // iOS 退场：缩小 + 淡出
@@ -2674,9 +2696,10 @@ private fun reapplyImmersiveActivity(view: android.view.View) {
 
 
 // 轻触感（列表项/按钮）：苹果式 tick
+private var tapVib: android.os.Vibrator? = null
 fun tapTick(ctx: android.content.Context) {
     try {
-        val vib = ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        val vib = tapVib ?: (ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator)?.also { tapVib = it }
         if (vib == null || !vib.hasVibrator()) return
         if (android.os.Build.VERSION.SDK_INT >= 30 && vib.hasAmplitudeControl()) {
             vib.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK))
@@ -2962,6 +2985,7 @@ private fun ProMaxIsland(
     var suSel by remember { mutableStateOf(-1) }
     val navCtx = LocalContext.current
     val navScope = rememberCoroutineScope()
+    var suLoading by remember { mutableStateOf(false) }
     LaunchedEffect(navTarget, jumpStep, suOpenTick) {
         modSel = -1
         suSel = -1
@@ -2995,85 +3019,66 @@ private fun ProMaxIsland(
                 }
             }
         }
-        // 点超级用户图标：先开抽屉（空列表）→ 后台填充（和游戏清理完全一样）
-        if (suOpenTick > 0) {
+        // 点超级用户图标：直接复用游戏清理的加载路径（快），再补授权标记
+        if (suOpenTick > 0 && !suLoading) {
+            suLoading = true
             uiPickerTitle = "超级用户"
             uiPicker = emptyList()
             uiPickerIcons = null
             uiPickerMarks = emptyMap()
             uiPickerSelected = null
-            val base = withContext(Dispatchers.IO) {
+            Thread {
                 try {
                     val pm = navCtx.packageManager
-                    val suList = try {
-                        val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
-                        val res = repo.getAppList()
-                        res.getOrNull()?.first ?: emptyList()
-                    } catch (t: Throwable) { emptyList() }
-                    val apps: List<SuApp> = if (suList.isNotEmpty()) {
-                        suList.filter { ai ->
-                            val aiInfo = ai.packageInfo.applicationInfo
-                            val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                            // 已授权的系统应用保留（否则界面会"消失"）
-                            (!isSystem || ai.profile?.allowSu == true) && ai.packageName != "android"
+                    // 与游戏清理同一套：pm 列表（快）
+                    val raw = pm.getInstalledApplications(0)
+                        .filter {
+                            val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                            val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
+                            !isSystem && hasCode && it.packageName != "android" &&
+                                it.packageName != navCtx.packageName
                         }
-                            .map { ai ->
-                                val allowed = ai.profile?.allowSu == true
-                                val icon = try {
-                                    val d = pm.getApplicationIcon(ai.packageName)
-                                    val w = d.intrinsicWidth.coerceAtLeast(1)
-                                    val h = d.intrinsicHeight.coerceAtLeast(1)
-                                    val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-                                    android.graphics.Canvas(bmp).also { d.setBounds(0, 0, w, h); d.draw(it) }
-                                    bmp
-                                } catch (t: Throwable) { null }
-                                SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
-                            }
-                            .sortedWith(compareByDescending<SuApp> { it.allowed }.thenBy { it.label })
-                    } else {
-                        pm.getInstalledApplications(0)
-                            .filter {
-                                val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                                val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
-                                !isSystem && hasCode && it.packageName != "android"
-                            }
-                            .map { ai ->
-                                val icon = try {
-                                    val d = pm.getApplicationIcon(ai.packageName)
-                                    val w = d.intrinsicWidth.coerceAtLeast(1)
-                                    val h = d.intrinsicHeight.coerceAtLeast(1)
-                                    val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-                                    android.graphics.Canvas(bmp).also { d.setBounds(0, 0, w, h); d.draw(it) }
-                                    bmp
-                                } catch (t: Throwable) { null }
-                                // 官方判定：Natives.getAppProfile().allowSu
-                                val granted = runCatching {
-                                    me.weishu.kernelsu.Natives.getAppProfile(ai.packageName, ai.uid).allowSu
-                                }.getOrDefault(false)
-                                SuApp(ai.packageName, ai.loadLabel(pm).toString(), ai.uid, granted, icon)
-                            }
-                            .sortedWith(compareByDescending<SuApp> { it.allowed }.thenBy { it.label })
+                        .sortedBy { it.loadLabel(pm).toString() }
+                    val apps = raw.map { ai ->
+                        val icon = runCatching {
+                            val d = pm.getApplicationIcon(ai.packageName)
+                            val b = android.graphics.Bitmap.createBitmap(
+                                d.intrinsicWidth.coerceAtLeast(48),
+                                d.intrinsicHeight.coerceAtLeast(48),
+                                android.graphics.Bitmap.Config.ARGB_8888
+                            )
+                            val c = android.graphics.Canvas(b)
+                            d.setBounds(0, 0, c.width, c.height)
+                            d.draw(c)
+                            b
+                        }.getOrNull()
+                        SuApp(ai.packageName, ai.loadLabel(pm).toString(), ai.uid, false, icon)
                     }
-                    apps
+                    // 官方判定授权（逐应用，但只在后台做一次）
+                    val enriched = apps.map { a ->
+                        val g = runCatching {
+                            me.weishu.kernelsu.Natives.getAppProfile(a.pkg, a.uid).allowSu
+                        }.getOrDefault(false)
+                        a.copy(allowed = g)
+                    }.sortedWith(compareByDescending<SuApp> { it.allowed }.thenBy { it.label })
+                    suApps = enriched
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        try {
+                            uiPickerTitle = "超级用户 " + enriched.size + "/" + enriched.count { it.allowed }
+                            uiPickerIcons = enriched.map { a -> a.icon?.asImageBitmap() }
+                            uiPicker = enriched.map { it.label }
+                            uiPickerMarks = enriched.filter { it.allowed }.associate { it.label to "已签名" }
+                            uiPickerAction = { sel ->
+                                val app = suApps.firstOrNull { it.label == sel }
+                                onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                            }
+                        } catch (t: Throwable) {}
+                        suLoading = false
+                    }
                 } catch (t: Throwable) {
-                    emptyList()
+                    suLoading = false
                 }
             }
-            suApps = base
-            try {
-                val granted = suApps.count { it.allowed }
-                uiPickerTitle = "超级用户 " + suApps.size + "/" + granted
-                uiPickerSelected = null
-                uiPickerIcons = suApps.map { a ->
-                    a.icon?.let { bmp -> android.graphics.Bitmap.createScaledBitmap(bmp, 64, 64, true).asImageBitmap() }
-                }
-                uiPicker = suApps.map { a -> a.label }
-                uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
-                uiPickerAction = { sel ->
-                    val app = suApps.firstOrNull { it.label == sel }
-                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
-                }
-            } catch (t: Throwable) {}
         }
         if (navTarget == "su" || (navTarget == "home" && jumpStep == 7)) {
             val base = withContext(Dispatchers.IO) {
@@ -3114,7 +3119,7 @@ private fun ProMaxIsland(
                 uiPickerTitle = "超级用户"
                 uiPickerSelected = null
                 uiPickerIcons = suApps.map { a ->
-                    a.icon?.let { bmp -> android.graphics.Bitmap.createScaledBitmap(bmp, 64, 64, true).asImageBitmap() }
+                    a.icon?.let { bmp -> android.graphics.Bitmap.createScaledBitmap(bmp, 40, 40, true).asImageBitmap() }
                 }
                 uiPicker = suApps.map { a -> a.label }
                 uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
@@ -4300,7 +4305,7 @@ private fun ProMaxIsland(
                                             if (isArchive) "解压" else "压缩",
                                             Color(0xFF0A84FF)
                                         ) {
-                                            if (isArchive) onFileOp("unzip", oppositePath)
+                                            if (isArchive) onFileOp("unzip", "")
                                             else onFileOp("zip", "")
                                             closeIsland()
                                         }
@@ -6369,18 +6374,7 @@ private fun FsRow(
     onLongClick: () -> Unit = {}
 ) {
     val rowCtx = androidx.compose.ui.platform.LocalContext.current
-    val tapFx: () -> Unit = {
-        try {
-            val vib = rowCtx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-            if (vib != null && vib.hasVibrator()) {
-                if (android.os.Build.VERSION.SDK_INT >= 30 && vib.hasAmplitudeControl()) {
-                    vib.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK))
-                } else if (android.os.Build.VERSION.SDK_INT >= 26) {
-                    vib.vibrate(android.os.VibrationEffect.createOneShot(8, 30))
-                }
-            }
-        } catch (t: Throwable) {}
-    }
+    val tapFx: () -> Unit = { tapTick(rowCtx) }
     // iOS Inset Grouped：整体卡片 + 行间 0.5dp 分隔线
     Column {
         Row(
@@ -6721,24 +6715,40 @@ private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatche
 
     val fromShell = shellOut.mapNotNull { raw ->
         val line = raw.trim()
-        // toybox ls -l: perms links owner group [size] date [time] name
-        // 部分设备没有 time 段，或 size 段格式不同，做兼容
-        val m = Regex("^([dl-])[rwxsStT-]{9}[+@.]?\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\S+)\\s*(\\S*)\\s+(.+)$").find(line)
+        // toybox ls -l 两种日期格式都要兼容：
+        //   drwxr-xr-x 2 u g 4096 Jan  1  2025 name      （月 日 年，3 段）
+        //   -rw-r--r-- 1 u g 1234 Nov 19 14:30 name      （月 日 时间，3 段）
+        //   -rw-r--r-- 1 u g 1234 2026-11-20 10:00 name  （ISO 日期 + 时间，2 段）
+        val head = Regex("^([dl-])[rwxsStT-]{9}[+@.]?\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(.+)$").find(line)
             ?: return@mapNotNull null
-        val isDir = m.groupValues[1] == "d"
-        val size = m.groupValues[2].toLongOrNull() ?: 0L
-        // 分组：1=类型 2=size 3=date 4=time(可空) 5=name
-        val date = m.groupValues[3]
-        val g4 = m.groupValues[4]
-        val g5 = m.groupValues[5]
-        val hasTime = g4.contains(":")
-        val time = if (hasTime) g4 else ""
-        val name = (if (hasTime) g5 else (g4 + " " + g5)).trim().removeSuffix("/")
-        // 文件夹只显示时间，不显示大小（算目录大小要递归扫盘，会卡）
-        val sizeText = if (isDir) "" else formatSizeText(size)
-        // 时间去掉年份：2026-11-19 -> 11-19
-        val dateShort = if (date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) date.substring(5) else date
-        FsEntry(name, isDir, sizeText, "$dateShort $time")
+        val isDir = head.groupValues[1] == "d"
+        val size = head.groupValues[2].toLongOrNull() ?: 0L
+        val rest = head.groupValues[3].trim()
+        val parts = rest.split(Regex("\\s+"))
+        if (parts.size < 2) return@mapNotNull null
+        // 前 2~3 段是日期/时间，最后（可能多段）是文件名
+        val dateParts: List<String>
+        val name: String
+        fun isIso(t: String) = Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(t)
+        fun isTime(t: String) = t.contains(":")
+        if (isIso(parts[0])) {
+            val hasT = parts.size > 2 && isTime(parts[1])
+            dateParts = if (hasT) listOf(parts[0], parts[1]) else listOf(parts[0])
+            name = parts.drop(if (hasT) 2 else 1).joinToString(" ")
+        } else {
+            // Mon DD YYYY / Mon DD HH:MM（名字里可能有空格，日期固定 3 段）
+            dateParts = parts.take(3)
+            name = parts.drop(3).joinToString(" ")
+        }
+        if (name.isNotBlank()) {
+            val nn = name.removeSuffix("/")
+            val sizeText = if (isDir) "" else formatSizeText(size)
+            val dateShort = dateParts.firstOrNull()?.let { d ->
+                if (isIso(d)) d.substring(5) else d
+            } ?: ""
+            val tm = dateParts.lastOrNull()?.takeIf { isTime(it) } ?: ""
+            FsEntry(nn, isDir, sizeText, (dateShort + " " + tm).trim())
+        } else null
     }
 
     if (fromShell.isNotEmpty()) {
