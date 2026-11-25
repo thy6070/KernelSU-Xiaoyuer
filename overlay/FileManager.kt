@@ -417,6 +417,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var ctxMenuClosing by remember { mutableStateOf(false) }
     // 长按菜单：重命名输入
     var cmRenamePath by remember { mutableStateOf<String?>(null) }
+    // 超级用户：点图标直接开抽屉（不激活灵动岛）
+    var suOpenTick by remember { mutableStateOf(0) }
     var cmRenameText by remember { mutableStateOf("") }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
@@ -2939,8 +2941,8 @@ private fun ProMaxIsland(
                     val res = repo.getAppList()
                     val apps = res.getOrNull()?.first ?: emptyList()
                     val pm = navCtx.packageManager
-                    apps.filter { ai ->
-                        if (ai.packageName == navCtx.packageName) return@filter false
+                    apps.mapNotNull { ai ->
+                        if (ai.packageName == navCtx.packageName) return@mapNotNull null
                         val icon = try {
                             val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
                             val w = d.intrinsicWidth.coerceAtLeast(1)
@@ -2984,8 +2986,8 @@ private fun ProMaxIsland(
                     val res = repo.getAppList()
                     val apps = res.getOrNull()?.first ?: emptyList()
                     val pm = navCtx.packageManager
-                    apps.filter { ai ->
-                        if (ai.packageName == navCtx.packageName) return@filter false
+                    apps.mapNotNull { ai ->
+                        if (ai.packageName == navCtx.packageName) return@mapNotNull null
                         if (ai.allowSu) return@filter true
                         ai.packageInfo.applicationInfo?.let {
                             (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
