@@ -2962,7 +2962,7 @@ private fun ProMaxIsland(
     var suSel by remember { mutableStateOf(-1) }
     val navCtx = LocalContext.current
     val navScope = rememberCoroutineScope()
-    LaunchedEffect(navTarget, jumpStep) {
+    LaunchedEffect(navTarget, jumpStep, suOpenTick) {
         modSel = -1
         suSel = -1
         if (navTarget == "module") {
@@ -3061,7 +3061,8 @@ private fun ProMaxIsland(
             }
             suApps = base
             try {
-                uiPickerTitle = "超级用户"
+                val granted = suApps.count { it.allowed }
+                uiPickerTitle = "超级用户 " + suApps.size + "/" + granted
                 uiPickerSelected = null
                 uiPickerIcons = suApps.map { a ->
                     a.icon?.let { bmp -> android.graphics.Bitmap.createScaledBitmap(bmp, 64, 64, true).asImageBitmap() }
