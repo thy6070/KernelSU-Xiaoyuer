@@ -160,6 +160,8 @@ jobs:
           printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<paths><external-files-path name="download" path="."/><cache-path name="cache" path="."/></paths>' > src/manager/app/src/main/res/xml/file_paths.xml
           grep -c "fileprovider" src/manager/app/src/main/AndroidManifest.xml || true
           # 每次构建递增版本号（云更新可识别）
+          # AGP 版本：官方可用版本（我们目录写错 9.4.1 会导致插件找不到）
+          sed -i 's|^agp = ".*"|agp = "8.13.0"|' src/manager/gradle/libs.versions.toml 2>/dev/null || true
           perl -pi -e 's/versionName = ".*"/versionName = "1.0.${{ github.run_number }}"/' src/manager/app/build.gradle.kts 2>/dev/null || true
           grep -n "versionName" src/manager/app/build.gradle.kts | head -2 || true
           cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
