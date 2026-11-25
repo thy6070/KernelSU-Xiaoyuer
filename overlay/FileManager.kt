@@ -3058,7 +3058,7 @@ private fun ProMaxIsland(
                         } catch (t: Throwable) {
                             null
                         }
-                        val allowed = allowed0
+                        val allowed = ai.profile?.allowSu == true
                         SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
                     }
                 } catch (t: Throwable) {
@@ -6419,11 +6419,11 @@ private fun FsRow(
 // iOS 风格字体：Inter（最接近 SF Pro 的开源字体）
 val AppFontFamily = androidx.compose.ui.text.font.FontFamily(
     androidx.compose.ui.text.font.Font(
-        "fonts/Inter-Regular.ttf",
+        R.font.inter_regular,
         androidx.compose.ui.text.font.FontWeight.Normal
     ),
     androidx.compose.ui.text.font.Font(
-        "fonts/Inter-SemiBold.ttf",
+        R.font.inter_semibold,
         androidx.compose.ui.text.font.FontWeight.SemiBold
     )
 )
