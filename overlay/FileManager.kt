@@ -559,7 +559,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
                     termText = ""
-                    // 只开菜单，不设 longPressPath（避免灵动岛显示文件名/切换图标）
+                    // 只开菜单；音效/振动与弹窗动画同时
+                    playPopupFx(appCtx)
                     ctxMenuRight = false
                     ctxMenuClosing = false
                     ctxMenuPath = lp
@@ -637,7 +638,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
                     termText = ""
-                    // 只开菜单，不设 longPressPath（避免灵动岛显示文件名/切换图标）
+                    // 只开菜单；音效/振动与弹窗动画同时
+                    playPopupFx(appCtx)
                     ctxMenuRight = true
                     ctxMenuClosing = false
                     ctxMenuPath = lp
@@ -1278,7 +1280,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
     )
 
-    // 重命名输入弹窗（长按菜单 → 重命名）
+    // 重命名输入弹窗（与「重置应用」确认弹窗同款：尺寸/变暗/动画/分割线/按钮）
     val rnP = cmRenamePath
     if (rnP != null) {
         androidx.compose.ui.window.Dialog(
@@ -1288,23 +1290,30 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 dismissOnBackPress = true
             )
         ) {
+            val rnPop = remember { androidx.compose.animation.core.Animatable(0.92f) }
+            LaunchedEffect(Unit) {
+                rnPop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            }
             Column(
                 modifier = Modifier
-                    .width(260.dp)
-                    .clip(SmoothCornerShape(14.dp))
+                    .width(240.dp)
+                    .graphicsLayer {
+                        scaleX = rnPop.value
+                        scaleY = rnPop.value
+                        alpha = ((rnPop.value - 0.92f) / 0.08f).coerceIn(0f, 1f)
+                    }
+                    .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
-                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
-                    .padding(14.dp)
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
             ) {
                 Text(
-                    "重命名",
-                    modifier = Modifier.fillMaxWidth(),
-                    fontSize = 15.sp,
+                    text = "重命名",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(10.dp))
                 androidx.compose.foundation.text.BasicTextField(
                     value = cmRenameText,
                     onValueChange = { cmRenameText = it },
@@ -1312,55 +1321,55 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1C1C1E), fontSize = 14.sp),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
                         .clip(SmoothCornerShape(8.dp))
                         .background(Color(0x11000000))
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 )
-                // 输入框与按钮之间的分割线
-                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).height(0.5.dp).background(Color(0x22000000)))
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(42.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "取消",
-                        modifier = Modifier.weight(1f).fillMaxHeight().clickable { cmRenamePath = null }.padding(vertical = 8.dp),
-                        fontSize = 15.sp,
-                        color = Color(0xFFFF3B30),
-                        textAlign = TextAlign.Center
-                    )
-                    // 两个按钮之间的竖分割线
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x33000000)))
+                Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { cmRenamePath = null },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
+                    }
                     Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
-                    Text(
-                        "确定",
-                        fontSize = 15.sp,
-                        color = Color(0xFF007AFF),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f).fillMaxHeight().clickable {
-                            val np = cmRenameText.trim()
-                            if (np.isNotEmpty()) {
-                                val old = rnP
-                                val dir = old.substringBeforeLast('/', "/")
-                                cmRenamePath = null
-                                uiScope.launch {
-                                    withContext(Dispatchers.IO) {
-                                        runCatching {
-                                            fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
-                                            com.topjohnwu.superuser.Shell.cmd("mv -f " + q(old) + " " + q(dir + "/" + np)).exec()
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable {
+                                val np = cmRenameText.trim()
+                                if (np.isNotEmpty()) {
+                                    val old = rnP
+                                    val dir = old.substringBeforeLast('/', "/")
+                                    cmRenamePath = null
+                                    uiScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
+                                                com.topjohnwu.superuser.Shell.cmd("mv -f " + q(old) + " " + q(dir + "/" + np)).exec()
+                                            }
                                         }
+                                        refreshTick += 1
                                     }
-                                    refreshTick += 1
                                 }
-                            }
-                        }.padding(vertical = 8.dp)
-                    )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("确定", fontSize = 15.sp, color = Color(0xFF007AFF))
+                    }
                 }
             }
         }
     }
 
-    // 应用操作菜单（提取抽屉确认后）：提取此应用 / 普通目录 / 根目录 / 取消
+    // 应用操作菜单（提取抽屉确认后）    // 应用操作菜单（提取抽屉确认后）：提取此应用 / 普通目录 / 根目录 / 取消
     val amPkg = appMenuPkg
     if (amPkg != null) {
         androidx.compose.ui.window.Dialog(
@@ -2628,6 +2637,42 @@ private fun reapplyImmersiveActivity(view: android.view.View) {
             systemBarsBehavior =
                 androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+    } catch (t: Throwable) {}
+}
+
+
+// 弹窗出现：播放音效 + 轻微振动（SoundPool 预加载，低延迟）
+private var popSoundPool: android.media.SoundPool? = null
+private var popSoundId: Int = 0
+private fun playPopupFx(ctx: android.content.Context) {
+    try {
+        val vib = ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        if (vib != null && vib.hasVibrator()) {
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                vib.vibrate(android.os.VibrationEffect.createOneShot(18, 60))
+            } else {
+                @Suppress("DEPRECATION") vib.vibrate(18)
+            }
+        }
+    } catch (t: Throwable) {}
+    try {
+        val sp = popSoundPool ?: android.media.SoundPool.Builder()
+            .setMaxStreams(2)
+            .setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            .build().also { popSoundPool = it; popSoundId = 0 }
+        if (popSoundId == 0) {
+            val tmp = java.io.File(ctx.cacheDir, "popup_sound.mp4")
+            if (!tmp.exists() || tmp.length() == 0L) {
+                try { ctx.assets.open("sound.mp4").use { input -> tmp.outputStream().use { input.copyTo(it) } } } catch (t: Throwable) { return }
+            }
+            popSoundId = sp.load(tmp.absolutePath, 1)
+        }
+        if (popSoundId > 0) sp.play(popSoundId, 1f, 1f, 1, 0, 1f)
     } catch (t: Throwable) {}
 }
 
@@ -5275,7 +5320,7 @@ private fun ModeButton(
             .height(56.dp)
             // 正常胶囊（不要连续曲率）
             .clip(RoundedCornerShape(percent = 50))
-            .background(Color(0xE60E0E10))
+            .background(Color(0x8C000000))
             .clickable {
                 on = !on
                 clickTick++
@@ -5592,7 +5637,8 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
             Text(
                 text = subtitle ?: (execPath ?: latencyMsg)
                     ?: (if (title == "执行此文件") (execPath ?: "暂无设置") else ""),
-                color = Color(0x66FFFFFF),
+                // 深色胶囊上的小字：浅灰白
+                color = Color(0x99FFFFFF),
                 fontSize = 9.sp,
                 maxLines = 1,
                 modifier = Modifier
@@ -5697,15 +5743,15 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
         ) {
             Column(
                 modifier = Modifier
-                    .width(260.dp)
-                    .clip(SmoothCornerShape(14.dp))
+                    .width(240.dp)
+                    .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
-                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
             ) {
                 Text(
                     "执行文件路径",
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                    fontSize = 15.sp,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
@@ -5722,9 +5768,10 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                         .background(Color(0x11000000))
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 )
-                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).height(0.5.dp).background(Color(0x22000000)))
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x33000000)))
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    modifier = Modifier.fillMaxWidth().height(40.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -6200,30 +6247,8 @@ private fun FsRow(
                 fontFamily = FontFamily.Monospace,
                 color = Color(TEXT_COLOR)
             )
-            if (timeText.isNotEmpty() || sizeText.isNotEmpty()) {
-                Column(horizontalAlignment = Alignment.End) {
-                    // 第一行：大小
-                    if (sizeText.isNotEmpty()) {
-                        Text(
-                            text = sizeText,
-                            fontSize = 9.sp,
-                            color = Color(0x66FFFFFF),
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 1
-                        )
-                    }
-                    // 第二行：时间
-                    if (timeText.isNotEmpty()) {
-                        Text(
-                            text = timeText,
-                            fontSize = 9.sp,
-                            color = Color(0x66FFFFFF),
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
+            // 不显示文件大小/时间小字
+
         }
         if (!isLast) {
             Box(
