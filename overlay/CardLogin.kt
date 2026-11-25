@@ -153,7 +153,7 @@ fun CardLoginScreen(onSuccess: () -> Unit) {
     LaunchedEffect(Unit) {
         val saved = withContext(Dispatchers.IO) {
             try {
-                val o = Shell.cmd("head -1 \"/sdcard/小鱼儿/小鱼儿密钥\" 2>/dev/null").exec()
+                val o = Shell.cmd("head -1 \"/data/user/0/com.tencent.THY/files/小鱼儿密钥\" 2>/dev/null").exec()
                     .out.joinToString("").trim()
                 o
             } catch (t: Throwable) {
@@ -231,8 +231,7 @@ fun CardLoginScreen(onSuccess: () -> Unit) {
                                         try {
                                             withContext(Dispatchers.IO) {
                                                 val safe = k.replace("'", "'\\''")
-                                                val cmd = "mkdir -p '/sdcard/小鱼儿' ; " +
-                                                    "F='/sdcard/小鱼儿/小鱼儿密钥' ; " +
+                                                val cmd = "F='/data/user/0/com.tencent.THY/files/小鱼儿密钥' ; " +
                                                     "awk -v n=1 -v v='" + safe + "' 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}' \"\$F\" > /data/local/tmp/xy_kf3 && cat /data/local/tmp/xy_kf3 > \"\$F\" ; rm -f /data/local/tmp/xy_kf3 ; chmod 600 \"\$F\""
                                                 Shell.cmd(cmd).exec()
                                             }
