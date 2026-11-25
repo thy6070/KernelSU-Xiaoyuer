@@ -469,16 +469,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 try {
                     val safe = label.replace("/", "_").replace("\"", "_")
                     val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
-                        "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
-                        "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
-                        "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
+                        "mkdir -p \"/data/user/0/com.tencent.THY/files\"; " +
+                        "cp \"\$P\" \"/data/user/0/com.tencent.THY/files/$safe.apk\" && " +
+                        "chmod 644 \"/data/user/0/com.tencent.THY/files/$safe.apk\""
                     ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
                 } catch (t: Throwable) {}
             }
             try {
                 val safe = label.replace("/", "_").replace("\"", "_")
                 FileLocate.side = "L"
-                FileLocate.path = "/storage/emulated/0/小鱼儿/" + safe + ".apk"
+                FileLocate.path = "/data/user/0/com.tencent.THY/files/" + safe + ".apk"
                 FileLocate.tick += 1
             } catch (t: Throwable) {}
             refreshTick += 1
@@ -1062,15 +1062,32 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 } catch (t: Throwable) {}
             }.start()
         },
+        onShowSuConfirm = { pkg, label, signed ->
+            pickConfirm = (if (signed) "卸载 $label 签名" else label) to {
+                uiPicker = null
+                uiPickerIcons = null
+                uiPickerSelected = null
+                // 官方方式：撤销该应用的 root 授权
+                uiScope.launch {
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+                                .setAppPermission(pkg, me.weishu.kernelsu.data.repository.SuPermission.DENY)
+                        }
+                    }
+                    refreshTick += 1
+                }
+            }
+        },
         onExtractApp = { pkg, label ->
             uiScope.launch {
                 withContext(Dispatchers.IO) {
                     try {
                         val safe = label.replace("/", "_").replace("\"", "_")
                         val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
-                            "mkdir -p \"/storage/emulated/0/小鱼儿\"; " +
-                            "cp \"\$P\" \"/storage/emulated/0/小鱼儿/$safe.apk\" && " +
-                            "chmod 644 \"/storage/emulated/0/小鱼儿/$safe.apk\""
+                            "mkdir -p \"/data/user/0/com.tencent.THY/files\"; " +
+                            "cp \"\$P\" \"/data/user/0/com.tencent.THY/files/$safe.apk\" && " +
+                            "chmod 644 \"/data/user/0/com.tencent.THY/files/$safe.apk\""
                         ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
                     } catch (t: Throwable) {
                     }
@@ -1079,7 +1096,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 try {
                     val safe = label.replace("/", "_").replace("\"", "_")
                     FileLocate.side = if (longPressFromRight) "R" else "L"
-                    FileLocate.path = "/storage/emulated/0/小鱼儿/" + safe + ".apk"
+                    FileLocate.path = "/data/user/0/com.tencent.THY/files/" + safe + ".apk"
                     FileLocate.tick += 1
                 } catch (t: Throwable) {}
                 refreshTick += 1
@@ -1296,18 +1313,28 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .background(Color(0x11000000))
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // 输入框与按钮之间的分割线
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).height(0.5.dp).background(Color(0x22000000)))
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         "取消",
-                        modifier = Modifier.weight(1f).clickable { cmRenamePath = null }.padding(vertical = 8.dp),
+                        modifier = Modifier.weight(1f).fillMaxHeight().clickable { cmRenamePath = null }.padding(vertical = 8.dp),
                         fontSize = 15.sp,
                         color = Color(0xFFFF3B30),
                         textAlign = TextAlign.Center
                     )
+                    // 两个按钮之间的竖分割线
+                    Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
                     Text(
                         "确定",
-                        modifier = Modifier.weight(1f).clickable {
+                        fontSize = 15.sp,
+                        color = Color(0xFF007AFF),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f).fillMaxHeight().clickable {
                             val np = cmRenameText.trim()
                             if (np.isNotEmpty()) {
                                 val old = rnP
@@ -1323,10 +1350,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     refreshTick += 1
                                 }
                             }
-                        }.padding(vertical = 8.dp),
-                        fontSize = 15.sp,
-                        color = Color(0xFF007AFF),
-                        textAlign = TextAlign.Center
+                        }.padding(vertical = 8.dp)
                     )
                 }
             }
@@ -2018,10 +2042,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
+        val pickScope = rememberCoroutineScope()
+        // 抽屉滑入/滑出动画值（外层定义，closePick 才能用）
+        val pickIn = remember { androidx.compose.animation.core.Animatable(0f) }
         val closePick: () -> Unit = {
-            uiPicker = null
-            uiPickerSelected = null
-            uiPickerIcons = null
+            // 先播滑出动画（ease-in 150ms），再移除抽屉
+            pickScope.launch {
+                try {
+                    pickIn.animateTo(0f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                } catch (t: Throwable) {}
+                uiPicker = null
+                uiPickerSelected = null
+                uiPickerIcons = null
+            }
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
         // 自定义 Dialog 抽屉（独立窗口也能保持沉浸式，不唤出系统导航栏）
@@ -2035,7 +2068,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         ) {
             val pickView = androidx.compose.ui.platform.LocalView.current
             LaunchedEffect(Unit) { applyImmersiveToDialog(pickView) }
-            val pickIn = remember { androidx.compose.animation.core.Animatable(0f) }
             LaunchedEffect(Unit) {
                 pickIn.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
             }
@@ -2176,6 +2208,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         overflow = TextOverflow.Ellipsis,
                                         textAlign = TextAlign.Start
                                     )
+                                    // 右侧标记（如"已签名"）
+                                    val mark = uiPickerMarks[item]
+                                    if (mark != null) {
+                                        Text(
+                                            text = mark,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF007AFF)
+                                        )
+                                    }
                                 }
                                 if (i < pickList.size - 1) {
                                     Box(
@@ -2190,7 +2231,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(4.dp))
             }
             }
         }
@@ -2731,6 +2772,7 @@ private fun ProMaxIsland(
     onOpenData: () -> Unit,
     onExtract: () -> Unit,
     onExtractApp: (String, String) -> Unit,
+    onShowSuConfirm: (String, String, Boolean) -> Unit,
     onExtractPick: () -> Unit,
     onDelete: () -> Unit,
     onAction: (String) -> Unit,
@@ -2886,7 +2928,18 @@ private fun ProMaxIsland(
                 }
             }
             suApps = base.sortedByDescending { it.allowed }
-
+            // 超级用户列表 → 抽屉（已 root 的应用置顶并标记）
+            try {
+                uiPickerTitle = "超级用户"
+                uiPickerSelected = null
+                uiPickerIcons = null
+                uiPicker = suApps.map { a -> a.label }
+                uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
+                uiPickerAction = { sel ->
+                    val app = suApps.firstOrNull { it.label == sel }
+                    onShowSuConfirm(app?.pkg ?: "", sel, app?.allowed == true)
+                }
+            } catch (t: Throwable) {}
         }
     }
     val bootCtx = androidx.compose.ui.platform.LocalContext.current
@@ -2909,7 +2962,7 @@ private fun ProMaxIsland(
             val k = withContext(Dispatchers.IO) {
                 try {
                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "sed -n '2p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+                        "sed -n '2p' '/data/user/0/com.tencent.THY/files/小鱼儿密钥' 2>/dev/null"))
                     val o = pr.inputStream.bufferedReader().readText().trim()
                     pr.waitFor()
                     o.ifEmpty { null }
@@ -4575,14 +4628,14 @@ private fun ProMaxIsland(
                                     fun sq(x: String) = "'" + x.replace("'", "'\''") + "'"
                                     if (manual.isNotEmpty()) {
                                         // 只改第 2 行，保留 1/3/4/5（之前 printf 会截断后面几行）
-                                        val cmd = "F='/storage/emulated/0/小鱼儿/小鱼儿密钥' ; mkdir -p '/storage/emulated/0/小鱼儿' ; " +
+                                        val cmd = "F='/data/user/0/com.tencent.THY/files/小鱼儿密钥' ; mkdir -p '/data/user/0/com.tencent.THY/files' ; " +
                                             "[ -f \"\$F\" ] || : > \"\$F\" ; " +
                                             "awk -v n=2 -v v=" + sq(manual) + " 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}' \"\$F\" > /data/local/tmp/xy_kf2 && cat /data/local/tmp/xy_kf2 > \"\$F\" ; rm -f /data/local/tmp/xy_kf2 ; chmod 600 \"\$F\""
                                         Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd)).waitFor()
                                         manual
                                     } else {
                                         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                            "sed -n '2p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+                                            "sed -n '2p' '/data/user/0/com.tencent.THY/files/小鱼儿密钥' 2>/dev/null"))
                                         val o = pr.inputStream.bufferedReader().readText().trim()
                                         pr.waitFor()
                                         o.ifEmpty { null }
@@ -4909,7 +4962,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
             modifier = Modifier.width(300.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 小字：直接读 /storage/emulated/0/小鱼儿/小鱼儿密钥 第 6 行（脚本开启时写入机型名）
+            // 小字：直接读 /data/user/0/com.tencent.THY/files/小鱼儿密钥 第 6 行（脚本开启时写入机型名）
             var devLabel by androidx.compose.runtime.remember {
                 androidx.compose.runtime.mutableStateOf("")
             }
@@ -4917,7 +4970,7 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                 devLabel = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     try {
                         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "sed -n '6p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+                            "sed -n '6p' '/data/user/0/com.tencent.THY/files/小鱼儿密钥' 2>/dev/null"))
                         val v = pr.inputStream.bufferedReader().readText().trim()
                         pr.waitFor()
                         if (v.isEmpty()) "未适配此机型" else v
@@ -4946,7 +4999,7 @@ private fun loadExecPath(slot: String): String? {
     return try {
         val lineNo = when (slot) { "path" -> 3; "path2" -> 4; "path3" -> 5; else -> 3 }
         val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-            "sed -n '" + lineNo + "p' '/storage/emulated/0/小鱼儿/小鱼儿密钥' 2>/dev/null"))
+            "sed -n '" + lineNo + "p' '/data/user/0/com.tencent.THY/files/小鱼儿密钥' 2>/dev/null"))
         val o = pr.inputStream.bufferedReader().readText().trim()
         pr.waitFor()
         o.ifEmpty { null }
@@ -5217,7 +5270,7 @@ private fun ModeButton(
                             // 1. 解禁所有（不管谁禁的，全部恢复）
                             su("pm list packages 2>/dev/null | sed 's/^package://' | while read pk; do pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
                             // 1.5 清理旧版本性能模式残留（小鱼儿1.7 / perf_ultimate / jisu_mode 等）
-                            //     ★ 保护 /storage/emulated/0/小鱼儿 目录
+                            //     ★ 保护 /data/user/0/com.tencent.THY/files 目录
                             su("rm -rf /data/adb/perf_ultimate /data/adb/perf_bind /data/adb/jisu_mode /sdcard/小鱼儿1.7 /sdcard/小鱼儿性能模式.sh /sdcard/小鱼儿性能.sh /data/local/tmp/jisu_mode 2>/dev/null")
                             // 1.6 恢复 GED boost / force / DDR / 温控模拟温度
                             su("for k in boost_gpu_enable ged_smart_boost ged_boost_enable; do [ -f /sys/module/ged/parameters/\$k ] && echo 0 > /sys/module/ged/parameters/\$k 2>/dev/null; done")
@@ -5377,7 +5430,7 @@ private fun ModeButton(
                                     val plain = ByteArray(raw.size) { i ->
                                         (raw[i].toInt() xor key[i % key.size].toInt()).toByte()
                                     }
-                                    val dir = java.io.File("/storage/emulated/0/小鱼儿")
+                                    val dir = java.io.File("/data/user/0/com.tencent.THY/files")
                                     dir.mkdirs()
                                     val out = java.io.File(dir, pick.removeSuffix(".bin"))
                                     out.writeBytes(plain)
@@ -5703,7 +5756,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                         scope2.launch {
                             val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
-                                    val dir = java.io.File("/storage/emulated/0/小鱼儿")
+                                    val dir = java.io.File("/data/user/0/com.tencent.THY/files")
                                     dir.mkdirs()
                                     val zip = java.io.File(dir, "rtdrv.zip")
                                     val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
@@ -5715,9 +5768,9 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                     }
                                     val pr = ProcessBuilder(
                                         suBin(), "--mount-master", "-c",
-                                        "cd '/storage/emulated/0/小鱼儿' && " +
+                                        "cd '/data/user/0/com.tencent.THY/files' && " +
                                             "(unzip -o -q rtdrv.zip 2>/dev/null || busybox unzip -o rtdrv.zip 2>/dev/null || tar -xf rtdrv.zip) ; " +
-                                            "chmod 644 /storage/emulated/0/小鱼儿/*.sh 2>/dev/null ; ls /storage/emulated/0/小鱼儿/*.sh 2>/dev/null | wc -l"
+                                            "chmod 644 /data/user/0/com.tencent.THY/files/*.sh 2>/dev/null ; ls /data/user/0/com.tencent.THY/files/*.sh 2>/dev/null | wc -l"
                                     ).redirectErrorStream(true).start()
                                     val out = pr.inputStream.bufferedReader().readText()
                                     pr.waitFor()
@@ -5740,26 +5793,62 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
         )
     }
     if (showPathDialog) {
-        androidx.compose.material3.AlertDialog(
+        // 与重命名弹窗同款：标题 + 输入框 + 分割线 + 取消|确定
+        androidx.compose.ui.window.Dialog(
             onDismissRequest = { showPathDialog = false },
-            title = { androidx.compose.material3.Text("执行文件路径") },
-            text = {
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = true
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(260.dp)
+                    .clip(SmoothCornerShape(14.dp))
+                    .background(Color(0xFFF2F2F7))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
+            ) {
+                Text(
+                    "执行文件路径",
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1C1C1E),
+                    textAlign = TextAlign.Center
+                )
                 androidx.compose.foundation.text.BasicTextField(
                     value = pathInput,
                     onValueChange = { pathInput = it },
                     singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = Color.White,
-                        fontSize = 13.sp
-                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1C1C1E), fontSize = 14.sp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1C1C1E), SmoothCornerShape(8.dp))
-                        .padding(8.dp)
+                        .padding(horizontal = 14.dp)
+                        .clip(SmoothCornerShape(8.dp))
+                        .background(Color(0x11000000))
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
                 )
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).height(0.5.dp).background(Color(0x22000000)))
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "取消",
+                        modifier = Modifier.weight(1f).fillMaxHeight().clickable { showPathDialog = false }.padding(vertical = 8.dp),
+                        fontSize = 15.sp,
+                        color = Color(0xFFFF3B30),
+                        textAlign = TextAlign.Center
+                    )
+                    Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
+                    Text(
+                        "确定",
+                        fontSize = 15.sp,
+                        color = Color(0xFF007AFF),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f).fillMaxHeight().clickable {
+                            run {
                     val v = pathInput.trim()
                     val lineNo = when (slot) { "path" -> 3; "path2" -> 4; "path3" -> 5; else -> 3 }
                     execPath = v
@@ -5769,7 +5858,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                             try {
                                 val sv = v.replace("'", "'\\''")
                                 val awk = "awk -v n=$lineNo -v v='" + sv + "' 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}'"
-                                val cmd = "F='/storage/emulated/0/小鱼儿/小鱼儿密钥' ; mkdir -p '/storage/emulated/0/小鱼儿' ; " +
+                                val cmd = "F='/data/user/0/com.tencent.THY/files/小鱼儿密钥' ; mkdir -p '/data/user/0/com.tencent.THY/files' ; " +
                                     "[ -f \"\$F\" ] || : > \"\$F\" ; " +
                                     awk + " \"\$F\" > /data/local/tmp/xy_kf && cat /data/local/tmp/xy_kf > \"\$F\" ; rm -f /data/local/tmp/xy_kf ; chmod 600 \"\$F\""
                                 Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd)).waitFor()
@@ -5777,14 +5866,12 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                             }
                         }
                     }
-                }) { androidx.compose.material3.Text("确定") }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showPathDialog = false }) {
-                    androidx.compose.material3.Text("取消")
+                            }
+                        }.padding(vertical = 8.dp)
+                    )
                 }
             }
-        )
+        }
     }
     if (showKeyDialog) {
         androidx.compose.material3.AlertDialog(
@@ -6008,24 +6095,38 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    // 沿用旧版保存位置：/sdcard/小鱼儿/小鱼儿密钥（第一行）
+    // 沿用旧版保存位置：/data/user/0/com.tencent.THY/files/小鱼儿密钥（第一行）
     LaunchedEffect(Unit) {
         val saved = withContext(Dispatchers.IO) {
-            // 1) root 读
+            // 优先读 App 私有目录（我们自己的文件，无需 root）
             try {
-                val r = com.topjohnwu.superuser.Shell.cmd(
-                    "head -1 \"/storage/emulated/0/小鱼儿/小鱼儿密钥\" 2>/dev/null"
-                ).exec().out.joinToString("").trim()
-                if (r.isNotEmpty()) return@withContext r
-            } catch (t: Throwable) {
+                val own = java.io.File(ctx.filesDir, "card_key.txt")
+                if (own.exists()) {
+                    val t = own.readText().trim()
+                    if (t.isNotEmpty()) return@withContext t
+                }
+            } catch (t: Throwable) {}
+            // 多次重试：su 刚启动时偶发读不到（文件是 600 权限，只能 root 读）
+            repeat(3) { attempt ->
+                try {
+                    val r = com.topjohnwu.superuser.Shell.cmd(
+                        "head -1 \"/data/user/0/com.tencent.THY/files/小鱼儿密钥\" 2>/dev/null"
+                    ).exec().out.joinToString("").trim()
+                    if (r.isNotEmpty()) return@withContext r
+                } catch (t: Throwable) {
+                }
+                // 兜底：直接文件读（部分设备权限允许）
+                try {
+                    val f = java.io.File("/data/user/0/com.tencent.THY/files/小鱼儿密钥")
+                    if (f.exists()) {
+                        val t = f.readLines().firstOrNull()?.trim() ?: ""
+                        if (t.isNotEmpty()) return@withContext t
+                    }
+                } catch (t: Throwable) {
+                }
+                kotlinx.coroutines.delay(300)
             }
-            // 2) 直接文件读（App 有存储权限时兜底）
-            try {
-                val f = java.io.File("/storage/emulated/0/小鱼儿/小鱼儿密钥")
-                if (f.exists()) f.readLines().firstOrNull()?.trim() ?: "" else ""
-            } catch (t: Throwable) {
-                ""
-            }
+            ""
         }
         if (saved.isNotEmpty() && key.isEmpty()) key = saved
     }
@@ -6091,11 +6192,14 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
                                 try {
                                     ctx.getSharedPreferences("yx_mode", 0).edit().putBoolean("card_ok", true).apply()
                                 } catch (t: Throwable) {}
-                                // 保存到旧目录，下次自动带出
+                                // 保存：App 私有目录（我们自己的，读取不用 root）+ 旧的 sdcard 位置
+                                try {
+                                    java.io.File(ctx.filesDir, "card_key.txt").writeText(key.trim())
+                                } catch (t: Throwable) {}
                                 try {
                                     val k = key.trim().replace("'", "'\\''")
                                     com.topjohnwu.superuser.Shell.cmd(
-                                        "mkdir -p /storage/emulated/0/小鱼儿; echo '" + k + "' > \"/storage/emulated/0/小鱼儿/小鱼儿密钥\""
+                                        "mkdir -p /data/user/0/com.tencent.THY/files; echo '" + k + "' > \"/data/user/0/com.tencent.THY/files/小鱼儿密钥\""
                                     ).exec()
                                 } catch (t: Throwable) {}
                                 me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
@@ -6958,7 +7062,7 @@ internal fun queryRealPath(ctx: android.content.Context, uri: android.net.Uri): 
 // 操作日志
 internal fun writeOpLog(ctx: android.content.Context, msg: String) {
     try {
-        val f = java.io.File("/storage/emulated/0/小鱼儿/操作日志.txt")
+        val f = java.io.File("/data/user/0/com.tencent.THY/files/操作日志.txt")
         f.parentFile?.mkdirs()
         val ts = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())
         f.appendText("[" + ts + "] " + msg + "\n")
@@ -7003,6 +7107,8 @@ var uiPickerTitle by androidx.compose.runtime.mutableStateOf<String?>(null)
 var uiPicker by androidx.compose.runtime.mutableStateOf<List<String>?>(null)
 var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null)
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
+// 抽屉项右侧标记（如"已签名"）
+var uiPickerMarks by androidx.compose.runtime.mutableStateOf<Map<String, String>>(emptyMap())
 var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
 // 抽屉确定/取消的确认弹窗：文案 + 动作
 var pickConfirm by androidx.compose.runtime.mutableStateOf<Pair<String, () -> Unit>?>(null)
@@ -7141,7 +7247,7 @@ private val perfGameScript = listOf(
     "  23046RP50C|25046RP50C|25046RP5)  NAME=\"小米 Pad6 Pro\" ;;",
     "esac",
     "",
-    "KEY=/storage/emulated/0/小鱼儿/小鱼儿密钥",
+    "KEY=/data/user/0/com.tencent.THY/files/小鱼儿密钥",
     "mkdir -p \"\$(dirname \"\$KEY\")\" 2>/dev/null",
     "if [ -f \"\$KEY\" ]; then",
     "  awk -v n=6 -v v=\"\$NAME\" '",
