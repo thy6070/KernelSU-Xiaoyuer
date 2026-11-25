@@ -517,8 +517,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .blur(
-                    // 编辑/终端/预览/能量守恒时对文件管理器固定 30dp 模糊（不受开关控制）
-                    if (panel || termFull || editPath != null || previewPath != null) 30.dp else 0.dp
+                    // 面板/终端/编辑/预览/长按菜单：背景模糊 15dp
+                    if (panel || termFull || editPath != null || previewPath != null ||
+                        (ctxMenuPath != null && android.os.Build.VERSION.SDK_INT >= 31)
+                    ) 15.dp else 0.dp
                 )
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
@@ -1464,22 +1466,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 usePlatformDefaultWidth = false
             )
         ) {
-            // 去掉系统暗色遮罩：不能盖住被长按放大的那一行
             val cmView = androidx.compose.ui.platform.LocalView.current
-            androidx.compose.runtime.LaunchedEffect(Unit) {
-                applyImmersiveToDialog(cmView)
-                try {
-                    val w = (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
-                    w?.setDimAmount(0f)
-                    // 窗口背景透明，露出下面的模糊背景
-                    w?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
-                } catch (t: Throwable) {}
-            }
+            androidx.compose.runtime.LaunchedEffect(Unit) { applyImmersiveToDialog(cmView) }
             val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0x66000000))
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = null
