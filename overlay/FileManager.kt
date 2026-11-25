@@ -227,8 +227,6 @@ data class FsEntry(val name: String, val isDir: Boolean, val sizeText: String = 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}) {
-    // 全局 iOS 字体（Inter）
-    androidx.compose.material3.MaterialTheme(typography = AppTypography) {
     val appCtx = LocalContext.current
     val view = LocalView.current
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
@@ -555,17 +553,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressPath = null
                     leftHighlight = null
                     // 从压缩包临时目录返回 → 回到压缩包原目录
-                    // 只有"离开压缩包目录"才回到原目录；压缩包内部子目录正常进入
-                    if (leftPath.startsWith("/data/local/tmp/yx_arch") &&
-                        !np.startsWith("/data/local/tmp/yx_arch")
-                    ) {
+                    if (leftPath == "/data/local/tmp/yx_arch" && np.startsWith("/data/local/tmp")) {
                         leftPath = archiveReturnPath ?: np
                     } else {
                         leftPath = np
                     }
                 },
                 onLongPress = { lp, dirFlag ->
-                    // 直接用列表里的 isDir（和图标同源，保证一致）
+                    // 与图标同源：直接用列表里的 isDir
                     longPressIsDir = dirFlag
                     longPressFromRight = false
                     // 长按新目标时先收起终端，避免叠在一起
@@ -628,16 +623,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressPath = null
                     rightHighlight = null
                     // 从压缩包临时目录返回 → 回到压缩包原目录
-                    if (rightPath.startsWith("/data/local/tmp/yx_arch") &&
-                        !np2.startsWith("/data/local/tmp/yx_arch")
-                    ) {
+                    if (rightPath == "/data/local/tmp/yx_arch" && np2.startsWith("/data/local/tmp")) {
                         rightPath = archiveReturnPath ?: np2
                     } else {
                         rightPath = np2
                     }
                 },
                 onLongPress = { lp, dirFlag ->
-                    // 直接用列表里的 isDir（和图标同源，保证一致）
+                    // 与图标同源：直接用列表里的 isDir
                     longPressIsDir = dirFlag
                     longPressFromRight = true
                     // 长按新目标时先收起终端，避免叠在一起
@@ -870,31 +863,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         "move" -> "mv -f " + q(srcPath) + " " + q(arg)
                         "copy" -> "cp -rf " + q(srcPath) + " " + q(arg)
                         "zip" -> "cd " + q(dir) + " && tar -czf " + q(name + ".tar.gz") + " " + q(name)
-                        "unzip" -> {
-                            val dst = arg.ifBlank { srcPath.substringBeforeLast('/', "/") }
-                            val lp2 = srcPath.lowercase()
-                            val extractor = when {
-                                lp2.endsWith(".tar.gz") || lp2.endsWith(".tgz") -> "tar -xzf"
-                                lp2.endsWith(".tar.xz") || lp2.endsWith(".txz") -> "tar -xJf"
-                                lp2.endsWith(".tar.bz2") -> "tar -xjf"
-                                lp2.endsWith(".tar") -> "tar -xf"
-                                lp2.endsWith(".7z") -> "7z x -y -o"
-                                lp2.endsWith(".rar") -> "unrar x -o+"
-                                lp2.endsWith(".gz") -> "gunzip -kf"
-                                else -> "unzip -o"
-                            }
-                            "echo '=== extract ' \"\$(date)\" >> /data/local/tmp/xy_archive_log.txt ; " +
-                                (if (extractor.startsWith("7z")) {
-                                    "$extractor" + q(dst)
-                                } else if (extractor.startsWith("unrar")) {
-                                    "$extractor" + q(srcPath)
-                                } else {
-                                    "$extractor" + " " + q(srcPath)
-                                }) +
-                                (if (extractor == "tar -xzf" || extractor == "tar -xJf" || extractor == "tar -xjf" || extractor == "tar -xf")
-                                    " -C " + q(dst) else if (extractor.startsWith("unzip")) " -d " + q(dst) else "") +
-                                " >> /data/local/tmp/xy_archive_log.txt 2>&1"
-                        }
+                        "unzip" -> "echo '=== unzip ' \"\$SRC\" \"\$(date)\" >> /data/local/tmp/xy_archive_log.txt ; " +
+                            "unzip -o " + q(srcPath) + " -d " + q(arg) + " >> /data/local/tmp/xy_archive_log.txt 2>&1"
                         "rename" -> "mv -f " + q(srcPath) + " " + q(dir + "/" + arg)
                         "delete" -> "rm -rf " + q(srcPath)
                         "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
@@ -1112,25 +1082,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 uiPicker = null
                 uiPickerIcons = null
                 uiPickerSelected = null
-                // 官方方式：授予/撤销 root（读 profile → 改 allowSu → 写回）
+                // 官方方式：撤销该应用的 root 授权
                 uiScope.launch {
-                    val ok = withContext(Dispatchers.IO) {
+                    withContext(Dispatchers.IO) {
                         runCatching {
-                            // 旧版同款：读当前 profile → 翻转 allowSu；没有则新建
-                            val current = me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)
-                            val next = current?.copy(allowSu = !signed)
-                                ?: me.weishu.kernelsu.Natives.Profile(
-                                    name = pkg,
-                                    currentUid = uid,
-                                    allowSu = !signed
-                                )
+                            // 官方方式：读 profile → allowSu=false → 写回
+                            val cur = me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)
+                            val next = cur?.copy(allowSu = !signed)
+                                ?: me.weishu.kernelsu.Natives.Profile(name = pkg, currentUid = uid, allowSu = !signed)
                             me.weishu.kernelsu.Natives.setAppProfile(next)
-                        }.getOrDefault(false)
+                        }
                     }
-                    runMessage = if (ok) (if (signed) "已撤销 $label 的 root" else "已授予 $label root") else "操作失败（setAppProfile 返回 false）"
-                    // 重新加载列表（状态变了）
                     refreshTick += 1
-                    suLoading = false
                 }
             }
         },
@@ -1367,7 +1330,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             ) {
                 Text(
                     text = "重命名",
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = AppFontFamily,
@@ -1709,14 +1672,33 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 参照目录：另一侧当前目录
                 val otherDir = if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) rightPath else leftPath
                 // 移动/复制（直接移到/复制到另一侧目录）
-                items.add(CmItem("移动") { cmFile("move", otherDir) })
+                items.add(CmItem("移动到另一侧") { cmFile("move", otherDir) })
                 items.add(CmItem("重命名") {
                     cmRenameText = cmPath.substringAfterLast('/')
                     cmRenamePath = cmPath
                     ctxMenuClosing = true
                 })
+                // 进入压缩包（解压到临时目录后浏览）
+                if (cmIsArchive) {
+                    items.add(CmItem("进入压缩包") {
+                        val dst = "/data/local/tmp/xy_browse/" + cmPath.substringAfterLast('/').substringBeforeLast('.')
+                        uiScope.launch {
+                            withContext(Dispatchers.IO) {
+                                runCatching {
+                                    com.topjohnwu.superuser.Shell.cmd(
+                                        "rm -rf " + quote(dst) + " ; mkdir -p " + quote(dst) + " ; " +
+                                            "unzip -o " + quote(cmPath) + " -d " + quote(dst) + " 2>&1"
+                                    ).exec()
+                                }
+                            }
+                            if (ctxMenuPath?.startsWith(leftPath.trimEnd('/') + "/") == true) leftPath = dst else rightPath = dst
+                            ctxMenuPath = null
+                            refreshTick += 1
+                        }
+                    })
+                }
                 // 解压 / 压缩（直接执行）
-                items.add(CmItem(if (cmIsArchive) "解压到对面目录" else "压缩") {
+                items.add(CmItem(if (cmIsArchive) "解压到当前目录" else "压缩") {
                     cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
                 })
                 // 复制路径
@@ -2116,16 +2098,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         )
         val pickScope = androidx.compose.runtime.rememberCoroutineScope()
         val closePick: () -> Unit = {
-            // 直接关（先验证卡死是否来自 hide() 协程）
-            uiPicker = null
-            uiPickerSelected = null
-            uiPickerIcons = null
-            uiPickerMarks = emptyMap()
+            // 先播收起动画（内容完整滑下），动画结束再清空
+            pickScope.launch {
+                try { pickSheetState.hide() } catch (t: Throwable) {}
+                uiPicker = null
+                uiPickerSelected = null
+                uiPickerIcons = null
+                uiPickerMarks = emptyMap()
+            }
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
         // 底部抽屉（恢复 ModalBottomSheet）
         androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { closePick() },
+            // 确认弹窗（另一个 Dialog）弹出时会把抽屉顶掉 → 这里忽略 dismiss
+            onDismissRequest = { },
             sheetState = pickSheetState,
             containerColor = Color(0xFFF2F2F7),
             shape = SmoothCornerShape(12.dp),
@@ -2264,21 +2250,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         text = item,
                                         modifier = Modifier.weight(1f),
                                         fontSize = 15.sp,
-                                        letterSpacing = (-0.2).sp,
+                                        fontFamily = AppFontFamily,
+                    letterSpacing = (-0.2).sp,
                                         color = Color.Black,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         textAlign = TextAlign.Start
                                     )
-                                    // 右侧标记（已签名）
-                                    val mark = uiPickerMarks[item]
-                                    if (mark != null) {
-                                        Text(
-                                            text = mark,
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF007AFF)
-                                        )
-                                    }
+                                    val mk = uiPickerMarks[item]
+                                    if (mk != null) Text(text = mk, fontSize = 12.sp, color = Color(0xFF007AFF))
                                 }
                                 if (i < pickList.size - 1) {
                                     Box(
@@ -2328,13 +2308,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
             }
             val pcDismiss: () -> Unit = { if (!pcClosing) pcClosing = true }
-            // 背景遮罩（我们自己的变暗，系统 dim 已关）
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0x66000000)),
-                contentAlignment = Alignment.Center
-            ) {
             Column(
                 modifier = Modifier
                     .width(240.dp)
@@ -2396,7 +2369,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Text("确定", fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
-            }
             }
         }
     }
@@ -2813,12 +2785,6 @@ private fun applyImmersiveToDialog(view: android.view.View) {
             )
             // 统一去掉系统黑色遮罩（背景自己控制）
             w.setDimAmount(0f)
-            // 窗口背景透明：否则全屏后状态栏区域会画成黑色
-            w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
-            // 窗口居中：全屏 layout 下避免内容从角落出现
-            w.setGravity(android.view.Gravity.CENTER)
-            // 键盘弹出时让内容区缩小（而不是被键盘盖住）
-            w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
             androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
                 hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -2915,7 +2881,6 @@ private fun ansiAnnotated(src: String): androidx.compose.ui.text.AnnotatedString
     }
     return b.toAnnotatedString()
 }
-    }   // MaterialTheme 结束
 
 @Composable
 private fun ProMaxIsland(
@@ -3109,7 +3074,7 @@ private fun ProMaxIsland(
             try {
                 uiPickerTitle = "超级用户 " + suApps.size + "/" + suApps.count { it.allowed }
                 uiPicker = suApps.map { it.label }
-                uiPickerIcons = null   // 先不加载图标（验证收起卡死）
+                uiPickerIcons = suApps.map { a -> a.icon?.asImageBitmap() }
                 uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
                 uiPickerAction = { sel ->
                     val app = suApps.firstOrNull { it.label == sel }
@@ -6198,7 +6163,7 @@ private fun BrowserPane(
             }
             }
         }
-        itemsIndexed(entries, key = { _, e -> e.name }) { idx, entry ->
+        itemsIndexed(entries) { idx, entry ->
             val rowPath = joinPath(path, entry.name)
             FsRow(
                 name = entry.name,
@@ -6432,8 +6397,6 @@ private fun FsRow(
                     onClick = { tapFx(); onClick() },
                     onLongClick = { tapFx(); onLongClick() }
                 )
-                // 定位/选中高亮：连续曲率圆角（iOS 感）
-                .clip(SmoothCornerShape(10.dp))
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x4D007AFF)
@@ -6476,25 +6439,6 @@ private fun FsRow(
  * 曲率变化更平滑，视觉上更"圆润"，不会有硬切线。
  * smoothing 越大越接近 iOS 的 continuous corner。
  */
-// 全局 iOS 字体（Inter，接近 SF Pro）
-val AppTypography = androidx.compose.material3.Typography(
-    displayLarge = androidx.compose.material3.Typography().displayLarge.copy(fontFamily = AppFontFamily),
-    displayMedium = androidx.compose.material3.Typography().displayMedium.copy(fontFamily = AppFontFamily),
-    displaySmall = androidx.compose.material3.Typography().displaySmall.copy(fontFamily = AppFontFamily),
-    headlineLarge = androidx.compose.material3.Typography().headlineLarge.copy(fontFamily = AppFontFamily),
-    headlineMedium = androidx.compose.material3.Typography().headlineMedium.copy(fontFamily = AppFontFamily),
-    headlineSmall = androidx.compose.material3.Typography().headlineSmall.copy(fontFamily = AppFontFamily),
-    titleLarge = androidx.compose.material3.Typography().titleLarge.copy(fontFamily = AppFontFamily),
-    titleMedium = androidx.compose.material3.Typography().titleMedium.copy(fontFamily = AppFontFamily),
-    titleSmall = androidx.compose.material3.Typography().titleSmall.copy(fontFamily = AppFontFamily),
-    bodyLarge = androidx.compose.material3.Typography().bodyLarge.copy(fontFamily = AppFontFamily),
-    bodyMedium = androidx.compose.material3.Typography().bodyMedium.copy(fontFamily = AppFontFamily),
-    bodySmall = androidx.compose.material3.Typography().bodySmall.copy(fontFamily = AppFontFamily),
-    labelLarge = androidx.compose.material3.Typography().labelLarge.copy(fontFamily = AppFontFamily),
-    labelMedium = androidx.compose.material3.Typography().labelMedium.copy(fontFamily = AppFontFamily),
-    labelSmall = androidx.compose.material3.Typography().labelSmall.copy(fontFamily = AppFontFamily)
-)
-
 // iOS 风格字体：Inter（最接近 SF Pro 的开源字体）
 val AppFontFamily = androidx.compose.ui.text.font.FontFamily(
     androidx.compose.ui.text.font.Font(
