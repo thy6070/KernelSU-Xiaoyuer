@@ -1064,7 +1064,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 } catch (t: Throwable) {}
             }.start()
         },
-        onShowSuConfirm = { pkg, label, signed ->
+        onShowSuConfirm = { pkg, uid, label, signed ->
             pickConfirm = (if (signed) "卸载 $label 签名" else label) to {
                 uiPicker = null
                 uiPickerIcons = null
@@ -1073,9 +1073,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 uiScope.launch {
                     withContext(Dispatchers.IO) {
                         runCatching {
-                            com.topjohnwu.superuser.Shell.cmd(
-                                "/data/adb/ksud su revoke '" + pkg.replace("'", "'\\''") + "' 2>&1"
-                            ).exec()
+                            // 官方方式：读 profile → allowSu=false → 写回
+                            val prof = me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)
+                            me.weishu.kernelsu.Natives.setAppProfile(prof.copy(allowSu = false))
                         }
                     }
                     refreshTick += 1
@@ -2765,7 +2765,7 @@ private fun ProMaxIsland(
     onOpenData: () -> Unit,
     onExtract: () -> Unit,
     onExtractApp: (String, String) -> Unit,
-    onShowSuConfirm: (String, String, Boolean) -> Unit,
+    onShowSuConfirm: (String, Int, String, Boolean) -> Unit,
     onExtractPick: () -> Unit,
     onDelete: () -> Unit,
     onAction: (String) -> Unit,
@@ -2930,7 +2930,7 @@ private fun ProMaxIsland(
                 uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
                 uiPickerAction = { sel ->
                     val app = suApps.firstOrNull { it.label == sel }
-                    onShowSuConfirm(app?.pkg ?: "", sel, app?.allowed == true)
+                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
                 }
             } catch (t: Throwable) {}
         }
