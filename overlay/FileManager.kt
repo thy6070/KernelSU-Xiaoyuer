@@ -1073,8 +1073,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 uiScope.launch {
                     withContext(Dispatchers.IO) {
                         runCatching {
-                            me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
-                                .setAppPermission(pkg, me.weishu.kernelsu.data.repository.SuPermission.DENY)
+                            com.topjohnwu.superuser.Shell.cmd(
+                                "/data/adb/ksud su revoke '" + pkg.replace("'", "'\\''") + "' 2>&1"
+                            ).exec()
                         }
                     }
                     refreshTick += 1
@@ -2072,7 +2073,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         translationY = (1f - pickIn.value) * 700f
                         alpha = pickIn.value
                     }
-                    .clip(SmoothCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
                     .background(Color(0xFFF2F2F7))
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
