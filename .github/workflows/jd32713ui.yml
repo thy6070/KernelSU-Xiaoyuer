@@ -164,6 +164,18 @@ jobs:
           cp manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg src/manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg
           mkdir -p src/manager/app/src/main/assets
           cp -r manager/app/src/main/assets/. src/manager/app/src/main/assets/ 2>/dev/null || true
+          # 名称最后再改一次（前面复制 res 会覆盖）
+          python3 - <<'PYEOF'
+          import re, io, glob
+          for f in ['src/manager/app/src/main/res/values/strings.xml'] + glob.glob('src/manager/app/src/main/res/values-*/strings.xml'):
+              try:
+                  t=io.open(f,encoding='utf-8').read()
+              except: continue
+              if 'name="app_name"' in t:
+                  t=re.sub(r'<string name="app_name">.*?</string>', '<string name="app_name">Emperor Weapon</string>', t)
+                  io.open(f,'w',encoding='utf-8').write(t)
+                  print('renamed', f)
+          PYEOF
 
       - name: Troll icons (troll face as app icon / module icon / pill icon)
         run: |
