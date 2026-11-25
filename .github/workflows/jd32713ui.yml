@@ -160,7 +160,11 @@ jobs:
           printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<paths><external-files-path name="download" path="."/><cache-path name="cache" path="."/></paths>' > src/manager/app/src/main/res/xml/file_paths.xml
           grep -c "fileprovider" src/manager/app/src/main/AndroidManifest.xml || true
           # 每次构建递增版本号（云更新可识别）
-          # AGP 版本：保持仓库原样（9.4.1，之前构建可用）
+          # 稳定组合：Gradle 8.13 + AGP 8.13.0（不依赖缓存，远程可拉）
+          sed -i 's|gradle-[0-9.]*-bin.zip|gradle-8.13-bin.zip|' src/manager/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true
+          sed -i 's|^agp = ".*"|agp = "8.13.0"|' src/manager/gradle/libs.versions.toml 2>/dev/null || true
+          grep -n "distributionUrl" src/manager/gradle/wrapper/gradle-wrapper.properties | head -1 || true
+          grep -n "^agp" src/manager/gradle/libs.versions.toml | head -1 || true
           perl -pi -e 's/versionName = ".*"/versionName = "1.0.${{ github.run_number }}"/' src/manager/app/build.gradle.kts 2>/dev/null || true
           grep -n "versionName" src/manager/app/build.gradle.kts | head -2 || true
           cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
