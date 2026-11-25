@@ -2793,6 +2793,8 @@ private fun applyImmersiveToDialog(view: android.view.View) {
                 android.view.WindowManager.LayoutParams.MATCH_PARENT,
                 android.view.WindowManager.LayoutParams.MATCH_PARENT
             )
+            // 统一去掉系统黑色遮罩（背景自己控制）
+            w.setDimAmount(0f)
             androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
             androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
                 hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
