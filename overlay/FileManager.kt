@@ -420,6 +420,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     // 超级用户：点图标直接开抽屉（不激活灵动岛）
     var suOpenTick by remember { mutableStateOf(0) }
     var cmRenameText by remember { mutableStateOf("") }
+    // 确认弹窗：关闭动画中
+    var pcClosing by remember { mutableStateOf(false) }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
     var appMenuLabel by remember { mutableStateOf("") }
@@ -559,8 +561,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
                     termText = ""
-                    // 只开菜单；音效/振动与弹窗动画同时
-                    playPopupFx(appCtx)
                     ctxMenuRight = false
                     ctxMenuClosing = false
                     ctxMenuPath = lp
@@ -638,8 +638,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
                     termText = ""
-                    // 只开菜单；音效/振动与弹窗动画同时
-                    playPopupFx(appCtx)
                     ctxMenuRight = true
                     ctxMenuClosing = false
                     ctxMenuPath = lp
@@ -1069,7 +1067,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         suOpenTick = suOpenTick,
         onSuOpen = { suOpenTick += 1 },
         onShowSuConfirm = { pkg, uid, label, signed ->
-            pickConfirm = (if (signed) "签名 $label" else label) to {
+            pickConfirm = (if (signed) "卸载 $label 签名" else "签名 $label") to {
                 uiPicker = null
                 uiPickerIcons = null
                 uiPickerSelected = null
@@ -1481,6 +1479,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val cmView = androidx.compose.ui.platform.LocalView.current
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 applyImmersiveToDialog(cmView)
+                // 弹窗出现的一瞬间：音效 + 振动
+                playPopupFx(cmView.context)
                 // 去掉系统变暗遮罩（背景由模糊呈现，不再压暗）
                 try {
                     (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.setDimAmount(0f)
@@ -2053,17 +2053,17 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
+        val pickScope = androidx.compose.runtime.rememberCoroutineScope()
         val closePick: () -> Unit = {
-            uiPicker = null
-            uiPickerSelected = null
-            uiPickerIcons = null
+            // 先播收起动画（ModalBottomSheet 自带下滑），再清状态
+            pickScope.launch {
+                try { pickSheetState.hide() } catch (t: Throwable) {}
+                uiPicker = null
+                uiPickerSelected = null
+                uiPickerIcons = null
+            }
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
-        // 抽屉出现：音效 + 振动
-        val pickFxCtx = androidx.compose.ui.platform.LocalContext.current
-        LaunchedEffect(uiPicker) {
-            if (uiPicker != null) playPopupFx(pickFxCtx)
-        }
         // 底部抽屉（恢复 ModalBottomSheet）
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
@@ -2131,7 +2131,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Text(
                             "确定",
                             modifier = Modifier.clickable {
-                                val sel = uiPickerSelected
+                                // 没选中就用第一项（避免点了没反应）
+                                val sel = uiPickerSelected ?: pickList.firstOrNull()
                                 if (sel != null) {
                                     when (pickTitle) {
                                         "选择机型" -> pickConfirm = "设为 $sel" to {
@@ -2244,6 +2245,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 applyImmersiveToDialog(popView)
                 pop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
             }
+            // iOS 退场：缩小 + 淡出
+            LaunchedEffect(pcClosing) {
+                if (pcClosing) {
+                    pop.animateTo(0.92f, tween(140, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                    pickConfirm = null
+                    pcClosing = false
+                }
+            }
+            val pcDismiss: () -> Unit = { if (!pcClosing) pcClosing = true }
             Column(
                 modifier = Modifier
                     .width(240.dp)
@@ -2277,7 +2287,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clickable { pickConfirm = null },
+                            .clickable { pcDismiss() },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
@@ -2294,7 +2304,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .fillMaxHeight()
                             .clickable {
                                 val action = pc.second
-                                pickConfirm = null
+                                pcClosing = true
                                 action()
                             },
                         contentAlignment = Alignment.Center
@@ -2689,6 +2699,11 @@ private fun applyImmersiveToDialog(view: android.view.View) {
         // 1) Dialog 自己的窗口（必须单独设，Dialog window 不继承 Activity）
         val w = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
         if (w != null) {
+            // 固定窗口尺寸：系统栏隐/显不再引起重新测量（避免弹窗上下跳动）
+            w.setLayout(
+                android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                android.view.WindowManager.LayoutParams.MATCH_PARENT
+            )
             androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
             androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
                 hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -2933,38 +2948,62 @@ private fun ProMaxIsland(
                 }
             }
         }
-        // 点超级用户图标：只开抽屉（不激活灵动岛/面板）
+        // 点超级用户图标：只开抽屉（复用游戏清理的列表逻辑，快且不列系统应用）
         if (suOpenTick > 0) {
             val base = withContext(Dispatchers.IO) {
                 try {
-                    val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
-                    val res = repo.getAppList()
-                    val apps = res.getOrNull()?.first ?: emptyList()
                     val pm = navCtx.packageManager
-                    apps.mapNotNull { ai ->
-                        if (ai.packageName == navCtx.packageName) return@mapNotNull null
-                        val icon = try {
-                            val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
-                            val w = d.intrinsicWidth.coerceAtLeast(1)
-                            val h = d.intrinsicHeight.coerceAtLeast(1)
-                            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-                            val canvas = android.graphics.Canvas(bmp)
-                            d.setBounds(0, 0, w, h)
-                            d.draw(canvas)
-                            bmp
-                        } catch (t: Throwable) {
-                            null
+                    val suList = try {
+                        val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+                        val res = repo.getAppList()
+                        res.getOrNull()?.first ?: emptyList()
+                    } catch (t: Throwable) { emptyList() }
+                    val apps: List<SuApp> = if (suList.isNotEmpty()) {
+                        suList.filter { ai ->
+                            val aiInfo = ai.packageInfo.applicationInfo
+                            val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                            // 已授权的系统应用保留（否则界面会"消失"）
+                            (!isSystem || ai.profile?.allowSu == true) && ai.packageName != "android"
                         }
-                        val allowed = runCatching {
-                            me.weishu.kernelsu.Natives.getAppProfile(ai.packageName, ai.uid).allowSu
-                        }.getOrDefault(ai.profile?.allowSu == true)
-                        SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
+                            .map { ai ->
+                                val allowed = ai.profile?.allowSu == true
+                                val icon = try {
+                                    val d = pm.getApplicationIcon(ai.packageName)
+                                    val w = d.intrinsicWidth.coerceAtLeast(1)
+                                    val h = d.intrinsicHeight.coerceAtLeast(1)
+                                    val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                                    android.graphics.Canvas(bmp).also { d.setBounds(0, 0, w, h); d.draw(it) }
+                                    bmp
+                                } catch (t: Throwable) { null }
+                                SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
+                            }
+                            .sortedWith(compareByDescending<SuApp> { it.allowed }.thenBy { it.label })
+                    } else {
+                        pm.getInstalledApplications(0)
+                            .filter {
+                                val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                                val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
+                                !isSystem && hasCode && it.packageName != "android"
+                            }
+                            .map { ai ->
+                                val icon = try {
+                                    val d = pm.getApplicationIcon(ai.packageName)
+                                    val w = d.intrinsicWidth.coerceAtLeast(1)
+                                    val h = d.intrinsicHeight.coerceAtLeast(1)
+                                    val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                                    android.graphics.Canvas(bmp).also { d.setBounds(0, 0, w, h); d.draw(it) }
+                                    bmp
+                                } catch (t: Throwable) { null }
+                                SuApp(ai.packageName, ai.loadLabel(pm).toString(), ai.uid, false, icon)
+                            }
+                            .sortedBy { it.label }
                     }
+                    apps
                 } catch (t: Throwable) {
                     emptyList()
                 }
             }
-            suApps = base.sortedByDescending { it.allowed }
+            suApps = base
             try {
                 uiPickerTitle = "超级用户"
                 uiPickerSelected = null
@@ -3005,9 +3044,7 @@ private fun ProMaxIsland(
                         } catch (t: Throwable) {
                             null
                         }
-                        val allowed = runCatching {
-                            me.weishu.kernelsu.Natives.getAppProfile(ai.packageName, ai.uid).allowSu
-                        }.getOrDefault(ai.profile?.allowSu == true)
+                        val allowed = allowed0
                         SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
                     }
                 } catch (t: Throwable) {
@@ -6060,6 +6097,22 @@ private fun BrowserPane(
         }
         itemsIndexed(entries) { idx, entry ->
             val rowPath = joinPath(path, entry.name)
+            // 尾部堆叠（简约）：滚到底部时，最后几张卡片轻微缩小叠起
+            val distFromEnd = entries.lastIndex - idx
+            val atBottom = !listState.canScrollForward
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        if (atBottom && distFromEnd in 0..2) {
+                            val sc = 1f - distFromEnd * 0.035f
+                            scaleX = sc
+                            scaleY = sc
+                            translationY = -distFromEnd * 5.dp.toPx()
+                            alpha = 1f - distFromEnd * 0.12f
+                        }
+                    }
+            ) {
             FsRow(
                 name = entry.name,
                 isDir = entry.isDir,
@@ -6085,6 +6138,7 @@ private fun BrowserPane(
                     onLongPress(rowPath)
                 }
             )
+            }
         }
     }
 }
