@@ -517,10 +517,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .blur(
-                    // 面板/终端/编辑/预览/长按菜单/应用菜单：背景模糊 10dp
-                    if (panel || termFull || editPath != null || previewPath != null ||
-                        appMenuPkg != null || ctxMenuPath != null
-                    ) 10.dp else 0.dp
+                    // 面板/终端/编辑/预览：背景模糊 15dp
+                    if (panel || termFull || editPath != null || previewPath != null) 15.dp else 0.dp
                 )
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
@@ -546,15 +544,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 },
                 onLongPress = { lp ->
-                    longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
-                        runCatching {
-                            val pr = Runtime.getRuntime().exec(
-                                arrayOf(suBin(), "--mount-master", "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
-                            )
-                            val o = pr.inputStream.bufferedReader().readText()
-                            pr.waitFor()
-                            o.trim() == "y"
-                        }.getOrDefault(false)
+                    // 只看 root 判定（File.isDirectory 在无权限时会误判成文件）
+                    longPressIsDir = runCatching {
+                        val pr = Runtime.getRuntime().exec(
+                            arrayOf(suBin(), "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
+                        )
+                        val o = pr.inputStream.bufferedReader().readText()
+                        pr.waitFor()
+                        o.trim() == "y"
+                    }.getOrDefault(false)
                     longPressFromRight = false
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
@@ -625,15 +623,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 },
                 onLongPress = { lp ->
-                    longPressIsDir = runCatching { java.io.File(lp).isDirectory }.getOrDefault(false) ||
-                        runCatching {
-                            val pr = Runtime.getRuntime().exec(
-                                arrayOf(suBin(), "--mount-master", "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
-                            )
-                            val o = pr.inputStream.bufferedReader().readText()
-                            pr.waitFor()
-                            o.trim() == "y"
-                        }.getOrDefault(false)
+                    // 只看 root 判定（File.isDirectory 在无权限时会误判成文件）
+                    longPressIsDir = runCatching {
+                        val pr = Runtime.getRuntime().exec(
+                            arrayOf(suBin(), "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
+                        )
+                        val o = pr.inputStream.bufferedReader().readText()
+                        pr.waitFor()
+                        o.trim() == "y"
+                    }.getOrDefault(false)
                     longPressFromRight = true
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
@@ -1066,8 +1064,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 } catch (t: Throwable) {}
             }.start()
         },
+        suOpenTick = suOpenTick,
+        onSuOpen = { suOpenTick += 1 },
         onShowSuConfirm = { pkg, uid, label, signed ->
-            pickConfirm = (if (signed) "卸载 $label 签名" else label) to {
+            pickConfirm = (if (signed) "签名 $label" else label) to {
                 uiPicker = null
                 uiPickerIcons = null
                 uiPickerSelected = null
@@ -1391,7 +1391,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             LaunchedEffect(Unit) { amAlpha.animateTo(1f, tween(140)) }
             Box(
                 modifier = Modifier
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .background(Color(0x66000000)),
                 contentAlignment = Alignment.Center
             ) {
             Column(
@@ -1487,6 +1488,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier
                 .fillMaxSize()
+                .background(Color(0x66000000))
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = null
@@ -2055,32 +2057,25 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             uiPickerIcons = null
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
-        // 自定义 Dialog 抽屉（独立窗口也能保持沉浸式，不唤出系统导航栏）
-        androidx.compose.ui.window.Dialog(
+        // 抽屉出现：音效 + 振动
+        val pickFxCtx = androidx.compose.ui.platform.LocalContext.current
+        LaunchedEffect(uiPicker) {
+            if (uiPicker != null) playPopupFx(pickFxCtx)
+        }
+        // 底部抽屉（恢复 ModalBottomSheet）
+        androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
-            properties = androidx.compose.ui.window.DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnClickOutside = true,
-                dismissOnBackPress = true
-            )
+            sheetState = pickSheetState,
+            containerColor = Color(0xFFF2F2F7),
+            shape = SmoothCornerShape(12.dp),
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            sheetGesturesEnabled = true,
+            contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
+            dragHandle = null
         ) {
-            val pickView = androidx.compose.ui.platform.LocalView.current
-            LaunchedEffect(Unit) { applyImmersiveToDialog(pickView) }
-            val pickIn = remember { androidx.compose.animation.core.Animatable(0f) }
-            LaunchedEffect(Unit) {
-                pickIn.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-            }
-            Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .graphicsLayer {
-                        translationY = (1f - pickIn.value) * 700f
-                        alpha = pickIn.value
-                    }
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                    .background(Color(0xFFF2F2F7))
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
@@ -2146,7 +2141,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "选择要提取的应用" -> {
                                             uiPickerAction?.invoke(sel)
                                         }
-                                        // 超级用户：确定 → 卸载签名确认（不做"重置"）
+                                        // 超级用户：确定 → 卸载签名确认
                                         "超级用户" -> {
                                             uiPickerAction?.invoke(sel)
                                         }
@@ -2225,8 +2220,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
             }
         }
     }
@@ -2476,6 +2469,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color(0x66000000))
                 .imePadding()
                 .padding(24.dp)
         ) {
@@ -2641,9 +2635,33 @@ private fun reapplyImmersiveActivity(view: android.view.View) {
 }
 
 
-// 弹窗出现：播放音效 + 轻微振动（SoundPool 预加载，低延迟）
-private var popSoundPool: android.media.SoundPool? = null
-private var popSoundId: Int = 0
+// 弹窗出现：播放音效 + 轻微振动
+// 预加载一个 MediaPlayer（prepare 完成后再播，避免每次 prepareAsync 的延迟）
+private var popPlayer: android.media.MediaPlayer? = null
+private var popPlayerReady = false
+private fun ensurePopPlayer(ctx: android.content.Context): android.media.MediaPlayer? {
+    val p = popPlayer
+    if (p != null && popPlayerReady) return p
+    if (p != null) return null
+    return try {
+        val tmp = java.io.File(ctx.cacheDir, "popup_sound.mp4")
+        if (!tmp.exists() || tmp.length() == 0L) {
+            ctx.assets.open("sound.mp4").use { input -> tmp.outputStream().use { input.copyTo(it) } }
+        }
+        val mp = android.media.MediaPlayer()
+        mp.setDataSource(tmp.absolutePath)
+        mp.setOnPreparedListener {
+            popPlayerReady = true
+            it.start()
+        }
+        mp.setOnCompletionListener { popPlayerReady = true }
+        mp.prepareAsync()
+        popPlayer = mp
+        mp
+    } catch (t: Throwable) {
+        null
+    }
+}
 private fun playPopupFx(ctx: android.content.Context) {
     try {
         val vib = ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
@@ -2656,23 +2674,10 @@ private fun playPopupFx(ctx: android.content.Context) {
         }
     } catch (t: Throwable) {}
     try {
-        val sp = popSoundPool ?: android.media.SoundPool.Builder()
-            .setMaxStreams(2)
-            .setAudioAttributes(
-                android.media.AudioAttributes.Builder()
-                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            .build().also { popSoundPool = it; popSoundId = 0 }
-        if (popSoundId == 0) {
-            val tmp = java.io.File(ctx.cacheDir, "popup_sound.mp4")
-            if (!tmp.exists() || tmp.length() == 0L) {
-                try { ctx.assets.open("sound.mp4").use { input -> tmp.outputStream().use { input.copyTo(it) } } } catch (t: Throwable) { return }
-            }
-            popSoundId = sp.load(tmp.absolutePath, 1)
-        }
-        if (popSoundId > 0) sp.play(popSoundId, 1f, 1f, 1, 0, 1f)
+        val mp = ensurePopPlayer(ctx) ?: return
+        if (!popPlayerReady) return
+        mp.seekTo(0)
+        mp.start()
     } catch (t: Throwable) {}
 }
 
@@ -2802,6 +2807,8 @@ private fun ProMaxIsland(
     onExtract: () -> Unit,
     onExtractApp: (String, String) -> Unit,
     onShowSuConfirm: (String, Int, String, Boolean) -> Unit,
+    suOpenTick: Int,
+    onSuOpen: () -> Unit,
     onExtractPick: () -> Unit,
     onDelete: () -> Unit,
     onAction: (String) -> Unit,
@@ -2924,6 +2931,52 @@ private fun ProMaxIsland(
                 }
             }
         }
+        // 点超级用户图标：只开抽屉（不激活灵动岛/面板）
+        if (suOpenTick > 0) {
+            val base = withContext(Dispatchers.IO) {
+                try {
+                    val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+                    val res = repo.getAppList()
+                    val apps = res.getOrNull()?.first ?: emptyList()
+                    val pm = navCtx.packageManager
+                    apps.filter { ai ->
+                        if (ai.packageName == navCtx.packageName) return@filter false
+                        val icon = try {
+                            val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
+                            val w = d.intrinsicWidth.coerceAtLeast(1)
+                            val h = d.intrinsicHeight.coerceAtLeast(1)
+                            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                            val canvas = android.graphics.Canvas(bmp)
+                            d.setBounds(0, 0, w, h)
+                            d.draw(canvas)
+                            bmp
+                        } catch (t: Throwable) {
+                            null
+                        }
+                        val allowed = runCatching {
+                            me.weishu.kernelsu.Natives.getAppProfile(ai.packageName, ai.uid).allowSu
+                        }.getOrDefault(ai.profile?.allowSu == true)
+                        SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
+                    }
+                } catch (t: Throwable) {
+                    emptyList()
+                }
+            }
+            suApps = base.sortedByDescending { it.allowed }
+            try {
+                uiPickerTitle = "超级用户"
+                uiPickerSelected = null
+                uiPickerIcons = suApps.map { a ->
+                    a.icon?.let { bmp -> android.graphics.Bitmap.createScaledBitmap(bmp, 64, 64, true).asImageBitmap() }
+                }
+                uiPicker = suApps.map { a -> a.label }
+                uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
+                uiPickerAction = { sel ->
+                    val app = suApps.firstOrNull { it.label == sel }
+                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                }
+            } catch (t: Throwable) {}
+        }
         if (navTarget == "su" || (navTarget == "home" && jumpStep == 7)) {
             val base = withContext(Dispatchers.IO) {
                 try {
@@ -2950,7 +3003,10 @@ private fun ProMaxIsland(
                         } catch (t: Throwable) {
                             null
                         }
-                        SuApp(ai.packageName, ai.label, ai.uid, ai.profile?.allowSu == true, icon)
+                        val allowed = runCatching {
+                            me.weishu.kernelsu.Natives.getAppProfile(ai.packageName, ai.uid).allowSu
+                        }.getOrDefault(ai.profile?.allowSu == true)
+                        SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
                     }
                 } catch (t: Throwable) {
                     emptyList()
@@ -3543,7 +3599,7 @@ private fun ProMaxIsland(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     NavIcon(Icons.Outlined.InsertDriveFile) { openNav("home") }
-                    NavIcon(Icons.Outlined.AdminPanelSettings) { openNav("su") }
+                    NavIcon(Icons.Outlined.AdminPanelSettings) { onSuOpen() }
                     NavIcon(Icons.Outlined.Layers) { openNav("module") }
                     NavIcon(Icons.Outlined.Tune) {
                         // 只改这一个图标：先完整收起，再展开到设置
@@ -4738,6 +4794,7 @@ private fun TerminalOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color(0x66000000))
                 .padding(12.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -6074,7 +6131,8 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
     // 卡密正确 → 自动验证并收起（不用手动点激活）
     LaunchedEffect(key) {
         if (key.isBlank() || busy) return@LaunchedEffect
-        kotlinx.coroutines.delay(700)
+        // 短防抖：输入停顿 250ms 即验证（无感）
+        kotlinx.coroutines.delay(250)
         if (key.isBlank() || busy) return@LaunchedEffect
         busy = true
         msg = "验证中…"
@@ -6498,14 +6556,19 @@ private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatche
 
     val fromShell = shellOut.mapNotNull { raw ->
         val line = raw.trim()
-        // toybox ls -l: perms links owner group size date time name
-        val m = Regex("^([dl-])[rwxsStT-]{9}[+@.]?\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\S+)\\s+(\\S+)\\s+(.+)$").find(line)
+        // toybox ls -l: perms links owner group [size] date [time] name
+        // 部分设备没有 time 段，或 size 段格式不同，做兼容
+        val m = Regex("^([dl-])[rwxsStT-]{9}[+@.]?\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\S+)\\s*(\\S*)\\s+(.+)$").find(line)
             ?: return@mapNotNull null
         val isDir = m.groupValues[1] == "d"
         val size = m.groupValues[2].toLongOrNull() ?: 0L
+        // 分组：1=类型 2=size 3=date 4=time(可空) 5=name
         val date = m.groupValues[3]
-        val time = m.groupValues[4]
-        val name = m.groupValues[5].removeSuffix("/")
+        val g4 = m.groupValues[4]
+        val g5 = m.groupValues[5]
+        val hasTime = g4.contains(":")
+        val time = if (hasTime) g4 else ""
+        val name = (if (hasTime) g5 else (g4 + " " + g5)).trim().removeSuffix("/")
         // 文件夹只显示时间，不显示大小（算目录大小要递归扫盘，会卡）
         val sizeText = if (isDir) "" else formatSizeText(size)
         // 时间去掉年份：2026-11-19 -> 11-19
