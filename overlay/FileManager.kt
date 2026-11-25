@@ -517,10 +517,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             modifier = Modifier
                 .fillMaxSize()
                 .blur(
-                    // 面板/终端/编辑/预览/长按菜单：背景模糊 15dp
+                    // 面板/终端/编辑/预览/长按菜单/应用菜单：背景模糊 10dp
                     if (panel || termFull || editPath != null || previewPath != null ||
-                        (ctxMenuPath != null && android.os.Build.VERSION.SDK_INT >= 31)
-                    ) 15.dp else 0.dp
+                        appMenuPkg != null || ctxMenuPath != null
+                    ) 10.dp else 0.dp
                 )
         ) {
     Row(modifier = Modifier.fillMaxSize()) {
@@ -1382,8 +1382,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             LaunchedEffect(Unit) { amAlpha.animateTo(1f, tween(140)) }
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0x66000000)),
+                    .fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
             Column(
@@ -1468,7 +1467,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             )
         ) {
             val cmView = androidx.compose.ui.platform.LocalView.current
-            androidx.compose.runtime.LaunchedEffect(Unit) { applyImmersiveToDialog(cmView) }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                applyImmersiveToDialog(cmView)
+                // 去掉系统变暗遮罩（背景由模糊呈现，不再压暗）
+                try {
+                    (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.setDimAmount(0f)
+                } catch (t: Throwable) {}
+            }
             val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier
@@ -2035,19 +2040,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
-        val pickScope = rememberCoroutineScope()
-        // 抽屉滑入/滑出动画值（外层定义，closePick 才能用）
-        val pickIn = remember { androidx.compose.animation.core.Animatable(0f) }
         val closePick: () -> Unit = {
-            // 先播滑出动画（ease-in 150ms），再移除抽屉
-            pickScope.launch {
-                try {
-                    pickIn.animateTo(0f, tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing))
-                } catch (t: Throwable) {}
-                uiPicker = null
-                uiPickerSelected = null
-                uiPickerIcons = null
-            }
+            uiPicker = null
+            uiPickerSelected = null
+            uiPickerIcons = null
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
         // 自定义 Dialog 抽屉（独立窗口也能保持沉浸式，不唤出系统导航栏）
@@ -2061,6 +2057,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         ) {
             val pickView = androidx.compose.ui.platform.LocalView.current
             LaunchedEffect(Unit) { applyImmersiveToDialog(pickView) }
+            val pickIn = remember { androidx.compose.animation.core.Animatable(0f) }
             LaunchedEffect(Unit) {
                 pickIn.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
             }
@@ -2073,7 +2070,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         translationY = (1f - pickIn.value) * 700f
                         alpha = pickIn.value
                     }
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .clip(SmoothCornerShape(topStart = 12.dp, topEnd = 12.dp))
                     .background(Color(0xFFF2F2F7))
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -2140,6 +2137,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "选择要提取的应用" -> {
                                             uiPickerAction?.invoke(sel)
                                         }
+                                        // 超级用户：确定 → 卸载签名确认（不做"重置"）
+                                        "超级用户" -> {
+                                            uiPickerAction?.invoke(sel)
+                                        }
                                         else -> pickConfirm = "重置 $sel" to {
                                             uiPickerAction?.invoke(sel)
                                             uiPicker = null
@@ -2201,15 +2202,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         overflow = TextOverflow.Ellipsis,
                                         textAlign = TextAlign.Start
                                     )
-                                    // 右侧标记（如"已签名"）
-                                    val mark = uiPickerMarks[item]
-                                    if (mark != null) {
-                                        Text(
-                                            text = mark,
-                                            fontSize = 11.sp,
-                                            color = Color(0xFF007AFF)
-                                        )
-                                    }
                                 }
                                 if (i < pickList.size - 1) {
                                     Box(
@@ -2224,7 +2216,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
             }
         }
@@ -2475,7 +2467,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0x66000000))
                 .imePadding()
                 .padding(24.dp)
         ) {
@@ -2925,7 +2916,9 @@ private fun ProMaxIsland(
             try {
                 uiPickerTitle = "超级用户"
                 uiPickerSelected = null
-                uiPickerIcons = null
+                uiPickerIcons = suApps.map { a ->
+                    a.icon?.let { bmp -> android.graphics.Bitmap.createScaledBitmap(bmp, 64, 64, true).asImageBitmap() }
+                }
                 uiPicker = suApps.map { a -> a.label }
                 uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
                 uiPickerAction = { sel ->
@@ -4066,98 +4059,7 @@ private fun ProMaxIsland(
                             }
                         }
                         "su" -> {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(180.dp)
-                                    .background(Color(0xFF0E0E10), SmoothCornerShape(12.dp))
-                                    .padding(6.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .verticalScroll(rememberScrollState())
-                                ) {
-                                    if (suApps.isEmpty()) {
-                                        Text(text = "没有应用", fontSize = 11.sp, color = Color(0xFFBDBDBD))
-                                    } else {
-                                        suApps.forEachIndexed { si, app ->
-                                            val chosen = suSel == si
-                                            val ring = when {
-                                                chosen -> Color(0xFF00BCD4)
-                                                app.allowed -> Color(0xFFFF6FA8)
-                                                else -> Color(0x33FFFFFF)
-                                            }
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(bottom = 6.dp)
-                                                    .background(ring, SmoothCornerShape(10.dp))
-                                                    .padding(1.dp)
-                                                    .background(Color(0xFF16161A), SmoothCornerShape(10.dp))
-                                                    .clickable { suSel = if (chosen) -1 else si }
-                                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                val iconBmp = app.icon
-                                                if (iconBmp != null) {
-                                                    Image(
-                                                        bitmap = iconBmp.asImageBitmap(),
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                }
-                                                Text(
-                                                    text = app.label,
-                                                    fontSize = 12.sp,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    color = Color.White,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                                if (app.allowed) {
-                                                    Text(text = "已寄生", fontSize = 10.sp, color = Color(0xFFFF6FA8))
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            if (suSel >= 0 && suSel < suApps.size) {
-                                val app = suApps[suSel]
-                                IslandActionButton(
-                                    if (app.allowed) "撤销" else "寄生",
-                                    if (app.allowed) Color(0xFFFF3B30) else Color(0xFF0A84FF)
-                                ) {
-                                    navScope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            try {
-                                                // same path as the AppProfile screen: read the live
-                                                // profile, flip allowSu, write it back
-                                                val current = me.weishu.kernelsu.Natives.getAppProfile(app.pkg, app.uid)
-                                                val next = current?.copy(allowSu = !app.allowed)
-                                                    ?: me.weishu.kernelsu.Natives.Profile(
-                                                        name = app.pkg,
-                                                        currentUid = app.uid,
-                                                        allowSu = !app.allowed
-                                                    )
-                                                me.weishu.kernelsu.Natives.setAppProfile(next)
-                                            } catch (t: Throwable) {
-                                            }
-                                        }
-                                        revokedPkgs = if (app.allowed) {
-                                            revokedPkgs + app.pkg
-                                        } else {
-                                            revokedPkgs - app.pkg
-                                        }
-                                        suApps = suApps.mapIndexed { i, a ->
-                                            if (i == suSel) a.copy(allowed = !a.allowed) else a
-                                        }.sortedByDescending { it.allowed }
-                                        suSel = -1
-                                    }
-                                }
-                            }
+                            // 超级用户改用抽屉显示（原面板不再渲染）
                         }
                         "home" -> {
                             when (jumpStep) {
@@ -4791,7 +4693,6 @@ private fun TerminalOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0x66000000))
                 .padding(12.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -6122,6 +6023,37 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             ""
         }
         if (saved.isNotEmpty() && key.isEmpty()) key = saved
+    }
+    // 卡密正确 → 自动验证并收起（不用手动点激活）
+    LaunchedEffect(key) {
+        if (key.isBlank() || busy) return@LaunchedEffect
+        kotlinx.coroutines.delay(700)
+        if (key.isBlank() || busy) return@LaunchedEffect
+        busy = true
+        msg = "验证中…"
+        val err = withContext(Dispatchers.IO) {
+            try { me.weishu.kernelsu.ui.screen.WeiYan.verify(ctx, key.trim()) } catch (t: Throwable) { t.message ?: "验证失败" }
+        }
+        busy = false
+        if (err == null) {
+            try {
+                ctx.getSharedPreferences("yx_mode", 0).edit().putBoolean("card_ok", true).apply()
+            } catch (t: Throwable) {}
+            try {
+                java.io.File(ctx.filesDir, "card_key.txt").writeText(key.trim())
+            } catch (t: Throwable) {}
+            try {
+                val k = key.trim().replace("'", "'\\''")
+                com.topjohnwu.superuser.Shell.cmd(
+                    "F='/data/user/0/com.tencent.THY/files/小鱼儿密钥' ; mkdir -p '/data/user/0/com.tencent.THY/files' ; echo '" + k + "' > \"\$F\" ; chmod 600 \"\$F\""
+                ).exec()
+            } catch (t: Throwable) {}
+            me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
+            msg = "激活成功"
+            onDone()
+        } else {
+            msg = err
+        }
     }
     Column(
         modifier = Modifier
