@@ -2859,7 +2859,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     }
-}
 
 
 
