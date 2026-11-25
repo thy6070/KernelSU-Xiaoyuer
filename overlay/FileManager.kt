@@ -149,6 +149,14 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.InstallMobile
 import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Android
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.TextSnippet
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.DiscFull
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -234,6 +242,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        // 预热音效（首次弹窗也零延迟）
+        kotlinx.coroutines.withContext(Dispatchers.IO) { try { ensurePopPlayer(appCtx) } catch (t: Throwable) {} }
+    }
     LaunchedEffect(Unit) {
         // 每次打开都显示卡密验证
         showCardSheet = true
@@ -2069,7 +2081,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
         // 底部抽屉（恢复 ModalBottomSheet）
         androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { closePick() },
+            // 确认弹窗（另一个 Dialog）弹出时会把抽屉顶掉 → 这里忽略 dismiss
+            onDismissRequest = { },
             sheetState = pickSheetState,
             containerColor = Color(0xFFF2F2F7),
             shape = SmoothCornerShape(12.dp),
@@ -2134,6 +2147,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Text(
                             "确定",
                             modifier = Modifier.clickable {
+                                tapTick(appCtx)
                                 // 没选中就用第一项（避免点了没反应）
                                 val sel = uiPickerSelected ?: pickList.firstOrNull()
                                 if (sel != null) {
@@ -2190,6 +2204,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         .clickable {
                                             // 点击只选中（高亮），点顶部「确定」才应用
                                             uiPickerSelected = item
+                                            tapTick(appCtx)
                                         }
                                         .padding(horizontal = 16.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -2246,6 +2261,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         ) {
             val pop = remember { androidx.compose.animation.core.Animatable(0.92f) }
             val popView = androidx.compose.ui.platform.LocalView.current
+            val pcCtx = androidx.compose.ui.platform.LocalContext.current
             LaunchedEffect(Unit) {
                 applyImmersiveToDialog(popView)
                 pop.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 320f))
@@ -2294,7 +2310,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clickable { pcDismiss() },
+                            .clickable { tapTick(pcCtx); pcDismiss() },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
@@ -2311,6 +2327,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .fillMaxHeight()
                             .clickable {
                                 val action = pc.second
+                                tapTick(pcCtx)
                                 pcClosing = true
                                 action()
                             },
@@ -2654,6 +2671,20 @@ private fun reapplyImmersiveActivity(view: android.view.View) {
 }
 
 
+
+// 轻触感（列表项/按钮）：苹果式 tick
+fun tapTick(ctx: android.content.Context) {
+    try {
+        val vib = ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        if (vib == null || !vib.hasVibrator()) return
+        if (android.os.Build.VERSION.SDK_INT >= 30 && vib.hasAmplitudeControl()) {
+            vib.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK))
+        } else if (android.os.Build.VERSION.SDK_INT >= 26) {
+            vib.vibrate(android.os.VibrationEffect.createOneShot(8, 30))
+        }
+    } catch (t: Throwable) {}
+}
+
 // 弹窗出现：播放音效 + 轻微振动
 // 预加载一个 MediaPlayer（prepare 完成后再播，避免每次 prepareAsync 的延迟）
 private var popPlayer: android.media.MediaPlayer? = null
@@ -2962,8 +2993,13 @@ private fun ProMaxIsland(
                 }
             }
         }
-        // 点超级用户图标：只开抽屉（复用游戏清理的列表逻辑，快且不列系统应用）
+        // 点超级用户图标：先开抽屉（空列表）→ 后台填充（和游戏清理完全一样）
         if (suOpenTick > 0) {
+            uiPickerTitle = "超级用户"
+            uiPicker = emptyList()
+            uiPickerIcons = null
+            uiPickerMarks = emptyMap()
+            uiPickerSelected = null
             val base = withContext(Dispatchers.IO) {
                 try {
                     val pm = navCtx.packageManager
@@ -3008,9 +3044,13 @@ private fun ProMaxIsland(
                                     android.graphics.Canvas(bmp).also { d.setBounds(0, 0, w, h); d.draw(it) }
                                     bmp
                                 } catch (t: Throwable) { null }
-                                SuApp(ai.packageName, ai.loadLabel(pm).toString(), ai.uid, false, icon)
+                                // 官方判定：Natives.getAppProfile().allowSu
+                                val granted = runCatching {
+                                    me.weishu.kernelsu.Natives.getAppProfile(ai.packageName, ai.uid).allowSu
+                                }.getOrDefault(false)
+                                SuApp(ai.packageName, ai.loadLabel(pm).toString(), ai.uid, granted, icon)
                             }
-                            .sortedBy { it.label }
+                            .sortedWith(compareByDescending<SuApp> { it.allowed }.thenBy { it.label })
                     }
                     apps
                 } catch (t: Throwable) {
@@ -4084,19 +4124,21 @@ private fun ProMaxIsland(
                                                                         // 官方做法：用普通 su shell 执行 action.sh（--mount-master 会因命名空间失败）
                                                                         val out = withContext(Dispatchers.IO) {
                                                                             runCatching {
-                                                                                val pr = Runtime.getRuntime().exec(arrayOf("su", "-c",
-                                                                                    "cd \"/data/adb/modules/${m.id}\" && sh action.sh 2>&1"))
+                                                                                // 官方风格：cd 模块目录 → PATH 补 ksu/bin → busybox sh ./action.sh </dev/null
+                                                                                val cmd = "cd \"/data/adb/modules/${m.id}\" && " +
+                                                                                    "export PATH=\"\$PATH:/data/adb/ksu/bin\" && " +
+                                                                                    "if command -v busybox >/dev/null 2>&1; then " +
+                                                                                    "busybox sh ./action.sh </dev/null 2>&1; else sh ./action.sh </dev/null 2>&1; fi"
+                                                                                val pr = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
                                                                                 val t = pr.inputStream.bufferedReader().readText()
                                                                                 pr.waitFor()
                                                                                 t
                                                                             }.getOrDefault("")
                                                                         }
                                                                         withContext(Dispatchers.Main) {
-                                                                            android.widget.Toast.makeText(
-                                                                                navCtx,
-                                                                                if (out.isBlank()) "已执行 ${m.id}" else out.take(120),
-                                                                                android.widget.Toast.LENGTH_LONG
-                                                                            ).show()
+                                                                            // 输出显示到终端（和原执行一致）
+                                                                            termText = (if (out.isBlank()) "已执行 " + m.id else out)
+                                                                            showTerminal = true
                                                                         }
                                                                     }
                                                                 }
@@ -6113,22 +6155,6 @@ private fun BrowserPane(
         }
         itemsIndexed(entries) { idx, entry ->
             val rowPath = joinPath(path, entry.name)
-            // 尾部堆叠（简约）：滚到底部时，最后几张卡片轻微缩小叠起
-            val distFromEnd = entries.lastIndex - idx
-            val atBottom = !listState.canScrollForward
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        if (atBottom && distFromEnd in 0..2) {
-                            val sc = 1f - distFromEnd * 0.035f
-                            scaleX = sc
-                            scaleY = sc
-                            translationY = -distFromEnd * 5.dp.toPx()
-                            alpha = 1f - distFromEnd * 0.12f
-                        }
-                    }
-            ) {
             FsRow(
                 name = entry.name,
                 isDir = entry.isDir,
@@ -6154,7 +6180,6 @@ private fun BrowserPane(
                     onLongPress(rowPath)
                 }
             )
-            }
         }
     }
 }
@@ -6387,10 +6412,10 @@ private fun FsRow(
             Text(
                 text = name,
                 modifier = Modifier.weight(1f),
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AppFontFamily,
                 color = Color(TEXT_COLOR)
             )
             // 不显示文件大小/时间小字
@@ -6556,21 +6581,59 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
             bitmap = mediaThumbNow,
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = Modifier.size(20.dp).clip(SmoothCornerShape(4.dp))
+            modifier = Modifier.size(22.dp).clip(SmoothCornerShape(4.dp))
         )
     } else if (apkIconNow != null) {
         Image(
             bitmap = apkIconNow,
             contentDescription = null,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(22.dp)
         )
     } else {
-        Icon(
-            imageVector = if (isDir) Icons.Rounded.Folder else Icons.Rounded.InsertDriveFile,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = if (isDir) Color(FOLDER_ICON) else (fileAccent(name) ?: Color(FILE_ICON))
-        )
+        if (isDir) {
+            Icon(
+                imageVector = Icons.Rounded.Folder,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = Color(FOLDER_ICON)
+            )
+        } else {
+            val (iv, c) = fileTypeIcon(name)
+            Icon(
+                imageVector = iv,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = c
+            )
+        }
+    }
+}
+
+
+// 文件类型 → (图标, 颜色)
+private fun fileTypeIcon(name: String): Pair<androidx.compose.ui.graphics.vector.ImageVector, Color> {
+    val l = name.lowercase()
+    return when {
+        l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".png") || l.endsWith(".gif") ||
+            l.endsWith(".webp") || l.endsWith(".bmp") -> Icons.Rounded.Image to Color(0xFFFF9500)
+        l.endsWith(".mp4") || l.endsWith(".mkv") || l.endsWith(".avi") || l.endsWith(".mov") ||
+            l.endsWith(".3gp") || l.endsWith(".webm") -> Icons.Rounded.Movie to Color(0xFFFF2D55)
+        l.endsWith(".mp3") || l.endsWith(".flac") || l.endsWith(".wav") || l.endsWith(".ogg") ||
+            l.endsWith(".m4a") || l.endsWith(".aac") -> Icons.Rounded.MusicNote to Color(0xFFAF52DE)
+        l.endsWith(".zip") || l.endsWith(".tar") || l.endsWith(".gz") || l.endsWith(".7z") ||
+            l.endsWith(".rar") || l.endsWith(".xz") -> Icons.Rounded.FolderZip to Color(0xFFFFCC00)
+        l.endsWith(".apk") || l.endsWith(".apks") || l.endsWith(".xapk") -> Icons.Rounded.Android to Color(0xFF34C759)
+        l.endsWith(".sh") || l.endsWith(".rc") || l.endsWith(".so") -> Icons.Rounded.Terminal to Color(0xFF32ADE6)
+        l.endsWith(".kt") || l.endsWith(".java") || l.endsWith(".py") || l.endsWith(".js") ||
+            l.endsWith(".c") || l.endsWith(".cpp") || l.endsWith(".h") || l.endsWith(".json") ||
+            l.endsWith(".xml") || l.endsWith(".smali") -> Icons.Rounded.Code to Color(0xFF5856D6)
+        l.endsWith(".txt") || l.endsWith(".log") || l.endsWith(".md") || l.endsWith(".prop") ||
+            l.endsWith(".conf") || l.endsWith(".ini") -> Icons.Rounded.TextSnippet to Color(0xFF8E8E93)
+        l.endsWith(".pdf") || l.endsWith(".doc") || l.endsWith(".docx") ||
+            l.endsWith(".xls") || l.endsWith(".xlsx") || l.endsWith(".ppt") ||
+            l.endsWith(".pptx") -> Icons.Rounded.Description to Color(0xFF007AFF)
+        l.endsWith(".img") || l.endsWith(".bin") || l.endsWith(".iso") -> Icons.Rounded.DiscFull to Color(0xFF636366)
+        else -> Icons.Rounded.InsertDriveFile to Color(FILE_ICON)
     }
 }
 
