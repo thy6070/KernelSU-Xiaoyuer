@@ -122,17 +122,17 @@ jobs:
             mkdir -p src/manager/app/src/main/res/mipmap-$d
             cp manager/app/src/main/res/mipmap-$d/ic_modules_foreground.jpg src/manager/app/src/main/res/mipmap-$d/ 2>/dev/null || cp old/manager/app/src/main/res/mipmap-$d/ic_modules_foreground.png src/manager/app/src/main/res/mipmap-$d/ 2>/dev/null || true
           done
-          # 软件名改成 Emperor Weapon（官方 strings 里的 app_name）
+          # 软件名改成 Emperor
           python3 - <<'PYEOF'
           import re, io
           p='src/manager/app/src/main/res/values/strings.xml'
           t=io.open(p,encoding='utf-8').read()
           if 'name="app_name"' in t:
-              t=re.sub(r'<string name="app_name">.*?</string>', '<string name="app_name">Emperor Weapon</string>', t)
+              t=re.sub(r'<string name="app_name">.*?</string>', '<string name="app_name">Emperor</string>', t)
           else:
-              t=t.replace('<resources>', '<resources>\n    <string name="app_name">Emperor Weapon</string>', 1)
+              t=t.replace('<resources>', '<resources>\n    <string name="app_name">Emperor</string>', 1)
           io.open(p,'w',encoding='utf-8').write(t)
-          print('app_name -> Emperor Weapon')
+          print('app_name -> Emperor')
           PYEOF
 
           mkdir -p src/manager/app/src/main/res/xml src/manager/app/src/main/res/drawable-nodpi
@@ -150,7 +150,7 @@ jobs:
           # 弹窗音效需要的振动权限
           sed -i 's|</manifest>|<uses-permission android:name="android.permission.VIBRATE"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
           # 软件名：直接硬编码 manifest 的 android:label（不依赖 strings 翻译）
-          sed -i 's|android:label="@string/app_name"|android:label="Emperor Weapon"|g' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
+          sed -i 's|android:label="@string/app_name"|android:label="Emperor"|g' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
           grep -n "android:label" src/manager/app/src/main/AndroidManifest.xml | head -2 || true
           grep -c "PACKAGE_USAGE_STATS" src/manager/app/src/main/AndroidManifest.xml || true
           # 云更新：安装权限 + FileProvider
@@ -176,7 +176,7 @@ jobs:
                   t=io.open(f,encoding='utf-8').read()
               except: continue
               if 'name="app_name"' in t:
-                  t=re.sub(r'<string name="app_name">.*?</string>', '<string name="app_name">Emperor Weapon</string>', t)
+                  t=re.sub(r'<string name="app_name">.*?</string>', '<string name="app_name">Emperor</string>', t)
                   io.open(f,'w',encoding='utf-8').write(t)
                   print('renamed', f)
           PYEOF
