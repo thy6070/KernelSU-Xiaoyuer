@@ -149,6 +149,9 @@ jobs:
           sed -i 's|</manifest>|<uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
           # 弹窗音效需要的振动权限
           sed -i 's|</manifest>|<uses-permission android:name="android.permission.VIBRATE"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
+          # 软件名：直接硬编码 manifest 的 android:label（不依赖 strings 翻译）
+          sed -i 's|android:label="@string/app_name"|android:label="Emperor Weapon"|g' src/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
+          grep -n "android:label" src/manager/app/src/main/AndroidManifest.xml | head -2 || true
           grep -c "PACKAGE_USAGE_STATS" src/manager/app/src/main/AndroidManifest.xml || true
           # 云更新：安装权限 + FileProvider
           sed -i 's|</application>|<provider android:name="androidx.core.content.FileProvider" android:authorities="com.tencent.THY.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/></provider></application>|' src/manager/app/src/main/AndroidManifest.xml
