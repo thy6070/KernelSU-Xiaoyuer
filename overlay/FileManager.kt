@@ -2986,8 +2986,8 @@ private fun ProMaxIsland(
                     val res = repo.getAppList()
                     val apps = res.getOrNull()?.first ?: emptyList()
                     val pm = navCtx.packageManager
-                    apps.mapNotNull { ai ->
-                        if (ai.packageName == navCtx.packageName) return@mapNotNull null
+                    apps.filter { ai ->
+                        if (ai.packageName == navCtx.packageName) return@filter false
                         if (ai.allowSu) return@filter true
                         ai.packageInfo.applicationInfo?.let {
                             (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
