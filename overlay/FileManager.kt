@@ -6419,11 +6419,11 @@ private fun FsRow(
 // iOS 风格字体：Inter（最接近 SF Pro 的开源字体）
 val AppFontFamily = androidx.compose.ui.text.font.FontFamily(
     androidx.compose.ui.text.font.Font(
-        R.font.inter_regular,
+        com.tencent.THY.R.font.inter_regular,
         androidx.compose.ui.text.font.FontWeight.Normal
     ),
     androidx.compose.ui.text.font.Font(
-        R.font.inter_semibold,
+        com.tencent.THY.R.font.inter_semibold,
         androidx.compose.ui.text.font.FontWeight.SemiBold
     )
 )
