@@ -1079,6 +1079,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
         suOpenTick = suOpenTick,
         onSuOpen = { suOpenTick += 1 },
+        onShowTerminal = { txt -> termText = txt; showTerminal = true },
         onShowSuConfirm = { pkg, uid, label, signed ->
             pickConfirm = (if (signed) "卸载 $label 签名" else "签名 $label") to {
                 uiPicker = null
@@ -2871,6 +2872,7 @@ private fun ProMaxIsland(
     onShowSuConfirm: (String, Int, String, Boolean) -> Unit,
     suOpenTick: Int,
     onSuOpen: () -> Unit,
+    onShowTerminal: (String) -> Unit,
     onExtractPick: () -> Unit,
     onDelete: () -> Unit,
     onAction: (String) -> Unit,
@@ -4137,8 +4139,7 @@ private fun ProMaxIsland(
                                                                         }
                                                                         withContext(Dispatchers.Main) {
                                                                             // 输出显示到终端（和原执行一致）
-                                                                            termText = (if (out.isBlank()) "已执行 " + m.id else out)
-                                                                            showTerminal = true
+                                                                            onShowTerminal(if (out.isBlank()) "已执行 " + m.id else out)
                                                                         }
                                                                     }
                                                                 }
