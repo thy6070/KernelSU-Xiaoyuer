@@ -79,15 +79,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.AcUnit
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.Hotel
-import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.AcUnit
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Smartphone
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Hotel
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.TransformOrigin
@@ -109,10 +109,10 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.AdminPanelSettings
-import androidx.compose.material.icons.outlined.Layers
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.AdminPanelSettings
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -135,20 +135,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.outlined.TaskAlt
-import androidx.compose.material.icons.outlined.InsertDriveFile
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material.icons.rounded.InsertDriveFile
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.automirrored.outlined.Undo
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.DriveFileMove
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.InstallMobile
-import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DriveFileMove
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.InstallMobile
+import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -724,9 +724,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             run { }
                             val cmd = when {
                                 lower.endsWith(".apk") ->
+                                    // 与长按菜单一致：-r 覆盖、-d 允许降级、-g 授予权限
                                     "cp -f " + shq(p) + " /data/local/tmp/xy_install.apk ; " +
                                         "chmod 644 /data/local/tmp/xy_install.apk ; " +
-                                        "pm install -r /data/local/tmp/xy_install.apk"
+                                        "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1"
                                 lower.endsWith(".zip") -> {
                                     // 模块 zip：走官方 ksud（/data/adb/ksud 优先）
                                     // 用 shell 判断（root 能查 /data/adb）；app 的 canExecute 会误判
@@ -1292,7 +1293,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         ) {
             val rnPop = remember { androidx.compose.animation.core.Animatable(0.92f) }
             LaunchedEffect(Unit) {
-                rnPop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                rnPop.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 320f))
             }
             Column(
                 modifier = Modifier
@@ -1311,6 +1312,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
+                    fontFamily = AppFontFamily,
+                    letterSpacing = (-0.2).sp,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
@@ -1327,7 +1330,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x33000000)))
+                Box(modifier = Modifier.fillMaxWidth().height(0.34.dp).background(Color(0x33000000)))
                 Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
                     Box(
                         modifier = Modifier
@@ -1423,7 +1426,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                Box(modifier = Modifier.fillMaxWidth().height(0.34.dp).background(Color(0x22000000)))
                 val amItems = listOf(
                     "提取此应用" to { appMenuPkg = null; appMenuExtract(amPkg, appMenuLabel) },
                     "打开普通目录" to {
@@ -1449,10 +1452,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Text(label, fontSize = 16.sp, color = Color(0xFF1C1C1E), textAlign = TextAlign.Center)
                     }
                     if (i < amItems.size - 1) {
-                        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                        Box(modifier = Modifier.fillMaxWidth().height(0.34.dp).background(Color(0x22000000)))
                     }
                 }
-                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                Box(modifier = Modifier.fillMaxWidth().height(0.34.dp).background(Color(0x22000000)))
                 Row(
                     modifier = Modifier.fillMaxWidth().height(42.dp).clickable { appMenuPkg = null },
                     horizontalArrangement = Arrangement.Center,
@@ -1563,7 +1566,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                Box(modifier = Modifier.fillMaxWidth().height(0.34.dp).background(Color(0x22000000)))
                 // 操作行
                 data class CmItem(val label: String, val red: Boolean = false, val act: () -> Unit)
                 val items = ArrayList<CmItem>()
@@ -1632,19 +1635,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 val cmIsExec = cmLower.endsWith(".sh") || cmLower.endsWith(".so") || cmLower.endsWith(".rc")
                 // 文件特殊动作（安装/进入/编辑/执行）
                 if (!isDirCm) {
-                    items.add(CmItem(
-                        when {
-                            cmIsApk -> "安装"
-                            cmIsArchive -> "进入"
-                            cmIsExec -> "编辑"
-                            else -> "执行"
-                        }
-                    ) { cmFile(when {
-                        cmIsApk -> "install"
-                        cmIsArchive -> "unzip"
-                        cmIsExec -> "edit"
-                        else -> "execute"
-                    }) })
+                    // 压缩包不显示「进入」；apk 不显示「安装」（装应用走灵动岛）；脚本保留编辑/执行
+                    if (!cmIsArchive && !cmIsApk) {
+                        items.add(CmItem(
+                            when {
+                                cmIsExec -> "编辑"
+                                else -> "执行"
+                            }
+                        ) { cmFile(when {
+                            cmIsExec -> "edit"
+                            else -> "execute"
+                        }) })
+                    }
                 }
                 // 参照目录：另一侧当前目录
                 val otherDir = if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) rightPath else leftPath
@@ -1655,7 +1657,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     cmRenamePath = cmPath
                     ctxMenuClosing = true
                 })
-                items.add(CmItem("复制到另一侧") { cmFile("copy", otherDir) })
                 // 解压 / 压缩（直接执行）
                 items.add(CmItem(if (cmIsArchive) "解压到当前目录" else "压缩") {
                     cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
@@ -1702,7 +1703,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         )
                     }
                     if (i < items.size - 1) {
-                        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                        Box(modifier = Modifier.fillMaxWidth().height(0.34.dp).background(Color(0x22000000)))
                     }
                 }
             }
@@ -1842,7 +1843,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 }
                             }
                             if (i < searchResults.size - 1) {
-                                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(0.5.dp).background(Color(0x22000000)))
+                                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(0.34.dp).background(Color(0x22000000)))
                             }
                         }
                     }
@@ -1924,6 +1925,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
+                    fontFamily = AppFontFamily,
+                    letterSpacing = (-0.2).sp,
                     color = Color.Black,
                     textAlign = TextAlign.Center
                 )
@@ -1956,7 +1959,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(0.5.dp)
+                        .height(0.34.dp)
                         .background(Color(0x33000000))
                 )
                 // 左红取消 / 右蓝更新（进度中隐藏整行）
@@ -2170,7 +2173,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         // 半屏再低一点；内容加载后高度变化走动画（不突兀长高）
                         modifier = Modifier
                             .heightIn(max = 180.dp)
-                            .animateContentSize(animationSpec = tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                            .animateContentSize(animationSpec = spring(dampingRatio = 0.86f, stiffness = 320f))
                             .graphicsLayer { alpha = listAlpha.value }
                     ) {
                         items(pickList.size, key = { pickList[it] }) { i ->
@@ -2204,6 +2207,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         text = item,
                                         modifier = Modifier.weight(1f),
                                         fontSize = 15.sp,
+                                        fontFamily = AppFontFamily,
+                    letterSpacing = (-0.2).sp,
                                         color = Color.Black,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -2215,7 +2220,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(start = 16.dp)
-                                            .height(0.5.dp)
+                                            .height(0.34.dp)
                                             .background(Color(0x22000000))
                                     )
                                 }
@@ -2243,12 +2248,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val popView = androidx.compose.ui.platform.LocalView.current
             LaunchedEffect(Unit) {
                 applyImmersiveToDialog(popView)
-                pop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                pop.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 320f))
             }
             // iOS 退场：缩小 + 淡出
             LaunchedEffect(pcClosing) {
                 if (pcClosing) {
-                    pop.animateTo(0.92f, tween(140, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                    pop.animateTo(0.92f, spring(dampingRatio = 0.92f, stiffness = 520f))
                     pickConfirm = null
                     pcClosing = false
                 }
@@ -2273,13 +2278,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .padding(horizontal = 18.dp, vertical = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
+                    fontFamily = AppFontFamily,
+                    letterSpacing = (-0.2).sp,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(0.5.dp)
+                        .height(0.34.dp)
                         .background(Color(0x33000000))
                 )
                 Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
@@ -2678,10 +2685,17 @@ private fun playPopupFx(ctx: android.content.Context) {
     try {
         val vib = ctx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
         if (vib != null && vib.hasVibrator()) {
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
-                vib.vibrate(android.os.VibrationEffect.createOneShot(18, 60))
+            if (android.os.Build.VERSION.SDK_INT >= 30 && vib.hasAmplitudeControl()) {
+                // 苹果式分级触感：短促的 "tick"（轻点感），不是长震
+                vib.vibrate(
+                    android.os.VibrationEffect.createPredefined(
+                        android.os.VibrationEffect.EFFECT_TICK
+                    )
+                )
+            } else if (android.os.Build.VERSION.SDK_INT >= 26) {
+                vib.vibrate(android.os.VibrationEffect.createOneShot(12, 40))
             } else {
-                @Suppress("DEPRECATION") vib.vibrate(18)
+                @Suppress("DEPRECATION") vib.vibrate(12)
             }
         }
     } catch (t: Throwable) {}
@@ -3360,7 +3374,7 @@ private fun ProMaxIsland(
         ) {
             if (wingIconExpanded) {
                 Icon(
-                    imageVector = Icons.Outlined.Fullscreen,
+                    imageVector = Icons.Rounded.Fullscreen,
                     contentDescription = "放大",
                     tint = Color.White,
                     modifier = Modifier.size(26.dp)
@@ -3486,7 +3500,7 @@ private fun ProMaxIsland(
                         textAlign = TextAlign.Center
                     )
                     Icon(
-                        imageVector = if (runMessage != null && !runOk) Icons.Outlined.Lock else Icons.Outlined.InsertDriveFile,
+                        imageVector = if (runMessage != null && !runOk) Icons.Rounded.Lock else Icons.Rounded.InsertDriveFile,
                         contentDescription = null,
                         tint = if (runMessage != null && !runOk) Color(0xFFFF3B30) else accent,
                         modifier = Modifier.size(22.dp).clickable { onClearSelection() }
@@ -3494,8 +3508,8 @@ private fun ProMaxIsland(
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
                     Icon(
-                        imageVector = if (!rootChecked || rootOk) Icons.Outlined.TaskAlt
-                                      else Icons.Outlined.Lock,
+                        imageVector = if (!rootChecked || rootOk) Icons.Rounded.TaskAlt
+                                      else Icons.Rounded.Lock,
                         contentDescription = if (rootChecked && !rootOk) "root unavailable" else "install",
                         tint = if (rootChecked && !rootOk) Color(0xFFFF3B30) else Color.White,
                         modifier = Modifier
@@ -3608,7 +3622,7 @@ private fun ProMaxIsland(
                 visible = (navMode || navTarget != null) && !navClosing,
                 enter = expandVertically(
                     // 出现：ease-out 250ms
-                    animationSpec = tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    animationSpec = spring(dampingRatio = 0.86f, stiffness = 320f),
                     expandFrom = Alignment.Bottom
                 ) + fadeIn(tween(180)),
                 // 关闭：ease-in 150ms
@@ -3637,10 +3651,10 @@ private fun ProMaxIsland(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    NavIcon(Icons.Outlined.InsertDriveFile) { openNav("home") }
-                    NavIcon(Icons.Outlined.AdminPanelSettings) { onSuOpen() }
-                    NavIcon(Icons.Outlined.Layers) { openNav("module") }
-                    NavIcon(Icons.Outlined.Tune) {
+                    NavIcon(Icons.Rounded.InsertDriveFile) { openNav("home") }
+                    NavIcon(Icons.Rounded.AdminPanelSettings) { onSuOpen() }
+                    NavIcon(Icons.Rounded.Layers) { openNav("module") }
+                    NavIcon(Icons.Rounded.Tune) {
                         // 只改这一个图标：先完整收起，再展开到设置
                         reopenScope.launch {
                             navClosing = true
@@ -4090,7 +4104,7 @@ private fun ProMaxIsland(
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Icon(
-                                                            imageVector = Icons.Outlined.PlayArrow,
+                                                            imageVector = Icons.Rounded.PlayArrow,
                                                             contentDescription = "执行",
                                                             tint = Color(0xFF0A84FF),
                                                             modifier = Modifier.size(18.dp)
@@ -4132,7 +4146,7 @@ private fun ProMaxIsland(
                                                             contentAlignment = Alignment.Center
                                                         ) {
                                                             Icon(
-                                                                imageVector = Icons.Outlined.OpenInNew,
+                                                                imageVector = Icons.Rounded.OpenInNew,
                                                                 contentDescription = "打开UI",
                                                                 tint = Color(0xFF0A84FF),
                                                                 modifier = Modifier.size(18.dp)
@@ -4883,7 +4897,7 @@ private fun TerminalOverlay(
                     )
                     IconButton(onClick = onExit, modifier = Modifier.size(36.dp)) {
                         Icon(
-                            imageVector = Icons.Outlined.FullscreenExit,
+                            imageVector = Icons.Rounded.FullscreenExit,
                             contentDescription = "缩小",
                             tint = Color(0xFFB0B0B0)
                         )
@@ -5012,17 +5026,17 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                     } catch (t: Throwable) { "未适配此机型" }
                 }
             }
-            ModeButton(Icons.Outlined.DarkMode, "FPS+", subtitle = "根据帧率调节频率")
-            ModeButton(Icons.Outlined.AcUnit, "禁用温控", subtitle = "小米/OPPO禁用温控")
-            ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3", onRun = {
+            ModeButton(Icons.Rounded.DarkMode, "FPS+", subtitle = "根据帧率调节频率")
+            ModeButton(Icons.Rounded.AcUnit, "禁用温控", subtitle = "小米/OPPO禁用温控")
+            ModeButton(Icons.Rounded.Folder, "执行此文件", slot = "path3", onRun = {
                 onDismiss()
                 onRunExec(it)
             })
-            ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path2", onRun = {
+            ModeButton(Icons.Rounded.Folder, "执行此文件", slot = "path2", onRun = {
                 onDismiss()
                 onRunExec(it)
             })
-            ModeButton(Icons.Outlined.Folder, "执行此文件", onRun = {
+            ModeButton(Icons.Rounded.Folder, "执行此文件", onRun = {
                 onDismiss()
                 onRunExec(it)
             })
@@ -5849,6 +5863,8 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
+                    fontFamily = AppFontFamily,
+                    letterSpacing = (-0.2).sp,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
@@ -5865,7 +5881,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x33000000)))
+                Box(modifier = Modifier.fillMaxWidth().height(0.34.dp).background(Color(0x33000000)))
                 Row(
                     modifier = Modifier.fillMaxWidth().height(40.dp),
                     horizontalArrangement = Arrangement.Center,
@@ -6088,7 +6104,7 @@ private fun BrowserPane(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 14.dp)
-                        .height(0.5.dp)
+                        .height(0.34.dp)
                         // 白底下用深色分割线
                         .background(Color(0x22000000))
                 )
@@ -6325,6 +6341,19 @@ private fun FsRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
+    val rowCtx = androidx.compose.ui.platform.LocalContext.current
+    val tapFx: () -> Unit = {
+        try {
+            val vib = rowCtx.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+            if (vib != null && vib.hasVibrator()) {
+                if (android.os.Build.VERSION.SDK_INT >= 30 && vib.hasAmplitudeControl()) {
+                    vib.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK))
+                } else if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    vib.vibrate(android.os.VibrationEffect.createOneShot(8, 30))
+                }
+            }
+        } catch (t: Throwable) {}
+    }
     // iOS Inset Grouped：整体卡片 + 行间 0.5dp 分隔线
     Column {
         Row(
@@ -6340,7 +6369,10 @@ private fun FsRow(
                     scaleX = sc
                     scaleY = sc
                 }
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .combinedClickable(
+                    onClick = { tapFx(); onClick() },
+                    onLongClick = { tapFx(); onLongClick() }
+                )
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x4D007AFF)
@@ -6369,7 +6401,7 @@ private fun FsRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 14.dp)
-                    .height(0.5.dp)
+                    .height(0.34.dp)
                     // 白底下用深色分割线
                     .background(Color(0x22000000))
             )
@@ -6384,6 +6416,18 @@ private fun FsRow(
  * 曲率变化更平滑，视觉上更"圆润"，不会有硬切线。
  * smoothing 越大越接近 iOS 的 continuous corner。
  */
+// iOS 风格字体：Inter（最接近 SF Pro 的开源字体）
+val AppFontFamily = androidx.compose.ui.text.font.FontFamily(
+    androidx.compose.ui.text.font.Font(
+        "fonts/Inter-Regular.ttf",
+        androidx.compose.ui.text.font.FontWeight.Normal
+    ),
+    androidx.compose.ui.text.font.Font(
+        "fonts/Inter-SemiBold.ttf",
+        androidx.compose.ui.text.font.FontWeight.SemiBold
+    )
+)
+
 class SmoothCornerShape(
     private val cornerRadius: androidx.compose.ui.unit.Dp,
     private val smoothing: Float = 0.6f
@@ -6522,7 +6566,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
         )
     } else {
         Icon(
-            imageVector = if (isDir) Icons.Outlined.Folder else Icons.Outlined.InsertDriveFile,
+            imageVector = if (isDir) Icons.Rounded.Folder else Icons.Rounded.InsertDriveFile,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
             tint = if (isDir) Color(FOLDER_ICON) else (fileAccent(name) ?: Color(FILE_ICON))
