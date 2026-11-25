@@ -417,6 +417,44 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var ctxMenuPath by remember { mutableStateOf<String?>(null) }
     var ctxMenuRight by remember { mutableStateOf(false) }
     var ctxMenuClosing by remember { mutableStateOf(false) }
+    // 安装弹窗（勾号 → 弹窗，替代跳安装页）
+    var showInstallDlg by remember { mutableStateOf(false) }
+    // 选择 KMI（安装时选内核版本）
+    var showKmiDlg by remember { mutableStateOf(false) }
+    var selKmi by remember { mutableStateOf("") }
+    // 修补镜像：输出日志（抽屉显示）+ 输出路径
+    var patchOut by remember { mutableStateOf("") }
+    var patchOutPath by remember { mutableStateOf<String?>(null) }
+    val patchLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        val u = uri ?: return@rememberLauncherForActivityResult
+        uiScope.launch {
+            patchOut = "开始修补…\n"
+            uiPickerTitle = "修补输出"
+            uiPicker = listOf("开始修补…")
+            uiPickerIcons = null
+            uiPickerSelected = null
+            val res = withContext(Dispatchers.IO) {
+                runCatching {
+                    // 复制选中的镜像到 cache
+                    val name = "img_in_${System.currentTimeMillis()}.img"
+                    val tmp = java.io.File(appCtx.cacheDir, name)
+                    appCtx.contentResolver.openInputStream(u)?.use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                    val outDir = appCtx.cacheDir
+                    val outName = "极道帝兵_" + (queryDisplayName(appCtx, u) ?: "image.img")
+                    val cmd = "/data/adb/ksud boot-patch '" + tmp.absolutePath + "' -o '" + outDir.absolutePath + "/" + outName.replace("'", "'\\''") + "' 2>&1"
+                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
+                    val text = pr.inputStream.bufferedReader().readText()
+                    pr.waitFor()
+                    patchOut = text
+                    patchOutPath = outDir.absolutePath + "/" + outName
+                    text.lines().filter { it.isNotBlank() }.takeLast(30).ifEmpty { listOf("(无输出)") }
+                }.getOrElse { listOf("修补失败: " + (it.message ?: "")) }
+            }
+            uiPicker = res
+        }
+    }
     // 长按菜单：重命名输入
     var cmRenamePath by remember { mutableStateOf<String?>(null) }
     var cmRenameText by remember { mutableStateOf("") }
@@ -1024,6 +1062,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 rightHighlight = null
             }
         },
+        onShowInstall = { showInstallDlg = true },
         onExtractPick = {
             // 打开抽屉选应用（后台加载列表）
             uiPickerTitle = "选择要提取的应用"
@@ -1274,6 +1313,170 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
         },
     )
+
+    // 安装弹窗（原安装页 3 个功能，UI 换成弹窗）
+    if (showInstallDlg) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showInstallDlg = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(300.dp)
+                    .clip(SmoothCornerShape(14.dp))
+                    .background(Color(0xFFF2F2F7))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
+            ) {
+                Text(
+                    "安装",
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1C1C1E),
+                    textAlign = TextAlign.Center
+                )
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                val items = listOf(
+                    Triple("选择文件并修补", "建议选择 init_boot 分区镜像", "patch"),
+                    Triple("直接安装（推荐）", "使用内置 LKM", "install"),
+                    Triple("安装到未使用槽位（OTA 后）", "刷入非活动槽位", "slot")
+                )
+                items.forEachIndexed { i, (title, desc, act) ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showInstallDlg = false
+                                when (act) {
+                                    "patch" -> {
+                                        // 选择镜像 → 修补 → 输出到抽屉（文件名 极道帝兵_原名.img）
+                                        try { patchLauncher.launch("*/*") } catch (t: Throwable) {}
+                                    }
+                                    "install" -> {
+                                        // 先选 KMI，再安装对应 ko
+                                        selKmi = ""
+                                        showKmiDlg = true
+                                    }
+                                    "slot" -> uiScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                com.topjohnwu.superuser.Shell.cmd(
+                                                    "SLOT=\$(getprop ro.boot.slot_suffix); T=\$([ \"\$SLOT\" = _a ] && echo _b || echo _a); /data/adb/ksud install --slot \$T 2>&1"
+                                                ).exec()
+                                            }
+                                        }
+                                        android.widget.Toast.makeText(appCtx, "已执行槽位安装", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Text(title, fontSize = 15.sp, color = Color(0xFF1C1C1E))
+                        Text(desc, fontSize = 11.sp, color = Color(0xFF8E8E93))
+                    }
+                    if (i < items.size - 1) {
+                        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                    }
+                }
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                Text(
+                    "取消",
+                    modifier = Modifier.fillMaxWidth().clickable { showInstallDlg = false }.padding(vertical = 12.dp),
+                    fontSize = 16.sp,
+                    color = Color(0xFF007AFF),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+
+    // 选择 KMI 弹窗（安装内核模块时选内核版本）
+    if (showKmiDlg) {
+        val kmis = listOf("android12-5.10", "android13-5.10", "android13-5.15", "android14-5.15", "android14-6.1", "android15-6.6")
+        val devKmi = remember {
+            runCatching {
+                val p = java.io.File("/proc/version").readText()
+                // 粗略取：Linux version 5.x.x-androidXX
+                "android" + Regex("android(\\d+)").find(p)?.groupValues?.getOrNull(1)?.let { it } ?: "?"
+            }.getOrDefault("")
+        }
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showKmiDlg = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(300.dp)
+                    .clip(SmoothCornerShape(14.dp))
+                    .background(Color(0xFFF2F2F7))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(14.dp))
+            ) {
+                Text(
+                    "选择 KMI",
+                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1C1C1E),
+                    textAlign = TextAlign.Center
+                )
+                if (devKmi.isNotBlank()) {
+                    Text(
+                        "本设备 KMI 版本：$devKmi",
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        fontSize = 12.sp,
+                        color = Color(0xFF8E8E93),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                kmis.forEachIndexed { i, k ->
+                    // 去掉 android 前缀；点击直接安装；行间分割线
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showKmiDlg = false
+                                pickConfirm = "安装 " + k.removePrefix("android") + " 内核模块" to {
+                                    uiScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                val ko = java.io.File(appCtx.cacheDir, "kernelsu.ko")
+                                                appCtx.assets.open("lkm/${k}_kernelsu.ko").use { inp -> ko.outputStream().use { inp.copyTo(it) } }
+                                                com.topjohnwu.superuser.Shell.cmd(
+                                                    "/data/adb/ksud install '" + ko.absolutePath + "' 2>&1"
+                                                ).exec()
+                                            }
+                                        }
+                                        android.widget.Toast.makeText(appCtx, "已安装 $k 内核模块", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            k.removePrefix("android"),
+                            modifier = Modifier.fillMaxWidth(),
+                            fontSize = 15.sp,
+                            color = Color(0xFF1C1C1E),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    if (i < kmis.size - 1) {
+                        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
+                    }
+                }
+
+            }
+        }
+    }
 
     // 重命名输入弹窗（长按菜单 → 重命名）
     val rnP = cmRenamePath
@@ -2144,6 +2347,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "选择要提取的应用" -> {
                                             uiPickerAction?.invoke(sel)
                                         }
+                                        // 修补输出：确定 → 定位到输出文件
+                                        "修补输出" -> {
+                                            val op = patchOutPath
+                                            if (op != null) {
+                                                FileLocate.side = "L"
+                                                FileLocate.path = op
+                                                FileLocate.tick += 1
+                                            }
+                                            uiPicker = null
+                                            uiPickerIcons = null
+                                            uiPickerSelected = null
+                                        }
                                         else -> pickConfirm = "重置 $sel" to {
                                             uiPickerAction?.invoke(sel)
                                             uiPicker = null
@@ -2797,6 +3012,7 @@ private fun ProMaxIsland(
     onExtract: () -> Unit,
     onExtractApp: (String, String) -> Unit,
     onExtractPick: () -> Unit,
+    onShowInstall: () -> Unit,
     onDelete: () -> Unit,
     onAction: (String) -> Unit,
     onSearch: () -> Unit = {},
@@ -3412,7 +3628,7 @@ private fun ProMaxIsland(
                         tint = if (rootChecked && !rootOk) Color(0xFFFF3B30) else Color.White,
                         modifier = Modifier
                             .size(22.dp)
-                            .clickable { onNavigate("install") }
+                            .clickable { onShowInstall() }
                     )
                 }
             }
