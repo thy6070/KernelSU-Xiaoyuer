@@ -1320,11 +1320,38 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             onDismissRequest = { showInstallDlg = false },
             properties = androidx.compose.ui.window.DialogProperties(
                 dismissOnClickOutside = true,
-                dismissOnBackPress = true
+                dismissOnBackPress = true,
+                usePlatformDefaultWidth = false
             )
         ) {
+            val insScale = remember { androidx.compose.animation.core.Animatable(0.84f) }
+            val insAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(Unit) {
+                insScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 380f))
+            }
+            LaunchedEffect(Unit) { insAlpha.animateTo(1f, tween(140)) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x66000000))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { showInstallDlg = false },
+                contentAlignment = Alignment.Center
+            ) {
             Column(
                 modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = insScale.value
+                        scaleY = insScale.value
+                        alpha = insAlpha.value
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
+                    }
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { }
                     .width(300.dp)
                     .clip(SmoothCornerShape(14.dp))
                     .background(Color(0xFFF2F2F7))
@@ -1389,6 +1416,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     color = Color(0xFF007AFF),
                     textAlign = TextAlign.Center
                 )
+            }
             }
         }
     }
@@ -1473,7 +1501,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x22000000)))
                     }
                 }
-
+            }
             }
         }
     }
