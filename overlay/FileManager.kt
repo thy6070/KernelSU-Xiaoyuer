@@ -877,7 +877,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         "move" -> "mv -f " + q(srcPath) + " " + q(arg)
                         "copy" -> "cp -rf " + q(srcPath) + " " + q(arg)
                         "zip" -> "cd " + q(dir) + " && tar -czf " + q(name + ".tar.gz") + " " + q(name)
-                        "unzip" -> "unzip -o " + q(srcPath) + " -d " + q(if (arg.isBlank()) srcPath.substringBeforeLast('/', "/") else arg)
+                        "unzip" -> "unzip -o " + q(srcPath) + " -d " + q(arg) + " 2>&1 | tail -n 5"
                         "rename" -> "mv -f " + q(srcPath) + " " + q(dir + "/" + arg)
                         "delete" -> "rm -rf " + q(srcPath)
                         "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
@@ -1194,6 +1194,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val p0 = longPressPath ?: selectedFile ?: leftHighlight
             // 校验：必须是真实存在的文件（防用残留路径解压旧包）
             val p = if (p0 != null && runCatching { java.io.File(p0).isFile }.getOrDefault(false)) p0 else null
+            if (p == null) {
+                runMessage = "未选中压缩包（路径为空）"
+                runOk = false
+            }
             if (p != null) {
                 uiScope.launch {
                     running = true
@@ -1203,11 +1207,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     withContext(Dispatchers.IO) {
                         try {
                             val q = "'" + p.replace("'", "'\''") + "'"
-                            Shell.cmd(
+                            val out = Shell.cmd(
                                 "rm -rf /data/local/tmp/yx_arch && mkdir -p /data/local/tmp/yx_arch && " +
-                                    "( unzip -o -q " + q + " -d /data/local/tmp/yx_arch 2>&1 || " +
+                                    "( unzip -o " + q + " -d /data/local/tmp/yx_arch 2>&1 || " +
                                     "tar -xf " + q + " -C /data/local/tmp/yx_arch 2>&1 )"
                             ).exec()
+                            // 解压日志写到文件，便于排查
+                            runCatching {
+                                val log = java.io.File("/data/local/tmp/xy_archive_log.txt")
+                                log.appendText("=== " + p + "\n" + (out.out + out.err).joinToString("\n") + "\n")
+                            }
                         } catch (t: Throwable) {
                         }
                     }
@@ -3019,7 +3028,7 @@ private fun ProMaxIsland(
                 }
             }
         }
-        // 点超级用户图标：直接复用游戏清理的加载路径（快），再补授权标记
+        // 点超级用户图标：数据加载沿用旧版（面板时代那套），只把显示换成抽屉
         if (suOpenTick > 0 && !suLoading) {
             suLoading = true
             uiPickerTitle = "超级用户"
@@ -3027,58 +3036,49 @@ private fun ProMaxIsland(
             uiPickerIcons = null
             uiPickerMarks = emptyMap()
             uiPickerSelected = null
-            Thread {
+            val base = withContext(Dispatchers.IO) {
                 try {
+                    val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+                    val res = repo.getAppList()
+                    val apps = res.getOrNull()?.first ?: emptyList()
                     val pm = navCtx.packageManager
-                    // 与游戏清理同一套：pm 列表（快）
-                    val raw = pm.getInstalledApplications(0)
-                        .filter {
-                            val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                            val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
-                            !isSystem && hasCode && it.packageName != "android" &&
-                                it.packageName != navCtx.packageName
+                    apps.filter { ai ->
+                        if (ai.packageName == navCtx.packageName) return@filter false
+                        if (ai.allowSu) return@filter true
+                        ai.packageInfo.applicationInfo?.let {
+                            (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
+                        } ?: true
+                    }.map { ai ->
+                        val icon = try {
+                            val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
+                            val w = d.intrinsicWidth.coerceAtLeast(1)
+                            val h = d.intrinsicHeight.coerceAtLeast(1)
+                            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                            val canvas = android.graphics.Canvas(bmp)
+                            d.setBounds(0, 0, w, h)
+                            d.draw(canvas)
+                            bmp
+                        } catch (t: Throwable) {
+                            null
                         }
-                        .sortedBy { it.loadLabel(pm).toString() }
-                    val apps = raw.map { ai ->
-                        val icon = runCatching {
-                            val d = pm.getApplicationIcon(ai.packageName)
-                            val b = android.graphics.Bitmap.createBitmap(
-                                d.intrinsicWidth.coerceAtLeast(48),
-                                d.intrinsicHeight.coerceAtLeast(48),
-                                android.graphics.Bitmap.Config.ARGB_8888
-                            )
-                            val c = android.graphics.Canvas(b)
-                            d.setBounds(0, 0, c.width, c.height)
-                            d.draw(c)
-                            b
-                        }.getOrNull()
-                        SuApp(ai.packageName, ai.loadLabel(pm).toString(), ai.uid, false, icon)
-                    }
-                    // 官方判定授权（逐应用，但只在后台做一次）
-                    val enriched = apps.map { a ->
-                        val g = runCatching {
-                            me.weishu.kernelsu.Natives.getAppProfile(a.pkg, a.uid).allowSu
-                        }.getOrDefault(false)
-                        a.copy(allowed = g)
-                    }.sortedWith(compareByDescending<SuApp> { it.allowed }.thenBy { it.label })
-                    suApps = enriched
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        try {
-                            uiPickerTitle = "超级用户 " + enriched.size + "/" + enriched.count { it.allowed }
-                            uiPickerIcons = enriched.map { a -> a.icon?.asImageBitmap() }
-                            uiPicker = enriched.map { it.label }
-                            uiPickerMarks = enriched.filter { it.allowed }.associate { it.label to "已签名" }
-                            uiPickerAction = { sel ->
-                                val app = suApps.firstOrNull { it.label == sel }
-                                onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
-                            }
-                        } catch (t: Throwable) {}
-                        suLoading = false
+                        SuApp(ai.packageName, ai.label, ai.uid, ai.profile?.allowSu == true, icon)
                     }
                 } catch (t: Throwable) {
-                    suLoading = false
+                    emptyList()
                 }
             }
+            suApps = base.sortedByDescending { it.allowed }
+            try {
+                uiPickerTitle = "超级用户 " + suApps.size + "/" + suApps.count { it.allowed }
+                uiPicker = suApps.map { it.label }
+                uiPickerIcons = suApps.map { a -> a.icon?.asImageBitmap() }
+                uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
+                uiPickerAction = { sel ->
+                    val app = suApps.firstOrNull { it.label == sel }
+                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                }
+            } catch (t: Throwable) {}
+            suLoading = false
         }
         if (navTarget == "su" || (navTarget == "home" && jumpStep == 7)) {
             val base = withContext(Dispatchers.IO) {
@@ -4305,7 +4305,7 @@ private fun ProMaxIsland(
                                             if (isArchive) "解压" else "压缩",
                                             Color(0xFF0A84FF)
                                         ) {
-                                            if (isArchive) onFileOp("unzip", "")
+                                            if (isArchive) onFileOp("unzip", oppositePath)
                                             else onFileOp("zip", "")
                                             closeIsland()
                                         }
@@ -6411,7 +6411,6 @@ private fun FsRow(
                 fontSize = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontFamily = AppFontFamily,
                 color = Color(TEXT_COLOR)
             )
             // 不显示文件大小/时间小字
