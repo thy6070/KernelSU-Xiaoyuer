@@ -877,7 +877,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         "delete" -> "rm -rf " + q(srcPath)
                         "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
                         "edit" -> "chmod 644 " + q(srcPath)
-                        "execute" -> "cd " + q(dir) + " && sh " + q(srcPath) + " 2>&1
+                        "execute" -> "cd " + q(dir) + " && sh " + q(srcPath) + " 2>&1"
                         else -> ""
                     }
                     var ok = true
