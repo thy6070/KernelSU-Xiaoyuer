@@ -774,7 +774,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     "ZID=$(unzip -p " + shq(p) + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
                                         "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
                                         "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
-                                        "\"/data/adb/ksud\" module install " + shq(p) + " 2>&1 ; " +
+                                        "KSUD=" + shq(libKsud) + " ; [ -x \"\$KSUD\" ] || KSUD=/data/adb/ksud ; " +
+                                        "\"\$KSUD\" module install " + shq(p) + " 2>&1 ; " +
                                         "echo '--- verify:' ; " +
                                         "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then " +
                                         "echo \"[OK] \$ZID installed\" ; else echo \"[FAIL] \$ZID incomplete\" ; fi"
@@ -1115,7 +1116,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }.start()
         },
         suOpenTick = suOpenTick,
-        onSuOpen = { suOpenTick += 1 },
+        onSuOpen = { loadSuperUserPicker(appCtx) },
         onShowTermDrawer = { txt -> termDrawer = txt },
         onShowSuConfirm = { pkg, uid, label, signed ->
             // 点确定 → 直接展开日志抽屉（不弹窗）；底下列表抽屉缩小（堆叠感）
@@ -1126,7 +1127,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 termDrawer = "应用：" + label + "  v" + ver + "  " + pkg + "\n"
                 // 先输出过程
                 val act0 = if (signed) "取消签名" else "签名"
-                termDrawer = (termDrawer ?: "") + "正在" + act0 + " " + label + " …\n"
+                termDrawer = (termDrawer ?: "") + "开始" + act0 + "：应用 " + pkg + "，uid=" + uid + "\n"
+                val before = withContext(Dispatchers.IO) {
+                    runCatching {
+                        me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)?.allowSu == true
+                    }.getOrDefault(false)
+                }
+                termDrawer = (termDrawer ?: "") + "当前授权：allowSu=" + before + "，目标：allowSu=" + (!signed) + "\n"
+                termDrawer = (termDrawer ?: "") + "构造 Profile(name=" + pkg + ", currentUid=" + uid + ", allowSu=" + (!signed) + ")\n"
+                termDrawer = (termDrawer ?: "") + "写入 setAppProfile ...\n"
                 val ok = withContext(Dispatchers.IO) {
                     runCatching {
                         val cur = me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)
@@ -1327,7 +1336,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val cmd = "ZID=$(unzip -p " + q + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
                         "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
                         "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
-                        "\"/data/adb/ksud\" module install " + q + " 2>&1 ; " +
+                        "KSUD=" + shq(appCtx.applicationInfo.nativeLibraryDir + "/libksud.so") + " ; [ -x \"\$KSUD\" ] || KSUD=/data/adb/ksud ; " +
+                        "\"\$KSUD\" module install " + q + " 2>&1 ; " +
                         "echo '--- verify:' ; " +
                         "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then " +
                         "echo \"[OK] \$ZID installed\" ; else echo \"[FAIL] \$ZID incomplete\" ; fi"
@@ -1757,14 +1767,25 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 })
                 // 解压 / 压缩（直接执行）
                 items.add(CmItem(if (cmIsArchive) "解压" else "压缩") {
-                    // 解压到对面目录，不跳转；对面目录高亮提示
+                    // 解压到对面目录，不跳转；完成后高亮对面新解压出来的文件/目录
+                    val archSrc = cmPath
+                    val archDst = otherDir
+                    val fromLeft = archSrc.startsWith(leftPath.trimEnd('/') + "/")
                     cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
                     if (cmIsArchive) {
-                        if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) {
-                            rightHighlight = otherDir
-                        } else {
-                            leftHighlight = otherDir
-                        }
+                        Thread {
+                            try {
+                                // 等解压完成，再找对面目录里最新的一项
+                                Thread.sleep(1500)
+                                val d = java.io.File(archDst)
+                                val newest = d.listFiles()?.maxByOrNull { it.lastModified() }
+                                val target = newest?.absolutePath ?: archDst
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    if (fromLeft) rightHighlight = target else leftHighlight = target
+                                    refreshTick += 1
+                                }
+                            } catch (t: Throwable) {}
+                        }.start()
                     }
                 })
                 // 复制路径
@@ -2245,9 +2266,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             // 改机型：日志抽屉 → 执行 → 结果 → 右上确定弹重启
                                             val setAct = uiPickerAction
                                             termDrawerTitle = sel
-                                            termDrawer = "机型：" + sel + "\n"
+                                            termDrawer = "目标机型：" + sel + "\n"
                                             uiScope.launch {
-                                                termDrawer = (termDrawer ?: "") + "正在写入机型 " + sel + " …\n"
+                                                // 先读当前机型（修改前）
+                                                val curModel = withContext(Dispatchers.IO) {
+                                                    runCatching {
+                                                        java.io.File("/data/local/tmp/xy_cur_model.txt").writeText("")
+                                                        val p = java.lang.ProcessBuilder(suBin(), "-c", "getprop ro.product.model; getprop ro.product.brand; getprop ro.product.device; getprop ro.product.manufacturer")
+                                                            .redirectErrorStream(true).start()
+                                                        val out = p.inputStream.bufferedReader().readText().trim()
+                                                        p.waitFor()
+                                                        out.replace("\n", " / ")
+                                                    }.getOrDefault("")
+                                                }
+                                                termDrawer = (termDrawer ?: "") + "当前机型：" + curModel + "\n"
+                                                termDrawer = (termDrawer ?: "") + "修改项：ro.product.model → " + sel + "\n"
                                                 withContext(Dispatchers.IO) {
                                                     try { setAct?.invoke(sel) } catch (t: Throwable) {}
                                                 }
@@ -2281,7 +2314,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             termDrawerTitle = sel
                                             termDrawer = "应用：" + sel + "\n"
                                             uiScope.launch {
-                                                termDrawer = (termDrawer ?: "") + "开始重置 " + sel + " …\n"
+                                                termDrawer = (termDrawer ?: "") + "清除应用缓存与设备标识文件\n"
                                                 withContext(Dispatchers.IO) {
                                                     try { appSel?.invoke(sel) } catch (t: Throwable) {}
                                                 }
@@ -2317,7 +2350,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         // 半屏再低一点；内容加载后高度变化走动画（不突兀长高）
                         modifier = Modifier
                             // 列表抽屉加高：约屏幕 80%
-                            .heightIn(min = 240.dp, max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.80f).dp)
+                            .heightIn(
+                                min = 200.dp,
+                                // 整体 80%：扣掉标题栏+按钮行（约 44dp）
+                                max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.80f - 44f).dp
+                            )
                             .animateContentSize(animationSpec = tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
                             .graphicsLayer { alpha = listAlpha.value }
                     ) {
@@ -2404,6 +2441,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(Color(0xFFF2F2F7))
                     .shadow(28.dp, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp), clip = false,
                         ambientColor = Color(0x40000000), spotColor = Color(0x40000000))
             ) {
@@ -2448,7 +2486,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 androidx.compose.foundation.lazy.LazyColumn(
                     state = termListState,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.90f).dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(
+                        min = 160.dp,
+                        // 整体 70%：扣掉顶栏（约 44dp）
+                        max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.70f - 44f).dp
+                    )
                 ) {
                     val lines = termLines
                     items(lines.size) { i ->
@@ -2458,14 +2500,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp)) {
                             Text(
                                 text = ansiToAnnotated(if (okMark || noMark) ln.dropLast(3) else ln),
-                                fontSize = 11.sp,
+                                fontSize = 13.sp,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                                 modifier = Modifier.weight(1f, fill = false)
                             )
                             if (okMark || noMark) {
                                 Text(
                                     text = if (okMark) "  .OK" else "  .NO",
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
                                     color = if (okMark) Color(0xFF007AFF) else Color(0xFFFF3B30),
                                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                 )
@@ -2963,6 +3005,12 @@ private fun applyImmersiveToDialog(view: android.view.View) {
             w.setDimAmount(0f)
             w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
             w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            // 允许 Dialog 绘到状态栏/导航栏区域（否则系统栏重算会露出黑块）
+            w.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR
+            )
             androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
             androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
                 hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -2977,6 +3025,15 @@ private fun applyImmersiveToDialog(view: android.view.View) {
             val act = c as? android.app.Activity
             if (act != null) {
                 val aw = act.window
+                @Suppress("DEPRECATION")
+                aw.decorView.systemUiVisibility = (
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                        android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                        android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                        android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    )
                 androidx.core.view.WindowCompat.setDecorFitsSystemWindows(aw, false)
                 androidx.core.view.WindowCompat.getInsetsController(aw, aw.decorView).apply {
                     hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -3175,6 +3232,8 @@ private fun ProMaxIsland(
     var suSel by remember { mutableStateOf(-1) }
     val navCtx = LocalContext.current
     val navScope = rememberCoroutineScope()
+    // 注册超级用户确认回调（供 Screen 层的 loadSuperUserPicker 使用）
+    LaunchedEffect(Unit) { suConfirmHandler = onShowSuConfirm }
     LaunchedEffect(navTarget, jumpStep, suOpenTick) {
         modSel = -1
         suSel = -1
@@ -3209,7 +3268,7 @@ private fun ProMaxIsland(
             }
         }
         // 点超级用户图标：调用与游戏清理完全相同的加载函数
-        if (suOpenTick > 0) {
+        if (false) {
             loadAppPicker(navCtx, "超级用户") { apps, icons ->
                 suApps = apps
                 uiPickerMarks = apps.filter { it.allowed }.associate { it.label to "已签名" }
@@ -7182,6 +7241,70 @@ internal fun loadAppPicker(
     }
 }
 
+
+// 超级用户列表（和 gameCleanCache 完全同款：顶层函数，点击即加载）
+internal fun loadSuperUserPicker(ctx: android.content.Context) {
+    uiPickerTitle = "超级用户"
+    uiPicker = emptyList()
+    uiPickerIcons = null
+    uiPickerSelected = null
+    uiPickerMarks = emptyMap()
+    Thread {
+        try {
+            val pm = ctx.packageManager
+            val suList = try {
+                val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+                val res = kotlinx.coroutines.runBlocking { repo.getAppList() }
+                res.getOrNull()?.first ?: emptyList()
+            } catch (t: Throwable) { emptyList() }
+            val apps: List<SuApp> = if (suList.isNotEmpty()) {
+                suList.filter { ai ->
+                    val aiInfo = ai.packageInfo.applicationInfo
+                    val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                    !isSystem && ai.packageName != "android" && ai.packageName != ctx.packageName
+                }
+                    .sortedBy { it.label }
+                    .map { SuApp(it.packageName, it.label, it.uid, it.allowSu, null) }
+            } else {
+                pm.getInstalledApplications(0)
+                    .filter {
+                        val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                        val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
+                        !isSystem && hasCode && it.packageName != "android" && it.packageName != ctx.packageName
+                    }
+                    .sortedBy { it.loadLabel(pm).toString() }
+                    .map { SuApp(it.packageName, it.loadLabel(pm).toString(), it.uid, false, null) }
+            }
+            val labels = apps.map { it.label }
+            val icons = apps.map { app ->
+                try {
+                    val d = pm.getApplicationIcon(app.pkg)
+                    val bmp = android.graphics.Bitmap.createBitmap(
+                        d.intrinsicWidth.coerceAtLeast(48),
+                        d.intrinsicHeight.coerceAtLeast(48),
+                        android.graphics.Bitmap.Config.ARGB_8888
+                    )
+                    val cv = android.graphics.Canvas(bmp)
+                    d.setBounds(0, 0, cv.width, cv.height)
+                    d.draw(cv)
+                    androidx.compose.ui.graphics.asImageBitmap(bmp)
+                } catch (t: Throwable) { null }
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                uiPicker = labels
+                uiPickerIcons = icons
+                uiPickerMarks = apps.filter { it.allowed }.associate { it.label to "已签名" }
+                uiPickerAction = { sel ->
+                    val app = apps.firstOrNull { it.label == sel }
+                    suConfirmHandler?.invoke(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                }
+            }
+        } catch (t: Throwable) {
+            runCatching { java.io.File("/data/local/tmp/xy_su_log.txt").appendText("ERR " + t + "\n") }
+        }
+    }.start()
+}
+
 internal fun gameCleanCache(ctx: android.content.Context) {
     // 立即打开抽屉（先空列表，加载完再填）
     uiPickerTitle = "选择要重置的应用"
@@ -7281,7 +7404,8 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("*/files/*Cache*|*/files/*cache*|*/files/*_data*|*/files/*Data*) continue;; ")
                 sb.append("*.so|*.pak|*.obb|*.bundle|*.dat|*.assetbundle|*.unity3d|*.mp4|*.mp3|*.png|*.jpg|*.webp) continue;; ")
                 sb.append("esac; ")
-                sb.append("rm -f \"\$f\" 2>/dev/null && F=\$((F+1)) || N=\$((N+1)); ")
+                sb.append("[ -e \"\$f\" ] || continue; ")
+                sb.append("if rm -f \"\$f\" 2>/dev/null; then F=\$((F+1)); echo \"删除 \$f .OK\"; else N=\$((N+1)); echo \"删除 \$f .NO\"; fi; ")
                 sb.append("done; done; ")
                 // 先读原值（供恢复）
                 sb.append("OID=\$(settings get secure android_id 2>/dev/null); ")
@@ -7290,12 +7414,12 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("echo \"ORIG|\$OID|\$OHOST|\$OSN\" > /data/local/tmp/xy_orig_ids.txt; ")
                 sb.append("chmod 644 /data/local/tmp/xy_orig_ids.txt; ")
                 // 全随机
-                sb.append("settings put secure android_id ").append(androidId).append(" 2>/dev/null; ")
+                sb.append("settings put secure android_id ").append(androidId).append(" 2>/dev/null && echo \"修改 android_id → ").append(androidId).append(" .OK\" || echo \"修改 android_id .NO\"; ")
                 sb.append("settings put secure advertising_id ").append(hex(16)).append(" 2>/dev/null; ")
                 sb.append("settings put secure device_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
                 sb.append("settings put secure bluetooth_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
-                sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null; ")
-                sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null; ")
+                sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null && echo \"修改 net.hostname → ").append(hostname).append(" .OK\" || echo \"修改 net.hostname .NO\"; ")
+                sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null && echo \"修改 ro.serialno → ").append(serial).append(" .OK\" || echo \"修改 ro.serialno .NO\"; ")
                 // 用户层可改的其余标识（boot序列号 / build.id / OAID系列）
                 sb.append("resetprop ro.boot.serialno '").append(serial).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.boot.bootserialno '").append(serial).append("' 2>/dev/null; ")
@@ -7313,7 +7437,8 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("settings put global ble_mac ").append(hex(12)).append(" 2>/dev/null; ")
                 sb.append("settings put secure android_id_g ").append(hex(16)).append(" 2>/dev/null; ")
                 sb.append("resetprop ro.com.google.clientidbase 'android-").append(hex(8)).append("' 2>/dev/null; ")
-                sb.append("settings put secure imei '").append(hex(15)).append("' 2>/dev/null; ")
+                val imeiNew = hex(15)
+                sb.append("settings put secure imei '").append(imeiNew).append("' 2>/dev/null && echo \"修改 imei → ").append(imeiNew).append(" .OK\" || echo \"修改 imei .NO\"; ")
                 // IMEI 用 resetprop（更彻底，模块同款）
                 sb.append("for i in \$(getprop | grep imei | awk -F '[][]' '{print \$2}'); do imei=\$(getprop \$i); ")
                 sb.append("[ \${#imei} -lt 15 ] && continue; resetprop \$i 86916\$(tr -dc '1-9' < /dev/urandom | head -c 10); done; ")
@@ -7467,6 +7592,8 @@ var uiPickerMarks by androidx.compose.runtime.mutableStateOf<Map<String, String>
 var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
 // 抽屉确定/取消的确认弹窗：文案 + 动作
 var pickConfirm by androidx.compose.runtime.mutableStateOf<Pair<String, () -> Unit>?>(null)
+// 超级用户确认回调（ProMaxIsland 注册，Screen 层调用）
+var suConfirmHandler by androidx.compose.runtime.mutableStateOf<((String, Int, String, Boolean) -> Unit)?>(null)
 // 确认弹窗「确定」按钮文字（默认 确定；可设 打开 / 重试）
 var pickConfirmOk by androidx.compose.runtime.mutableStateOf("确定")
 // 确认弹窗标题中要高亮的词与颜色（如「已签名」蓝 / 「失败」红）
@@ -9377,6 +9504,7 @@ fun ansiToAnnotated(src: String): androidx.compose.ui.text.AnnotatedString {
                 continue
             }
         }
+        // 和列表抽屉同款浅底，默认文字用深色
         b.pushStyle(androidx.compose.ui.text.SpanStyle(color = color ?: androidx.compose.ui.graphics.Color(0xFF1C1C1E)))
         b.append(src[i])
         b.pop()
