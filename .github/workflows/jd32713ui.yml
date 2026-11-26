@@ -171,9 +171,12 @@ jobs:
           perl -pi -e 's/versionName = ".*"/versionName = "1.0.${{ github.run_number }}"/' src/manager/app/build.gradle.kts 2>/dev/null || true
           grep -n "versionName" src/manager/app/build.gradle.kts | head -2 || true
           cp manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml src/manager/app/src/main/res/mipmap-anydpi/ic_launcher.xml
-          # Inter 字体资源（iOS 风格）
+          # Inter 字体资源（iOS 风格）——从 assets 里的 Inter 复制成 res/font（R.font 需要）
           mkdir -p src/manager/app/src/main/res/font
           cp -f manager/app/src/main/res/font/*.ttf src/manager/app/src/main/res/font/ 2>/dev/null || true
+          cp -f manager/app/src/main/assets/fonts/Inter-Regular.ttf src/manager/app/src/main/res/font/inter_regular.ttf 2>/dev/null || true
+          cp -f manager/app/src/main/assets/fonts/Inter-SemiBold.ttf src/manager/app/src/main/res/font/inter_semibold.ttf 2>/dev/null || true
+          ls -la src/manager/app/src/main/res/font/ || echo "font dir missing"
           cp manager/app/src/main/res/mipmap-xxhdpi/mod_icon.png src/manager/app/src/main/res/mipmap-xxhdpi/mod_icon.png 2>/dev/null || true
           cp manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg src/manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg
           mkdir -p src/manager/app/src/main/assets
