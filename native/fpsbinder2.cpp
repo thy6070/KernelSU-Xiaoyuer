@@ -90,7 +90,7 @@ static long long timestatsLayerFrames(const std::string &d, const std::string &p
         std::string lname = d.substr(ln + 12, leSafe - (ln + 12));
         size_t nextLayer = d.find("layerName = ", leSafe + 1);
         size_t segEnd = (nextLayer == std::string::npos) ? d.size() : nextLayer;
-        if (lname.find(pkg) != std::string::npos && lname.find("SurfaceView") != std::string::npos) {
+        if (lname.find(pkg) != std::string::npos) {
             size_t tf = d.find("totalFrames = ", leSafe);
             if (tf != std::string::npos && tf < segEnd) {
                 long long v = atoll(d.c_str() + tf + 14);
@@ -215,7 +215,19 @@ int main(int argc, char **argv) {
             static int missCount = 0;
             static bool firstFound = false;
             if (!found) {
-                if (missCount++ % 10 == 0) fprintf(stderr, "timestats: layer not found for pkg=%s (try %d)\n", pkg.c_str(), missCount);
+                if (missCount++ % 10 == 0) {
+                    fprintf(stderr, "timestats: layer not found for pkg=%s (try %d) layers:", pkg.c_str(), missCount);
+                    size_t p2 = 0; int shown = 0;
+                    while (shown < 5) {
+                        size_t ln2 = data.find("layerName = ", p2);
+                        if (ln2 == std::string::npos) break;
+                        size_t le2 = data.find('\n', ln2);
+                        if (le2 == std::string::npos) le2 = data.size();
+                        fprintf(stderr, " [%s]", data.substr(ln2 + 12, le2 - (ln2 + 12)).c_str());
+                        p2 = le2 + 1; shown++;
+                    }
+                    fprintf(stderr, "\n");
+                }
             } else if (!firstFound) {
                 firstFound = true;
                 fprintf(stderr, "timestats: matched pkg=%s totalFrames=%lld\n", pkg.c_str(), frames);
