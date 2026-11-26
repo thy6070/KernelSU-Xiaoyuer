@@ -2136,18 +2136,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .graphicsLayer {
                             translationY = slide.value * size.height
                         }
-                        .clip(SmoothCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
                         .background(Color(0xFFF2F2F7)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        closePick()
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                 // 卡片（标题 + 列表 + 按钮一体）
                 Column(
                     modifier = Modifier
