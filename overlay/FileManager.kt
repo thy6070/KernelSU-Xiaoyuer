@@ -419,6 +419,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var cmRenamePath by remember { mutableStateOf<String?>(null) }
     // 超级用户：点图标直接开抽屉（不激活灵动岛）
     var suOpenTick by remember { mutableStateOf(0) }
+    var suAppsGlobal by remember { mutableStateOf<List<SuApp>>(emptyList()) }
     // 抽屉终端：非空时显示输出
     var termDrawer by remember { mutableStateOf<String?>(null) }
     var termDrawerTitle by remember { mutableStateOf("终端输出") }
