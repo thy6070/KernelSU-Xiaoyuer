@@ -421,6 +421,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var suOpenTick by remember { mutableStateOf(0) }
     // 抽屉终端：非空时显示输出
     var termDrawer by remember { mutableStateOf<String?>(null) }
+    var termDrawerTitle by remember { mutableStateOf("终端输出") }
+    // 右上「确定」动作（非空时显示确定按钮）
+    var termDrawerConfirm by remember { mutableStateOf<(() -> Unit)?>(null) }
     var cmRenameText by remember { mutableStateOf("") }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
@@ -715,8 +718,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             run { }
                             // APK：走结构化安装报告（抽屉终端 5 行）
                             if (lower.endsWith(".apk")) {
-                                termDrawer = ""
-                                installApkReport(appCtx, p,
+                                termDrawerTitle = file
+                                // 先展示信息，抽屉右上「确定」后再安装
+                                val info0 = runCatching { appCtx.packageManager.getPackageArchiveInfo(p, 0) }.getOrNull()
+                                val nm0 = info0?.applicationInfo?.let { ai -> runCatching { ai.loadLabel(appCtx.packageManager).toString() }.getOrDefault(file) } ?: file.removeSuffix(".apk")
+                                termDrawer = "应用：" + nm0 + "  v" + (info0?.versionName ?: "") + "  " + (info0?.packageName ?: "") + "\n准备将此程序加载至桌面\n"
+                                termDrawerConfirm = {
+                                    termDrawerConfirm = null
+                                    installApkReport(appCtx, p,
                                     { line, okLine ->
                                         termDrawer = (termDrawer ?: "") + line + (if (okLine) " .OK" else " .NO") + "\n"
                                     },
@@ -746,6 +755,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             }
                                         }
                                     })
+                                }
                                 return@withContext
                             }
                             val cmd = when {
@@ -1104,14 +1114,27 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }.start()
         },
         suOpenTick = suOpenTick,
-        onSuOpen = { suOpenTick += 1 },
+        onSuOpen = {
+            loadAppPicker(appCtx, "超级用户") { apps, _ ->
+                suAppsGlobal = apps
+                uiPickerMarks = apps.filter { it.allowed }.associate { it.label to "已签名" }
+                uiPickerAction = { sel ->
+                    val app = suAppsGlobal.firstOrNull { it.label == sel }
+                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                }
+            }
+        },
         onShowTermDrawer = { txt -> termDrawer = txt },
         onShowSuConfirm = { pkg, uid, label, signed ->
-            // 抽屉终端：应用信息 + 授权日志；完成后结果弹窗（打开 / 重试）
+            // 点确定 → 直接展开日志抽屉（不弹窗）；底下列表抽屉缩小（堆叠感）
             uiScope.launch {
                 val pm = appCtx.packageManager
                 val ver = runCatching { pm.getPackageInfo(pkg, 0).versionName ?: "" }.getOrDefault("")
+                termDrawerTitle = label
                 termDrawer = "应用：" + label + "  v" + ver + "  " + pkg + "\n"
+                // 先输出过程
+                val act0 = if (signed) "取消签名" else "签名"
+                termDrawer = (termDrawer ?: "") + "正在" + act0 + " " + label + " …\n"
                 val ok = withContext(Dispatchers.IO) {
                     runCatching {
                         val cur = me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)
@@ -1122,28 +1145,34 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 val act = if (signed) "取消签名" else "签名"
                 termDrawer = (termDrawer ?: "") + act + " " + label + (if (ok) " .OK" else " .NO") + "\n"
-                if (ok) {
-                    pickConfirmOk = "打开"
-                    pickConfirmAccentWord = "已签名"
-                    pickConfirmAccentColor = 0xFF007AFF
-                    pickConfirm = "已签名 " + label to {
-                        // 打开应用
-                        runCatching {
-                            val it2 = pm.getLaunchIntentForPackage(pkg)
-                            if (it2 != null) appCtx.startActivity(it2.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                // 日志抽屉右「确定」：成功 → 打开；失败 → 重试
+                termDrawerConfirm = {
+                    termDrawerConfirm = null
+                    if (ok) {
+                        pickConfirmOk = "打开"
+                        pickConfirmAccentWord = "完成"
+                        pickConfirmAccentColor = 0xFF007AFF
+                        pickConfirm = label + " 完成" to {
+                            runCatching {
+                                val it2 = pm.getLaunchIntentForPackage(pkg)
+                                if (it2 != null) appCtx.startActivity(it2.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                            }
                         }
-                        suOpenTick += 1
+                    } else {
+                        pickConfirmOk = "重试"
+                        pickConfirmAccentWord = "失败"
+                        pickConfirmAccentColor = 0xFFFF3B30
+                        pickConfirm = label + " 失败" to {
+                            // 重试：重新走授权
+                            val retryPkg = pkg
+                            val retryUid = uid
+                            val retryLabel = label
+                            val retrySigned = signed
+                            loadAppPicker(appCtx, "超级用户") { apps2, _ ->
+                                uiPickerMarks = apps2.filter { it.allowed }.associate { it.label to "已签名" }
+                            }
+                        }
                     }
-                } else {
-                    pickConfirmOk = "重试"
-                    pickConfirmAccentWord = "失败"
-                    pickConfirmAccentColor = 0xFFFF3B30
-                    val retry: () -> Unit = {
-                        pickConfirm = null
-                        // 重试：重新走一遍
-                        suOpenTick += 1
-                    }
-                    pickConfirm = "签名 " + label + " 失败" to retry
                 }
             }
         },
@@ -1292,9 +1321,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         onArchiveMount = {
             val p = selectedFile
             if (p != null) {
+                // 先展示模块信息，点抽屉右上「确定」再安装
+                termDrawerTitle = p.substringAfterLast('/')
+                termDrawer = "模块：" + p.substringAfterLast('/') + "\n准备安装此模块\n"
+                termDrawerConfirm = {
+                    termDrawerConfirm = null
                 uiScope.launch {
                     running = true
-                    termDrawer = ""  // 用抽屉终端
                     runMessage = null
                     
                     // 和 KSU 管理器一致：读 id → 清理残留 → ksud 原版安装 → 验证
@@ -1330,6 +1363,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             proc.waitFor()
                             withContext(Dispatchers.Main) {
                                 termDrawer = ((termDrawer ?: "") + "已结束 .OK\n")
+                                // 模块安装完成 → 右上确定弹「重启完全生效」
+                                termDrawerConfirm = {
+                                    termDrawerConfirm = null
+                                    pickConfirmOk = "重启"
+                                    pickConfirmAccentWord = "重启"
+                                    pickConfirmAccentColor = 0xFF007AFF
+                                    pickConfirm = "重启完全生效" to {
+                                        uiScope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                runCatching { Runtime.getRuntime().exec(arrayOf(suBin(), "-c", "reboot")).waitFor() }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     } catch (t: Throwable) {
@@ -1343,6 +1390,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 }
             }
+                }   // termDrawerConfirm 结束
         },
     )
 
@@ -1717,14 +1765,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 })
                 // 解压 / 压缩（直接执行）
                 items.add(CmItem(if (cmIsArchive) "解压" else "压缩") {
+                    // 解压到对面目录，不跳转；对面目录高亮提示
                     cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
                     if (cmIsArchive) {
-                        // 解压到对面后，定位/高亮对面目录
-                        try {
-                            FileLocate.side = if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) "R" else "L"
-                            FileLocate.path = otherDir
-                            FileLocate.tick += 1
-                        } catch (t: Throwable) {}
+                        if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) {
+                            rightHighlight = otherDir
+                        } else {
+                            leftHighlight = otherDir
+                        }
                     }
                 })
                 // 复制路径
@@ -2131,11 +2179,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
-        // 抽屉出现：音效 + 振动
-        val pickFxCtx = androidx.compose.ui.platform.LocalContext.current
-        LaunchedEffect(uiPicker) {
-            if (uiPicker != null) playPopupFx(pickFxCtx)
-        }
         // 底部抽屉（恢复 ModalBottomSheet）
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closePick() },
@@ -2206,8 +2249,31 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 val sel = uiPickerSelected
                                 if (sel != null) {
                                     when (pickTitle) {
-                                        "选择机型" -> pickConfirm = "设为 $sel" to {
-                                            uiPickerAction?.invoke(sel)
+                                        "选择机型" -> {
+                                            // 改机型：日志抽屉 → 执行 → 结果 → 右上确定弹重启
+                                            val setAct = uiPickerAction
+                                            termDrawerTitle = sel
+                                            termDrawer = "机型：" + sel + "\n"
+                                            uiScope.launch {
+                                                termDrawer = (termDrawer ?: "") + "正在写入机型 " + sel + " …\n"
+                                                withContext(Dispatchers.IO) {
+                                                    try { setAct?.invoke(sel) } catch (t: Throwable) {}
+                                                }
+                                                termDrawer = (termDrawer ?: "") + "设置机型 " + sel + " .OK\n"
+                                                termDrawerConfirm = {
+                                                    termDrawerConfirm = null
+                                                    pickConfirmOk = "重启"
+                                                    pickConfirmAccentWord = "重启"
+                                                    pickConfirmAccentColor = 0xFF007AFF
+                                                    pickConfirm = "重启完全生效" to {
+                                                        uiScope.launch {
+                                                            withContext(Dispatchers.IO) {
+                                                                runCatching { Runtime.getRuntime().exec(arrayOf(suBin(), "-c", "reboot")).waitFor() }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                         // 提取：直接打开应用操作菜单（抽屉保留）
                                         "选择要提取的应用" -> {
@@ -2217,9 +2283,31 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         "超级用户" -> {
                                             uiPickerAction?.invoke(sel)
                                         }
-                                        else -> pickConfirm = "重置 $sel" to {
-                                            // 不收起抽屉，只执行
-                                            uiPickerAction?.invoke(sel)
+                                        else -> {
+                                            // 重置：打开日志抽屉 → 执行 → 结果 → 右上确定弹重启
+                                            val appSel = uiPickerAction
+                                            termDrawerTitle = sel
+                                            termDrawer = "应用：" + sel + "\n"
+                                            uiScope.launch {
+                                                termDrawer = (termDrawer ?: "") + "开始重置 " + sel + " …\n"
+                                                withContext(Dispatchers.IO) {
+                                                    try { appSel?.invoke(sel) } catch (t: Throwable) {}
+                                                }
+                                                termDrawer = (termDrawer ?: "") + "重置 " + sel + " .OK\n"
+                                                termDrawerConfirm = {
+                                                    termDrawerConfirm = null
+                                                    pickConfirmOk = "重启"
+                                                    pickConfirmAccentWord = "重启"
+                                                    pickConfirmAccentColor = 0xFF007AFF
+                                                    pickConfirm = "重启完全生效" to {
+                                                        uiScope.launch {
+                                                            withContext(Dispatchers.IO) {
+                                                                runCatching { Runtime.getRuntime().exec(arrayOf(suBin(), "-c", "reboot")).waitFor() }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2236,7 +2324,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     androidx.compose.foundation.lazy.LazyColumn(
                         // 半屏再低一点；内容加载后高度变化走动画（不突兀长高）
                         modifier = Modifier
-                            .heightIn(max = 180.dp)
+                            // 列表抽屉加高：约屏幕 80%
+                            .heightIn(min = 240.dp, max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.80f).dp)
                             .animateContentSize(animationSpec = tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
                             .graphicsLayer { alpha = listAlpha.value }
                     ) {
@@ -2320,18 +2409,43 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
             dragHandle = null
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(28.dp, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp), clip = false,
+                        ambientColor = Color(0x40000000), spotColor = Color(0x40000000))
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("终端输出", color = Color(0xFF8E8E93), fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    // 抽屉终端统一：左边取消，右边确定（无标题）
                     Text(
-                        "完成",
-                        color = Color(0xFF0A84FF),
-                        fontSize = 14.sp,
+                        "取消",
+                        color = Color(0xFFFF3B30),
+                        fontSize = 15.sp,
                         modifier = Modifier.clickable { closeTerm() }
                     )
+                    Spacer(modifier = Modifier.weight(1f))
+                    val dlgConfirm = termDrawerConfirm
+                    if (dlgConfirm != null) {
+                        Text(
+                            "确定",
+                            color = Color(0xFF007AFF),
+                            fontSize = 15.sp,
+                            modifier = Modifier.clickable {
+                                termDrawerConfirm = null
+                                dlgConfirm()
+                            }
+                        )
+                    } else {
+                        Text(
+                            "确定",
+                            color = Color(0xFF007AFF),
+                            fontSize = 15.sp,
+                            modifier = Modifier.clickable { closeTerm() }
+                        )
+                    }
                 }
                 val termListState = androidx.compose.foundation.lazy.rememberLazyListState()
                 val termLines = td.split("\n")
@@ -2342,7 +2456,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 androidx.compose.foundation.lazy.LazyColumn(
                     state = termListState,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.90f).dp)
                 ) {
                     val lines = termLines
                     items(lines.size) { i ->
@@ -2351,7 +2465,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val noMark = ln.endsWith(".NO")
                         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp)) {
                             Text(
-                                text = ansiToAnnotated(ln),
+                                text = ansiToAnnotated(if (okMark || noMark) ln.dropLast(3) else ln),
                                 fontSize = 11.sp,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                                 modifier = Modifier.weight(1f, fill = false)
@@ -2848,6 +2962,15 @@ private fun applyImmersiveToDialog(view: android.view.View) {
         // 1) Dialog 自己的窗口（必须单独设，Dialog window 不继承 Activity）
         val w = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
         if (w != null) {
+            // 固定尺寸 + 居中：系统栏隐显不再重排（避免弹窗上下跳）
+            w.setLayout(
+                android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                android.view.WindowManager.LayoutParams.MATCH_PARENT
+            )
+            w.setGravity(android.view.Gravity.CENTER)
+            w.setDimAmount(0f)
+            w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            w.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
             androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
                 hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -3104,57 +3227,7 @@ private fun ProMaxIsland(
                 }
             }
         }
-        if (navTarget == "su" || (navTarget == "home" && jumpStep == 7)) {
-            val base = withContext(Dispatchers.IO) {
-                try {
-                    val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
-                    val res = repo.getAppList()
-                    val apps = res.getOrNull()?.first ?: emptyList()
-                    val pm = navCtx.packageManager
-                    apps.filter { ai ->
-                        if (ai.packageName == navCtx.packageName) return@filter false
-                        if (ai.allowSu) return@filter true
-                        ai.packageInfo.applicationInfo?.let {
-                            (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
-                        } ?: true
-                    }.map { ai ->
-                        val icon = try {
-                            val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
-                            val w = d.intrinsicWidth.coerceAtLeast(1)
-                            val h = d.intrinsicHeight.coerceAtLeast(1)
-                            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-                            val canvas = android.graphics.Canvas(bmp)
-                            d.setBounds(0, 0, w, h)
-                            d.draw(canvas)
-                            bmp
-                        } catch (t: Throwable) {
-                            null
-                        }
-                        val allowed = runCatching {
-                            me.weishu.kernelsu.Natives.getAppProfile(ai.packageName, ai.uid).allowSu
-                        }.getOrDefault(ai.profile?.allowSu == true)
-                        SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
-                    }
-                } catch (t: Throwable) {
-                    emptyList()
-                }
-            }
-            suApps = base.sortedByDescending { it.allowed }
-            // 超级用户列表 → 抽屉（已 root 的应用置顶并标记）
-            try {
-                uiPickerTitle = "超级用户"
-                uiPickerSelected = null
-                uiPickerIcons = suApps.map { a ->
-                    a.icon?.let { bmp -> android.graphics.Bitmap.createScaledBitmap(bmp, 64, 64, true).asImageBitmap() }
-                }
-                uiPicker = suApps.map { a -> a.label }
-                uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
-                uiPickerAction = { sel ->
-                    val app = suApps.firstOrNull { it.label == sel }
-                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
-                }
-            } catch (t: Throwable) {}
-        }
+
     }
     val bootCtx = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(Unit) {
