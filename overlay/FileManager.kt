@@ -149,6 +149,13 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.InstallMobile
 import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Audiotrack
+import androidx.compose.material.icons.rounded.Android
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -208,6 +215,8 @@ private const val FOLDER_ICON = 0xFF007AFF.toInt()
 private const val FILE_ICON = 0xFF9A9A9A.toInt()
 
 private val apkIconCache = ConcurrentHashMap<String, ImageBitmap?>()
+// 包名目录图标缓存（/data/user/0/<pkg>、Android/data/<pkg>）
+private val pkgIconCache = ConcurrentHashMap<String, ImageBitmap?>()
 private val apkIconMutex = Mutex()
 
 data class ModItem(val id: String, val name: String, val version: String, val desc: String, val disabled: Boolean, val author: String = "")
@@ -234,6 +243,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     val scope = rememberCoroutineScope()
+    // 预加载提示音：启动即准备好，弹窗出现瞬间就能响（不再有延迟/首次静音）
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            runCatching { ensurePopPlayer(appCtx) }
+        }
+    }
     LaunchedEffect(Unit) {
         // 每次打开都显示卡密验证
         showCardSheet = true
@@ -427,6 +442,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var termDrawerIcon by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     // 右上「确定」动作（非空时显示确定按钮）
     var termDrawerConfirm by remember { mutableStateOf<(() -> Unit)?>(null) }
+    // 抽屉终端输入模式（模式面板里的「终端」按钮打开）
+    var termDrawerInput by remember { mutableStateOf(false) }
+    var termDrawerCmd by remember { mutableStateOf("") }
     var cmRenameText by remember { mutableStateOf("") }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
@@ -1119,7 +1137,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
         suOpenTick = suOpenTick,
         onSuOpen = { loadSuperUserPicker(appCtx) },
-        onShowTermDrawer = { txt -> termDrawer = txt },
+        onShowTermDrawer = { txt ->
+            termDrawer = txt
+            termDrawerInput = txt.trim() == "终端"
+        },
         onShowSuConfirm = { pkg, uid, label, signed ->
             // 点确定 → 直接展开日志抽屉（不弹窗）；底下列表抽屉缩小（堆叠感）
             uiScope.launch {
@@ -1453,7 +1474,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
             Column(
                 modifier = Modifier
-                    .width(270.dp)
+                    .width(240.dp)
                     .graphicsLayer {
                         scaleX = rnPop.value
                         scaleY = rnPop.value
@@ -1494,7 +1515,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable { cmRenamePath = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
+                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
                     }
                     Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
                     Box(
@@ -1520,7 +1541,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(pickConfirmOk, fontSize = 17.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
@@ -1916,11 +1937,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     modifier = Modifier
                         .weight(1f)
                         .onFocusChanged { searchFocused = it.isFocused }
-                        .clip(SmoothCornerShape(10.dp))
-                        // iOS 搜索栏：灰底、无阴影、无描边
-                        .background(Color(0xFFE4E4E9))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, color = Color(0xFF1C1C1E), fontFamily = AppFontFamily)
+                        .shadow(
+                            elevation = if (searchFocused) 8.dp else 3.dp,
+                            shape = SmoothCornerShape(12.dp),
+                            clip = false,
+                            ambientColor = Color(0x44000000),
+                            spotColor = Color(0x44000000)
+                        )
+                        .clip(SmoothCornerShape(12.dp))
+                        .background(if (searchFocused) Color(0xFFFFFFFF) else Color(0xFFFAFAFC))
+                        .border(
+                            width = 0.5.dp,
+                            color = Color(0x1F000000),
+                            shape = SmoothCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.Black)
                 )
                 Spacer(Modifier.width(8.dp))
                 Box(
@@ -2122,7 +2154,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 // 左红取消 / 右蓝更新（进度中隐藏整行）
                 if (updateProgress < 0) {
-                    Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -2130,7 +2162,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 .clickable { updateVer = null },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
+                            Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
                         }
                         Box(
                             modifier = Modifier
@@ -2199,7 +2231,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("更新", fontSize = 17.sp, color = Color(0xFF007AFF))
+                            Text("更新", fontSize = 15.sp, color = Color(0xFF007AFF))
                         }
                     }
                 }
@@ -2576,7 +2608,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val ln = lines[i]
                         val okMark = ln.endsWith(".OK")
                         val noMark = ln.endsWith(".NO")
-                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 1.dp)
+                                .animateItem(fadeInSpec = tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             val headIcon = termDrawerIcon
                             if (i == 0 && headIcon != null) {
                                 Image(
@@ -2601,6 +2638,49 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 )
                             }
                         }
+                    }
+                }
+                if (termDrawerInput) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = termDrawerCmd,
+                            onValueChange = { termDrawerCmd = it },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(SmoothCornerShape(8.dp))
+                                .background(Color(0xFFFFFFFF))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontSize = 13.sp, color = Color(0xFF1C1C1E),
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "执行",
+                            color = Color(0xFF007AFF),
+                            fontSize = 15.sp,
+                            modifier = Modifier.clickable {
+                                val c = termDrawerCmd.trim()
+                                if (c.isNotEmpty()) {
+                                    termDrawerCmd = ""
+                                    termDrawer = (termDrawer ?: "") + "\$ " + c + "\n"
+                                    termScope.launch {
+                                        val out = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                                            runCatching { suNow(c) }.getOrDefault("")
+                                        }
+                                        if (out.isNotBlank()) {
+                                            termDrawer = (termDrawer ?: "") + out.trimEnd() + "\n"
+                                        }
+                                        termDrawer = (termDrawer ?: "") + "已完成 .OK\n"
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(14.dp))
@@ -2640,7 +2720,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             ) {
                 Column(
                     modifier = Modifier
-                        .width(270.dp)
+                        .width(240.dp)
                         .graphicsLayer {
                             scaleX = pop.value
                             scaleY = pop.value
@@ -2681,7 +2761,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .height(0.33.dp)
                         .background(Color(0x33000000))
                 )
-                Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+                Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -2689,7 +2769,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable { pickConfirm = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
+                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
                     }
                     Box(
                         modifier = Modifier
@@ -2708,7 +2788,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(pickConfirmOk, fontSize = 17.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
                 }
@@ -3000,6 +3080,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         android.widget.EditText(vctx).apply {
                             editView = this
                             setText(editText)
+                            // 允许长按选择/复制/粘贴
+                            isLongClickable = true
+                            setTextIsSelectable(true)
+                            // 禁用输入法的"全屏提取编辑框"，直接在当前界面内联输入
+                            setImeOptions(
+                                android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI or
+                                    android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN or
+                                    android.view.inputmethod.EditorInfo.IME_ACTION_NONE
+                            )
+                            setRawInputType(
+                                android.text.InputType.TYPE_CLASS_TEXT or
+                                    android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                                    android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                            )
                             // 双指缩放字号（Compose 手势被 AndroidView 拦截，这里用原生检测）
                             val sg = android.view.ScaleGestureDetector(vctx,
                                 object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -3087,7 +3181,16 @@ private fun playPopupFx(ctx: android.content.Context) {
     } catch (t: Throwable) {}
     try {
         val mp = ensurePopPlayer(ctx) ?: return
-        if (!popPlayerReady) return
+        if (!popPlayerReady) {
+            // 还没准备好：注册一次性回调，准备好了立刻响
+            mp.setOnPreparedListener { p ->
+                runCatching {
+                    p.seekTo(0)
+                    p.start()
+                }
+            }
+            return
+        }
         mp.seekTo(0)
         mp.start()
     } catch (t: Throwable) {}
@@ -4176,23 +4279,33 @@ private fun ProMaxIsland(
                                             try {
                                                 if (fpsShow) {
                                                     if (!android.provider.Settings.canDrawOverlays(navCtx)) {
-                                                        // 需要悬浮窗权限
+                                                        // 没悬浮窗权限：先引导授权，别启动（否则看起来"开了没效果"）
+                                                        fpsShow = false
+                                                        navCtx.getSharedPreferences("settings", 0).edit()
+                                                            .putBoolean("fps_show", false).apply()
+                                                        android.widget.Toast.makeText(navCtx, "请先授予「显示在其他应用上层」权限，再打开帧率", android.widget.Toast.LENGTH_LONG).show()
                                                         val it = android.content.Intent(
                                                             android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                                             android.net.Uri.parse("package:" + navCtx.packageName)
                                                         )
                                                         it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                                                         navCtx.startActivity(it)
+                                                    } else {
+                                                        navCtx.startForegroundService(
+                                                            android.content.Intent(navCtx, FpsOverlayService::class.java)
+                                                        )
                                                     }
-                                                    navCtx.startForegroundService(
-                                                        android.content.Intent(navCtx, FpsOverlayService::class.java)
-                                                    )
                                                 } else {
                                                     navCtx.stopService(
                                                         android.content.Intent(navCtx, FpsOverlayService::class.java)
                                                     )
                                                 }
-                                            } catch (t: Throwable) {}
+                                            } catch (t: Throwable) {
+                                                fpsShow = false
+                                                navCtx.getSharedPreferences("settings", 0).edit()
+                                                    .putBoolean("fps_show", false).apply()
+                                                android.widget.Toast.makeText(navCtx, "帧率启动失败：" + (t.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
+                                            }
                                         }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -5339,6 +5452,10 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                     } catch (t: Throwable) { "未适配此机型" }
                 }
             }
+            ModeButton(Icons.Rounded.Terminal, "终端", subtitle = "打开终端（可输入命令）", onRun = {
+                onDismiss()
+                onOpenTerminal()
+            })
             ModeButton(Icons.Rounded.DarkMode, "FPS+", subtitle = "根据帧率调节频率")
             ModeButton(Icons.Rounded.AcUnit, "禁用温控", subtitle = "小米/OPPO禁用温控")
             ModeButton(Icons.Rounded.Folder, "执行此文件", slot = "path3", onRun = {
@@ -5433,18 +5550,6 @@ private fun ModeButton(
         // 进界面检测 FPS+ 开关
         if (title == "FPS+") {
             on = ctxMsg.getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
-        }
-        // 进界面就检测"放开通行"状态（不用点击）
-        if (title == "放开通行") {
-            val ex = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "[ -f /data/adb/service.d/xy_open_access.sh ] && echo 1 || echo 0"))
-                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
-                    o == "1"
-                }.getOrDefault(false)
-            }
-            on = ex
         }
     }
     LaunchedEffect(latencyMsg) {
@@ -5699,42 +5804,6 @@ private fun ModeButton(
                 }
             }
         }
-        if (title == "放开通行") {
-            // 标记文件：/data/adb/xy_open_access.on
-            val exists = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                try {
-                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "[ -f /data/adb/xy_open_access.on ] && echo 1 || echo 0"))
-                    val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
-                    o == "1"
-                } catch (t: Throwable) { false }
-            }
-            if (on && !exists) {
-                // 开启：执行一次解除隐藏/启用（不循环）
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching {
-                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "pm list packages 2>/dev/null | sed 's/^package://' | while read pk; do pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done; " +
-                            "mkdir -p /data/adb; echo \"$(date)\" > /data/adb/xy_open_access.on; chmod 644 /data/adb/xy_open_access.on; echo done")).waitFor()
-                    }
-                }
-                latencyMsg = "已放开（执行一次）"
-            } else if (on && exists) {
-                latencyMsg = "已放开"
-            } else if (!on && exists) {
-                // 关闭：删标记（已生效的解除不回滚）
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching {
-                        Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                            "rm -f /data/adb/xy_open_access.on")).waitFor()
-                    }
-                }
-                latencyMsg = "已关闭"
-            } else {
-                latencyMsg = "已关闭"
-            }
-            refreshLatency()
-        }
     }
 
     Row(
@@ -5808,7 +5877,6 @@ private fun ModeButton(
                 }
                 ctx3.getSharedPreferences("yx_mode", 0).edit().putBoolean(
                     when (title) {
-                        "放开通行" -> "open"
                         "隐藏BL" -> "bl"
                         else -> "none"
                     },
@@ -5949,97 +6017,6 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                         latencyMsg = msg
                     }
                 }
-                if (title == "放开通行") {
-                    val enabling = on
-                    scope2.launch {
-                        withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            try {
-                                fun su(c: String): String {
-                                    val p = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", c))
-                                    val out = p.inputStream.bufferedReader().readText()
-                                    p.waitFor()
-                                    return out
-                                }
-                                if (enabling) {
-                                    // install a boot script so the state survives reboots
-                                    try {
-                                        val bootDir = "/data/adb/service.d"
-                                        su("mkdir -p $bootDir")
-                                        val boot = "#!/system/bin/sh\n" +
-                                            "chmod 771 /data/adb\n" +
-                                            "chmod 755 /data/adb/modules\n" +
-                                            "chmod 755 /data/adb/ksu\n" +
-                                            "chmod 755 /data/adb/ksud\n" +
-                                            "printf 'allow untrusted_app adb_data_file dir { open read search getattr }\\n' > /data/local/tmp/xy_allow.txt\n" +
-                                            "printf 'allow untrusted_app adb_data_file file { open read getattr }\\n' >> /data/local/tmp/xy_allow.txt\n" +
-                                            "n=0\n" +
-                                            "while [ \"\$n\" -lt 30 ]; do\n" +
-                                            "  done_ok=0\n" +
-                                            "  for c in /data/adb/ksud /data/adb/ksu/bin/ksud; do\n" +
-                                            "    [ -x \"\$c\" ] || continue\n" +
-                                            "    \"\$c\" sepolicy apply /data/local/tmp/xy_allow.txt >/dev/null 2>&1 && done_ok=1\n" +
-                                            "  done\n" +
-                                            "  [ \"\$done_ok\" = \"1\" ] && break\n" +
-                                            "  n=\$((n + 1))\n" +
-                                            "  sleep 2\n" +
-                                            "done\n"
-                                        su("cat > $bootDir/xy_open_access.sh <<'XYBOOT'\n" + boot + "XYBOOT\nchmod 755 $bootDir/xy_open_access.sh")
-                                    } catch (t: Throwable) {
-                                    }
-                                    for ((path, mode) in listOf(
-                                        "/data/adb" to "771",
-                                        "/data/adb/modules" to "755",
-                                        "/data/adb/ksu" to "755",
-                                        "/data/adb/ksud" to "755"
-                                    )) {
-                                        su("chmod $mode '" + path.replace("'", "'\''") + "' 2>/dev/null; true")
-                                    }
-                                    val domains = listOf(
-                                        "untrusted_app", "untrusted_app_25", "untrusted_app_27",
-                                        "untrusted_app_29", "untrusted_app_30", "untrusted_app_32",
-                                        "untrusted_app_34"
-                                    )
-                                    val rules = domains.joinToString("\n") { dm ->
-                                        "allow " + dm + " adb_data_file dir { open read search getattr }\n" +
-                                            "allow " + dm + " adb_data_file file { open read getattr }\n" +
-                                            "allow " + dm + " adb_data_file lnk_file read\n" +
-                                            "allow " + dm + " proc_modules file { open read getattr }"
-                                    } + "\n"
-                                    val rf = "/data/local/tmp/sepolicy_rules.txt"
-                                    su("printf '%s' '" + rules.replace("'", "'\''") + "' > $rf ; chmod 644 $rf ; true")
-                                    val ks = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
-                                    if (java.io.File(ks).exists()) {
-                                        su("'" + ks.replace("'", "'\\''") + "' sepolicy apply $rf 2>&1; true")
-                                    }
-                                } else {
-                                    try {
-                                        su("rm -f /data/adb/service.d/xy_open_access.sh")
-                                    } catch (t: Throwable) {
-                                    }
-                                    for (path in listOf(
-                                        "/data/adb", "/data/adb/modules",
-                                        "/data/adb/ksu", "/data/adb/ksud"
-                                    )) {
-                                        su("chmod 700 '" + path.replace("'", "'\''") + "' 2>/dev/null; true")
-                                    }
-                                    val rules = "deny untrusted_app adb_data_file dir { open read search getattr }\n" +
-                                        "deny untrusted_app adb_data_file file { open read getattr }\n" +
-                                        "deny untrusted_app adb_data_file lnk_file read\n" +
-                                        "deny untrusted_app proc_modules file { open read getattr }\n"
-                                    val rf = "/data/local/tmp/sepolicy_deny.txt"
-                                    su("printf '%s' '" + rules.replace("'", "'\''") + "' > $rf ; chmod 644 $rf ; true")
-                                    val ks = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
-                                    if (java.io.File(ks).exists()) {
-                                        su("'" + ks.replace("'", "'\\''") + "' sepolicy apply $rf 2>&1; true")
-                                    }
-                                }
-                            } catch (t: Throwable) {
-                            }
-                        }
-                        kotlinx.coroutines.delay(600)
-                        refreshLatency()
-                    }
-                }
             }
             .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -6168,7 +6145,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
         ) {
             Column(
                 modifier = Modifier
-                    .width(270.dp)
+                    .width(240.dp)
                     .shadow(24.dp, SmoothCornerShape(20.dp), clip = false, ambientColor = Color(0x33000000), spotColor = Color(0x33000000))
                     .clip(SmoothCornerShape(20.dp))
                     .background(Color(0xFFF2F2F7))
@@ -6425,7 +6402,8 @@ private fun BrowserPane(
             }
             }
         }
-        itemsIndexed(entries) { idx, entry ->
+        // key 用完整路径：避免刷新/排序时条目被复用导致图标、缩略图错位
+        itemsIndexed(entries, key = { _, e -> joinPath(path, e.name) }) { idx, entry ->
             val rowPath = joinPath(path, entry.name)
             FsRow(
                 name = entry.name,
@@ -6654,7 +6632,8 @@ private fun FsRow(
                     scaleY = sc
                 }
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                .clip(SmoothCornerShape(10.dp))
+                // 定位/选中高亮：直角、铺满整行宽度（不做圆角）
+                .fillMaxWidth()
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x4D007AFF)
@@ -6669,7 +6648,7 @@ private fun FsRow(
             Text(
                 text = name,
                 modifier = Modifier.weight(1f),
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = FontFamily.Monospace,
@@ -6779,7 +6758,14 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
                 }
                 val tmp = java.io.File(ctx.cacheDir, "thumb_$key")
                 if (!tmp.exists() || tmp.length() == 0L) {
-                    suNow("cp '" + fullPath.replace("'", "'\\''") + "' '" + tmp.absolutePath + "'")
+                    val qq = "'" + fullPath.replace("'", "'\\''") + "'"
+                    // 先 cp，失败再用 cat 兜底（大文件/特殊路径更稳）
+                    suNow("cp -f " + qq + " '" + tmp.absolutePath + "' 2>/dev/null || cat " + qq + " > '" + tmp.absolutePath + "'")
+                    runCatching {
+                        java.io.File("/data/local/tmp/xy_thumb_log.txt").appendText(
+                            "thumb " + fullPath + " -> " + tmp.length() + "\n"
+                        )
+                    }
                 }
                 if (!tmp.exists() || tmp.length() == 0L) null
                 else if (isImageFile) {
@@ -6792,7 +6778,16 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
                 } else {
                     val retr = android.media.MediaMetadataRetriever()
                     retr.setDataSource(tmp.absolutePath)
-                    val bmp = retr.getFrameAtTime(0)
+                    // 多时间点尝试：0 → 1s → 2s → 时长 1/4 → 任意帧
+                    var bmp: android.graphics.Bitmap? = null
+                    val durs = runCatching {
+                        (retr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION) ?: "0").toLong()
+                    }.getOrDefault(0L)
+                    for (t in listOf(0L, 1_000_000L, 2_000_000L, if (durs > 0) durs * 1000 / 4 else 0L)) {
+                        if (bmp != null) break
+                        bmp = runCatching { retr.getFrameAtTime(t, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC) }.getOrNull()
+                    }
+                    if (bmp == null) bmp = runCatching { retr.frameAtTime }.getOrNull()
                     retr.release()
                     if (bmp != null) {
                         val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, 96, 96, true)
@@ -6826,7 +6821,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
             bitmap = mediaThumbNow,
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = Modifier.size(20.dp).clip(SmoothCornerShape(4.dp))
+            modifier = Modifier.size(31.dp).clip(SmoothCornerShape(7.dp))
         )
     } else if (apkIconNow != null) {
         Image(
@@ -6834,13 +6829,78 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
             contentDescription = null,
             modifier = Modifier.size(20.dp)
         )
+    } else if (isDir) {
+        // /data/user/0/<pkg>、/data/data/<pkg>、Android/data/<pkg> → 显示该应用图标
+        val parent = fullPath.substringBeforeLast('/', "")
+        val isAppDataDir = parent.endsWith("/data/user/0") || parent.endsWith("/data/data") ||
+            parent.endsWith("/Android/data") || parent.endsWith("/Android/obb") ||
+            parent.endsWith("/data/app")
+        val appIcon by produceState<ImageBitmap?>(if (isAppDataDir) pkgIconCache[name] else null, fullPath) {
+            if (!isAppDataDir) return@produceState
+            value = kotlinx.coroutines.withContext(Dispatchers.IO) { loadPkgIcon(ctx, name) }
+        }
+        if (appIcon != null) {
+            Image(
+                bitmap = appIcon!!,
+                contentDescription = null,
+                modifier = Modifier.size(31.dp).clip(SmoothCornerShape(7.dp))
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Rounded.Folder,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = Color(FOLDER_ICON)
+            )
+        }
     } else {
+        // 按类型配 iOS 风格图标 + 配色（简约）
+        fun has(vararg exts: String) = exts.any { lowerName.endsWith(it) }
+        val (ic, tintColor) = when {
+            has(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".svg") ->
+                Icons.Rounded.Image to Color(0xFF34C759)
+            has(".mp4", ".mkv", ".avi", ".mov", ".3gp", ".webm", ".ts") ->
+                Icons.Rounded.Movie to Color(0xFFFF2D55)
+            has(".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus") ->
+                Icons.Rounded.Audiotrack to Color(0xFFAF52DE)
+            has(".zip", ".tar", ".gz", ".tgz", ".7z", ".rar", ".xz", ".bz2", ".zst") ->
+                Icons.Rounded.FolderZip to Color(0xFFFF9500)
+            has(".apk", ".apks", ".xapk", ".apkm") ->
+                Icons.Rounded.Android to Color(0xFF34C759)
+            has(".sh", ".py", ".js", ".ts", ".kt", ".java", ".c", ".cpp", ".h", ".rs", ".go", ".lua", ".json", ".xml", ".yml", ".yaml", ".gradle", ".toml", ".ini", ".conf", ".prop") ->
+                Icons.Rounded.Code to Color(0xFF007AFF)
+            has(".txt", ".md", ".pdf", ".doc", ".docx", ".xls", ".ppt", ".log", ".csv") ->
+                Icons.Rounded.Description to Color(0xFF5AC8FA)
+            has(".so", ".bin", ".img", ".ko", ".elf", ".dex", ".jar") ->
+                Icons.Rounded.Memory to Color(0xFF8E8E93)
+            else -> Icons.Rounded.InsertDriveFile to Color(FILE_ICON)
+        }
         Icon(
-            imageVector = if (isDir) Icons.Rounded.Folder else Icons.Rounded.InsertDriveFile,
+            imageVector = ic,
             contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = if (isDir) Color(FOLDER_ICON) else (fileAccent(name) ?: Color(FILE_ICON))
+            modifier = Modifier.size(24.dp),
+            tint = tintColor
         )
+    }
+}
+
+private fun loadPkgIcon(ctx: Context, pkg: String): ImageBitmap? {
+    return try {
+        pkgIconCache[pkg] ?: run {
+            val pm = ctx.packageManager
+            val d = pm.getApplicationIcon(pkg)
+            val w = d.intrinsicWidth.coerceAtLeast(48)
+            val h = d.intrinsicHeight.coerceAtLeast(48)
+            val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            val cv = android.graphics.Canvas(b)
+            d.setBounds(0, 0, w, h)
+            d.draw(cv)
+            val img = b.asImageBitmap()
+            pkgIconCache[pkg] = img
+            img
+        }
+    } catch (t: Throwable) {
+        null
     }
 }
 
@@ -8790,6 +8850,7 @@ class FpsOverlayService : Service() {
         if (!bin.exists()) {
             try { assets.open("fpsbinder2").use { input -> bin.outputStream().use { input.copyTo(it) } } } catch (t: Throwable) {}
         }
+        logLine("fpsbinder2 解压检查: exists=" + bin.exists() + " len=" + bin.length())
         if (bin.exists() && bin.length() > 10000) {
             bin.setExecutable(true)
             // stderr 落 fpsbinder.log，便于诊断层选择/timestats
@@ -9396,7 +9457,7 @@ class FpsOverlayService : Service() {
     // 自适应调频（闭环）：帧率稳定降频省电，掉帧升频保帧
     private var lastAdaptMs = 0L
     private var lastAdaptLog = 0L
-    private var adaptIdx = 100
+    private var adaptIdx = 95
     private var lockedTarget = 0.0   // 进游戏锁定的目标档位，退出游戏清零
     private var adaptUpStreak = 0
     private var adaptDownStreak = 0  // 0-100 频率比例
@@ -9424,7 +9485,7 @@ class FpsOverlayService : Service() {
         //   fps ≥ 目标        → 每周期 -2%（缓慢降，省电）
         val diff = fps - target
         if (diff < -8.0) {
-            adaptIdx = 100
+            adaptIdx = 95
             if (now - lastAdaptLog >= 1500L) {
                 lastAdaptLog = now
                 logLine("严重掉帧拉满: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
@@ -9432,7 +9493,7 @@ class FpsOverlayService : Service() {
             }
         } else if (diff < -1.0) {
             // 容差 1 帧：119.1 也算 120 档，不拉；118.9 才算未达标
-            adaptIdx = (adaptIdx + 8).coerceAtMost(100)
+            adaptIdx = (adaptIdx + 8).coerceAtMost(95)
             if (now - lastAdaptLog >= 1500L) {
                 lastAdaptLog = now
                 logLine("未达标上拉: fps=" + String.format("%.1f", fps) + " 目标=" + String.format("%.0f", target) +
@@ -9528,7 +9589,7 @@ class FpsOverlayService : Service() {
         // 保存原值 + 拉频（合并成一次 su，减少开销）
         sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null; " +
            "[ -f /data/local/tmp/fps_plus_gpu ] || echo \"\$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null) \$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" > /data/local/tmp/fps_plus_gpu 2>/dev/null; " +
-           "for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); [ -n \"\$hw\" ] && { echo \$hw > \$p/scaling_max_freq 2>/dev/null; echo \$hw > \$p/scaling_min_freq 2>/dev/null; }; done; " +
+           "for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); lo=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); [ -n \"\$hw\" ] && [ -n \"\$lo\" ] && { t=\$(( lo + (hw - lo) * 95 / 100 )); echo \$t > \$p/scaling_max_freq 2>/dev/null; echo \$t > \$p/scaling_min_freq 2>/dev/null; }; done; " +
            "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
            "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
            "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
