@@ -419,6 +419,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var cmRenamePath by remember { mutableStateOf<String?>(null) }
     // 超级用户：点图标直接开抽屉（不激活灵动岛）
     var suOpenTick by remember { mutableStateOf(0) }
+    // 抽屉终端：非空时显示输出
+    var termDrawer by remember { mutableStateOf<String?>(null) }
     var cmRenameText by remember { mutableStateOf("") }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
@@ -711,6 +713,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             // 诊断：输出分支判断
                             val _dbg = "p=" + p + " lower=" + lower + " isZip=" + lower.endsWith(".zip") + " isSh=" + lower.endsWith(".sh") + "\n"
                             run { }
+                            // APK：走结构化安装报告（抽屉终端 5 行）
+                            if (lower.endsWith(".apk")) {
+                                termDrawer = ""
+                                installApkReport(appCtx, p,
+                                    { line, okLine ->
+                                        termDrawer = (termDrawer ?: "") + line + (if (okLine) " .OK" else " .NO") + "\n"
+                                    },
+                                    { })
+                                return@withContext
+                            }
                             val cmd = when {
                                 lower.endsWith(".apk") ->
                                     // 我们的安装方式：-r 覆盖 + -d 允许降级 + -g 授予权限
@@ -1068,6 +1080,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         },
         suOpenTick = suOpenTick,
         onSuOpen = { suOpenTick += 1 },
+        onShowTermDrawer = { txt -> termDrawer = txt },
         onShowSuConfirm = { pkg, uid, label, signed ->
             pickConfirm = (if (signed) "卸载 $label 签名" else "签名 $label") to {
                 // 不收起抽屉，只刷新列表状态
@@ -1652,8 +1665,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     ctxMenuClosing = true
                 })
                 // 解压 / 压缩（直接执行）
-                items.add(CmItem(if (cmIsArchive) "解压到当前目录" else "压缩") {
+                items.add(CmItem(if (cmIsArchive) "解压" else "压缩") {
                     cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
+                    if (cmIsArchive) {
+                        // 解压到对面后，定位/高亮对面目录
+                        try {
+                            FileLocate.side = if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) "R" else "L"
+                            FileLocate.path = otherDir
+                            FileLocate.tick += 1
+                        } catch (t: Throwable) {}
+                    }
                 })
                 // 复制路径
                 items.add(CmItem("复制路径") {
@@ -2048,10 +2069,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val pickSheetState = androidx.compose.material3.rememberModalBottomSheetState(
             skipPartiallyExpanded = true
         )
+        val pickScope = androidx.compose.runtime.rememberCoroutineScope()
         val closePick: () -> Unit = {
-            uiPicker = null
-            uiPickerSelected = null
-            uiPickerIcons = null
+            // 播放下滑收起动画（和点空白一致）
+            pickScope.launch {
+                try { pickSheetState.hide() } catch (t: Throwable) {}
+                uiPicker = null
+                uiPickerSelected = null
+                uiPickerIcons = null
+            }
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
         // 抽屉出现：音效 + 振动
@@ -2218,6 +2244,74 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     }
 
 
+
+
+    // 抽屉终端：用原本的抽屉样式（ModalBottomSheet），只显示输出
+    val td = termDrawer
+    if (td != null) {
+        val termSheetState = androidx.compose.material3.rememberModalBottomSheetState(
+            skipPartiallyExpanded = true
+        )
+        val termScope = androidx.compose.runtime.rememberCoroutineScope()
+        val closeTerm = {
+            termScope.launch {
+                try { termSheetState.hide() } catch (t: Throwable) {}
+                termDrawer = null
+            }
+        }
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { closeTerm() },
+            sheetState = termSheetState,
+            containerColor = Color(0xFFF2F2F7),
+            shape = SmoothCornerShape(12.dp),
+            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
+            sheetGesturesEnabled = true,
+            contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
+            dragHandle = null
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("终端输出", color = Color(0xFF8E8E93), fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text(
+                        "完成",
+                        color = Color(0xFF0A84FF),
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable { closeTerm() }
+                    )
+                }
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)
+                ) {
+                    val lines = td.split("\n")
+                    items(lines.size) { i ->
+                        val ln = lines[i]
+                        val okMark = ln.endsWith(".OK")
+                        val noMark = ln.endsWith(".NO")
+                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp)) {
+                            Text(
+                                text = ansiToAnnotated(ln),
+                                fontSize = 11.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (okMark || noMark) {
+                                Text(
+                                    text = if (okMark) "  .OK" else "  .NO",
+                                    fontSize = 11.sp,
+                                    color = if (okMark) Color(0xFF007AFF) else Color(0xFFFF3B30),
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+        }
+    }
 
     // 抽屉「确定/取消」的确认弹窗（iOS Alert 样式：文案 + 分割线 + 左红取消/右蓝确定）
     val pc = pickConfirm
@@ -2803,6 +2897,7 @@ private fun ProMaxIsland(
     onShowSuConfirm: (String, Int, String, Boolean) -> Unit,
     suOpenTick: Int,
     onSuOpen: () -> Unit,
+    onShowTermDrawer: (String) -> Unit,
     onExtractPick: () -> Unit,
     onDelete: () -> Unit,
     onAction: (String) -> Unit,
@@ -2892,7 +2987,7 @@ private fun ProMaxIsland(
     var suSel by remember { mutableStateOf(-1) }
     val navCtx = LocalContext.current
     val navScope = rememberCoroutineScope()
-    LaunchedEffect(navTarget, jumpStep) {
+    LaunchedEffect(navTarget, jumpStep, suOpenTick) {
         modSel = -1
         suSel = -1
         if (navTarget == "module") {
@@ -2925,69 +3020,15 @@ private fun ProMaxIsland(
                 }
             }
         }
-        // 点超级用户图标：完全用游戏清理同款列表（Thread + suList/兜底 + 图标）
+        // 点超级用户图标：调用与游戏清理完全相同的加载函数
         if (suOpenTick > 0) {
-            uiPickerTitle = "超级用户"
-            uiPicker = emptyList()
-            uiPickerIcons = null
-            uiPickerMarks = emptyMap()
-            uiPickerSelected = null
-            Thread {
-                try {
-                    val pm = navCtx.packageManager
-                    val suList = try {
-                        val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
-                        val res = kotlinx.coroutines.runBlocking { repo.getAppList() }
-                        res.getOrNull()?.first ?: emptyList()
-                    } catch (t: Throwable) { emptyList() }
-                    val apps: List<SuApp> = if (suList.isNotEmpty()) {
-                        suList.filter { ai ->
-                            val aiInfo = ai.packageInfo.applicationInfo
-                            val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                            (!isSystem || ai.allowSu) && ai.packageName != "android" &&
-                                ai.packageName != navCtx.packageName
-                        }
-                            .sortedBy { it.label }
-                            .map { SuApp(it.packageName, it.label, it.uid, it.allowSu, null) }
-                    } else {
-                        pm.getInstalledApplications(0)
-                            .filter {
-                                val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                                val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
-                                !isSystem && hasCode && it.packageName != "android" &&
-                                    it.packageName != navCtx.packageName
-                            }
-                            .sortedBy { it.loadLabel(pm).toString() }
-                            .map { SuApp(it.packageName, it.loadLabel(pm).toString(), it.uid, false, null) }
-                    }
-                    // 已授权置顶
-                    val sorted = apps.sortedWith(compareByDescending<SuApp> { it.allowed }.thenBy { it.label })
-                    val icons = sorted.map { app ->
-                        try {
-                            val d = pm.getApplicationIcon(app.pkg)
-                            val bmp = android.graphics.Bitmap.createBitmap(
-                                d.intrinsicWidth.coerceAtLeast(48),
-                                d.intrinsicHeight.coerceAtLeast(48),
-                                android.graphics.Bitmap.Config.ARGB_8888
-                            )
-                            val cv = android.graphics.Canvas(bmp)
-                            d.setBounds(0, 0, cv.width, cv.height)
-                            d.draw(cv)
-                            bmp.asImageBitmap()
-                        } catch (t: Throwable) { null }
-                    }
-                    suApps = sorted
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        uiPickerTitle = "超级用户 " + sorted.size + "/" + sorted.count { it.allowed }
-                        uiPicker = sorted.map { it.label }
-                        uiPickerIcons = icons
-                        uiPickerMarks = sorted.filter { it.allowed }.associate { it.label to "已签名" }
-                        uiPickerAction = { sel ->
-                            val app = suApps.firstOrNull { it.label == sel }
-                            onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
-                        }
-                    }
-                } catch (t: Throwable) {}
+            loadAppPicker(navCtx, "超级用户") { apps, icons ->
+                suApps = apps
+                uiPickerMarks = apps.filter { it.allowed }.associate { it.label to "已签名" }
+                uiPickerAction = { sel ->
+                    val app = suApps.firstOrNull { it.label == sel }
+                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                }
             }
         }
         if (navTarget == "su" || (navTarget == "home" && jumpStep == 7)) {
@@ -6301,6 +6342,7 @@ private fun FsRow(
                     scaleY = sc
                 }
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .clip(SmoothCornerShape(10.dp))
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x4D007AFF)
@@ -6856,6 +6898,148 @@ private fun findAllMatches(text: String, q: String): List<Pair<Int, Int>> {
 }
 
 // 游戏清理：先选应用再清理该应用缓存
+
+// 应用列表加载（游戏清理 / 超级用户共用同一套）
+
+// 安装 APK 并输出结构化报告（5 行，行尾 .OK/.NO）
+internal fun installApkReport(ctx: android.content.Context, path: String, onLine: (String, Boolean) -> Unit, onDone: (Boolean) -> Unit) {
+    Thread {
+        val pm = ctx.packageManager
+        // ① 图标 + 名称 + 版本
+        var label = path.substringAfterLast('/')
+        var ver = ""
+        var icon: android.graphics.Bitmap? = null
+        try {
+            val info = pm.getPackageArchiveInfo(path, 0)
+            val ai = info?.applicationInfo
+            if (ai != null) {
+                ai.sourceDir = path
+                ai.publicSourceDir = path
+                label = pm.getApplicationLabel(ai).toString()
+                ver = info.versionName ?: ""
+                val d = ai.loadIcon(pm)
+                val w = d.intrinsicWidth.coerceAtLeast(1)
+                val h = d.intrinsicHeight.coerceAtLeast(1)
+                icon = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                android.graphics.Canvas(icon).also { c -> d.setBounds(0, 0, w, h); d.draw(c) }
+            }
+        } catch (t: Throwable) {}
+        onLine("应用：" + label + "  v" + ver, true)
+        // ② 准备
+        onLine("准备将此程序加载至桌面", true)
+        // ③ root 检测
+        val hasRoot = try {
+            val p = Runtime.getRuntime().exec(arrayOf(suBin(), "-c", "id"))
+            val o = p.inputStream.bufferedReader().readText()
+            p.waitFor()
+            o.contains("uid=0")
+        } catch (t: Throwable) { false }
+        onLine("SU", hasRoot)
+        if (!hasRoot) {
+            // 系统安装器
+            try {
+                ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                    setDataAndType(
+                        androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", java.io.File(path)),
+                        "application/vnd.android.package-archive"
+                    )
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+                onLine("已调用系统安装器", true)
+                onDone(true)
+            } catch (t: Throwable) {
+                onLine("调用系统安装器失败：" + (t.message ?: ""), false)
+                onDone(false)
+            }
+            return@Thread
+        }
+        // ④ root 安装
+        onLine("root 安装日志：", true)
+        val (ok, out) = try {
+            val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                "cp -f '" + path.replace("'", "'\\''") + "' /data/local/tmp/xy_install.apk && " +
+                    "chmod 644 /data/local/tmp/xy_install.apk && " +
+                    "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1"))
+            val t = pr.inputStream.bufferedReader().readText()
+            pr.waitFor()
+            (t.contains("Success"), t.trim().takeLast(300))
+        } catch (t: Throwable) {
+            (false, t.message ?: "执行失败")
+        }
+        out.split("\n").filter { it.isNotBlank() }.forEach { onLine(it, ok) }
+        // ⑤ 结果
+        onLine(if (ok) "已加载至桌面" else "安装失败", ok)
+        onDone(ok)
+    }
+}
+
+internal fun loadAppPicker(
+    ctx: android.content.Context,
+    title: String,
+    onLoaded: (List<SuApp>, List<androidx.compose.ui.graphics.ImageBitmap?>) -> Unit
+) {
+    uiPickerTitle = title
+    uiPicker = emptyList()
+    uiPickerIcons = null
+    uiPickerSelected = null
+    Thread {
+        try {
+            val pm = ctx.packageManager
+            val suList = try {
+                val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+                val res = kotlinx.coroutines.runBlocking { repo.getAppList() }
+                res.getOrNull()?.first ?: emptyList()
+            } catch (t: Throwable) { emptyList() }
+            val apps: List<SuApp> = if (suList.isNotEmpty()) {
+                suList.filter { ai ->
+                    val aiInfo = ai.packageInfo.applicationInfo
+                    val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                    (!isSystem || ai.allowSu) && ai.packageName != "android" &&
+                        ai.packageName != ctx.packageName
+                }
+                    .sortedBy { it.label }
+                    .map { SuApp(it.packageName, it.label, it.uid, it.allowSu, null) }
+            } else {
+                pm.getInstalledApplications(0)
+                    .filter {
+                        val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                        val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
+                        !isSystem && hasCode && it.packageName != "android" &&
+                            it.packageName != ctx.packageName
+                    }
+                    .sortedBy { it.loadLabel(pm).toString() }
+                    .map { SuApp(it.packageName, it.loadLabel(pm).toString(), it.uid, false, null) }
+            }
+            val icons = apps.map { app ->
+                try {
+                    val d = pm.getApplicationIcon(app.pkg)
+                    val bmp = android.graphics.Bitmap.createBitmap(
+                        d.intrinsicWidth.coerceAtLeast(48),
+                        d.intrinsicHeight.coerceAtLeast(48),
+                        android.graphics.Bitmap.Config.ARGB_8888
+                    )
+                    val cv = android.graphics.Canvas(bmp)
+                    d.setBounds(0, 0, cv.width, cv.height)
+                    d.draw(cv)
+                    bmp.asImageBitmap()
+                } catch (t: Throwable) { null }
+            }
+            runCatching {
+                java.io.File("/data/local/tmp/xy_su_log.txt").appendText("loaded " + title + " apps=" + apps.size + "\n")
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                uiPicker = apps.map { it.label }
+                uiPickerIcons = icons
+                onLoaded(apps, icons)
+            }
+        } catch (t: Throwable) {
+            runCatching {
+                java.io.File("/data/local/tmp/xy_su_log.txt").appendText("ERR " + title + " " + t + "\n")
+            }
+        }
+    }
+}
+
 internal fun gameCleanCache(ctx: android.content.Context) {
     // 立即打开抽屉（先空列表，加载完再填）
     uiPickerTitle = "选择要重置的应用"
@@ -9009,4 +9193,48 @@ internal fun parseLatencyText(out: String): Double? {
         return if (fps > maxFps) maxFps else fps
     }
 
+// ANSI 颜色 → AnnotatedString（终端彩色输出）
+fun ansiToAnnotated(src: String): androidx.compose.ui.text.AnnotatedString {
+    val b = androidx.compose.ui.text.AnnotatedString.Builder()
+    var i = 0
+    var color: androidx.compose.ui.graphics.Color? = null
+    while (i < src.length) {
+        if (src[i] == '\u001b' && i + 1 < src.length && src[i + 1] == '[') {
+            val end = src.indexOf('m', i + 2)
+            if (end > 0) {
+                val nums = src.substring(i + 2, end).split(';')
+                for (n in nums) {
+                    val v = n.toIntOrNull() ?: continue
+                    color = when (v) {
+                        0 -> null
+                        30 -> androidx.compose.ui.graphics.Color(0xFF1C1C1E)
+                        31 -> androidx.compose.ui.graphics.Color(0xFFD70000)
+                        32 -> androidx.compose.ui.graphics.Color(0xFF00A300)
+                        33 -> androidx.compose.ui.graphics.Color(0xFFB8860B)
+                        34 -> androidx.compose.ui.graphics.Color(0xFF007AFF)
+                        35 -> androidx.compose.ui.graphics.Color(0xFFAF52DE)
+                        36 -> androidx.compose.ui.graphics.Color(0xFF00BCD4)
+                        37 -> androidx.compose.ui.graphics.Color(0xFF6B6B6B)
+                        90 -> androidx.compose.ui.graphics.Color(0xFF8E8E93)
+                        91 -> androidx.compose.ui.graphics.Color(0xFFFF3B30)
+                        92 -> androidx.compose.ui.graphics.Color(0xFF34C759)
+                        93 -> androidx.compose.ui.graphics.Color(0xFFFFCC00)
+                        94 -> androidx.compose.ui.graphics.Color(0xFF5AC8FA)
+                        95 -> androidx.compose.ui.graphics.Color(0xFFFF2D55)
+                        96 -> androidx.compose.ui.graphics.Color(0xFF32ADE6)
+                        97 -> androidx.compose.ui.graphics.Color(0xFF1C1C1E)
+                        else -> color
+                    }
+                }
+                i = end + 1
+                continue
+            }
+        }
+        b.pushStyle(androidx.compose.ui.text.SpanStyle(color = color ?: androidx.compose.ui.graphics.Color(0xFF1C1C1E)))
+        b.append(src[i])
+        b.pop()
+        i++
+    }
+    return b.toAnnotatedString()
+}
 
