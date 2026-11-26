@@ -2647,7 +2647,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     ) { pickConfirm = null },
                 contentAlignment = Alignment.Center
             ) {
-            Column(
+                Column(
                     modifier = Modifier
                         .width(240.dp)
                         .graphicsLayer {
@@ -2655,12 +2655,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             scaleY = pop.value
                             alpha = ((pop.value - 0.92f) / 0.08f).coerceIn(0f, 1f)
                         }
-            }
-                    .shadow(24.dp, SmoothCornerShape(20.dp), clip = false, ambientColor = Color(0x33000000), spotColor = Color(0x33000000))
-                    .clip(SmoothCornerShape(20.dp))
-                    .background(Color(0xFFF2F2F7))
-                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
-            ) {
+                        .shadow(24.dp, SmoothCornerShape(20.dp), clip = false, ambientColor = Color(0x33000000), spotColor = Color(0x33000000))
+                        .clip(SmoothCornerShape(20.dp))
+                        .background(Color(0xFFF2F2F7))
+                        .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
+                ) {
                 Text(
                     text = run {
                         val w = pickConfirmAccentWord
@@ -2699,7 +2698,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable { pickConfirm = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
+                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
                     }
                     Box(
                         modifier = Modifier
@@ -2718,8 +2717,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 17.sp, color = Color(0xFF007AFF))
                     }
+                }
                 }
             }
         }
