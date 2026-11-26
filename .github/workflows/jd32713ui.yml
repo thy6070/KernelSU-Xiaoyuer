@@ -42,6 +42,13 @@ jobs:
         run: |
           git clone -q https://github.com/tiann/KernelSU.git src
           cd src && git checkout 2a60b289
+      - name: Remove ksud ASCII banner
+        run: |
+          # ksud 自带 KernelSU 的 ASCII logo（module.rs / boot_patch.rs 里 println!(include_str!("banner"))）
+          sed -i '/include_str!("banner")/d' src/userspace/ksud/src/module.rs
+          sed -i '/include_str!("banner")/d' src/userspace/ksud/src/boot_patch.rs
+          echo "--- check:"
+          grep -rn 'include_str!("banner")' src/userspace/ksud/src/ || echo "banner removed"
       - name: Setup rust
         run: |
           rustup update stable
