@@ -683,28 +683,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         val doActionFile: (String) -> Unit = { soKey ->
             val p = longPressPath ?: selectedFile
             val apkName = p?.substringAfterLast('/') ?: ""
-            if (p != null && isApk(apkName)) {
-                selectedFile = null
-                uiScope.launch {
-                    runMessage = "安装中…"
-                    val msg = withContext(Dispatchers.IO) {
-                        try {
-                            val q = "'" + p.replace("'", "'\''") + "'"
-                            val out = Shell.cmd(
-                                "cp -f " + q + " /data/local/tmp/xy_install.apk; " +
-                                    "chmod 644 /data/local/tmp/xy_install.apk; " +
-                                    "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
-                            ).exec()
-                            val txt = (out.out + out.err).joinToString("\n")
-                            if (txt.contains("Success")) "安装成功" else "安装失败"
-                        } catch (t: Throwable) {
-                            "安装失败：" + (t.message ?: "")
-                        }
-                    }
-                    runMessage = msg
-                    refreshTick += 1
-                }
-            } else if (p != null) {
+            if (p != null) {
                 val lower = p.lowercase()
                 uiScope.launch {
                     running = true
@@ -744,7 +723,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 termDrawer = nm0 + "  v" + (info0?.versionName ?: "") + "  " + (info0?.packageName ?: "") + "\n准备将此程序加载至桌面\n"
                                 termDrawerConfirm = {
                                     termDrawerConfirm = null
-                                    termDrawer = (termDrawer ?: "") + "已就绪 .OK\n"
+                                    kotlinx.coroutines.delay(1000)   // 先让抽屉展开
                                     installApkReport(appCtx, p,
                                     { line, okLine ->
                                         termDrawer = (termDrawer ?: "") + line + (if (okLine) " .OK" else " .NO") + "\n"
@@ -1086,6 +1065,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             uiPickerSelected = null
             uiPicker = emptyList()
             uiPickerIcons = null
+            uiPickerMarks = emptyMap()   // 提取不显示「已签名」
             Thread {
                 try {
                     val pm = appCtx.packageManager
@@ -1158,7 +1138,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 先输出过程
                 val act0 = if (signed) "取消签名" else "签名"
                 termDrawer = (termDrawer ?: "") + "开始" + act0 + "：应用 " + pkg + "，uid=" + uid + " .OK\n"
-                termDrawer = (termDrawer ?: "") + "已就绪 .OK\n"
+                kotlinx.coroutines.delay(1000)   // 先让抽屉展开
                 val before = withContext(Dispatchers.IO) {
                     runCatching {
                         me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)?.allowSu == true
@@ -1219,10 +1199,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 withContext(Dispatchers.IO) {
                     try {
                         val safe = label.replace("/", "_").replace("\"", "_")
+                        // 提取到单独目录：files/提取/
                         val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
-                            "mkdir -p \"/data/user/0/com.tencent.THY/files\"; " +
-                            "cp \"\$P\" \"/data/user/0/com.tencent.THY/files/$safe.apk\" && " +
-                            "chmod 644 \"/data/user/0/com.tencent.THY/files/$safe.apk\""
+                            "mkdir -p \"/data/user/0/com.tencent.THY/files/提取\"; " +
+                            "cp \"\$P\" \"/data/user/0/com.tencent.THY/files/提取/$safe.apk\" && " +
+                            "chmod 644 \"/data/user/0/com.tencent.THY/files/提取/$safe.apk\""
                         ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
                     } catch (t: Throwable) {
                     }
@@ -1231,7 +1212,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 try {
                     val safe = label.replace("/", "_").replace("\"", "_")
                     FileLocate.side = if (longPressFromRight) "R" else "L"
-                    FileLocate.path = "/data/user/0/com.tencent.THY/files/" + safe + ".apk"
+                    FileLocate.path = "/data/user/0/com.tencent.THY/files/提取/" + safe + ".apk"
                     FileLocate.tick += 1
                 } catch (t: Throwable) {}
                 refreshTick += 1
@@ -1392,7 +1373,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         "echo '--- verify:' ; " +
                         "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then " +
                         "echo \"[OK] \$ZID installed\" ; else echo \"[FAIL] \$ZID incomplete\" ; fi"
-                    termDrawer = (termDrawer ?: "") + "已就绪 .OK\n"
+                    kotlinx.coroutines.delay(1000)   // 先让抽屉展开
                     termDrawer = (termDrawer ?: "") + "清理旧版本残留并调用 ksud 执行安装 .OK\n"
                     try {
                         val bb = listOf(
@@ -2323,6 +2304,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 if (sel != null) {
                                     when (pickTitle) {
                                         "选择机型" -> {
+                                            pickConfirmOk = "确定"
+                                            pickConfirmAccentWord = null
+                                            pickConfirm = "设为 " + sel to {
                                             // 改机型：日志抽屉 → 执行 → 结果 → 右上确定弹重启
                                             val setAct = uiPickerAction
                                             termDrawerTitle = sel
@@ -2346,7 +2330,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                     }
                                                 }
                                                 termDrawer = (termDrawer ?: "") + "修改项：ro.product.model → " + sel + " .OK\n"
-                                                termDrawer = (termDrawer ?: "") + "已就绪 .OK\n"
+                                                kotlinx.coroutines.delay(1000)   // 先让抽屉展开
                                                 withContext(Dispatchers.IO) {
                                                     try { setAct?.invoke(sel) } catch (t: Throwable) {}
                                                 }
@@ -2366,6 +2350,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                     }
                                                 }
                                             }
+                                            }   // pickConfirm to { 结束（机型）
                                         }
                                         // 提取：直接打开应用操作菜单（抽屉保留）
                                         "选择要提取的应用" -> {
@@ -2376,12 +2361,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             uiPickerAction?.invoke(sel)
                                         }
                                         else -> {
+                                            // 先弹确认，确定后再走日志抽屉
+                                            pickConfirmOk = "确定"
+                                            pickConfirmAccentWord = null
+                                            pickConfirm = "重置 " + sel to {
                                             // 重置：打开日志抽屉 → 执行 → 结果 → 右上确定弹重启
                                             val appSel = uiPickerAction
                                             termDrawerTitle = sel
-                                            termDrawer = "应用：" + sel + "\n"
+                                            // 首行图标 = 该应用图标
+                                            runCatching {
+                                                val idx2 = uiPicker?.indexOf(sel) ?: -1
+                                                termDrawerIcon = uiPickerIcons?.getOrNull(idx2)
+                                            }
+                                            termDrawer = sel + "\n"
                                             uiScope.launch {
-                                                termDrawer = (termDrawer ?: "") + "已就绪 .OK\n"
+                                                kotlinx.coroutines.delay(1000)   // 先让抽屉展开
                                                 // 实时输出：每条删除/修改立即显示
                                                 resetLineSink = { line ->
                                                     termDrawer = (termDrawer ?: "") + line + "\n"
@@ -2406,6 +2400,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                     }
                                                 }
                                             }
+                                            }   // pickConfirm to { 结束
                                         }
                                     }
                                 }
@@ -2524,14 +2519,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             dragHandle = null
         ) {
           androidx.compose.foundation.layout.Box(
-              modifier = Modifier.fillMaxWidth().background(Color(0xFFF2F2F7))
+              modifier = Modifier
+                  .fillMaxWidth()
+                  .shadow(28.dp, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp), clip = false,
+                      ambientColor = Color(0x40000000), spotColor = Color(0x40000000))
+                  .background(Color(0xFFF2F2F7))
           ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFFF2F2F7))
-                    .shadow(28.dp, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp), clip = false,
-                        ambientColor = Color(0x40000000), spotColor = Color(0x40000000))
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
@@ -2574,10 +2571,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }
                 androidx.compose.foundation.lazy.LazyColumn(
                     state = termListState,
-                    modifier = Modifier.fillMaxWidth().background(Color(0xFFF2F2F7)).heightIn(
-                        min = 160.dp,
-                        // 整体 78%：扣掉顶栏（约 44dp）
-                        max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.78f - 44f).dp
+                    modifier = Modifier.fillMaxWidth().background(Color(0xFFF2F2F7)).height(
+                        // 固定高度（整体 75% - 顶栏 44dp），避免内容多少导致时高时低
+                        (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.75f - 44f).dp
                     )
                 ) {
                     val lines = termLines
@@ -2604,7 +2600,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             if (okMark || noMark) {
                                 Text(
                                     text = if (okMark) "  .OK" else "  .NO",
-                                    fontSize = 14.5.sp,
+                                    fontSize = 13.5.sp,
                                     color = if (okMark) Color(0xFF007AFF) else Color(0xFFFF3B30),
                                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                 )
@@ -3459,7 +3455,7 @@ private fun ProMaxIsland(
             extractFailed = true
             extractDone = false
             expanded = false
-        } else if (runMessage == "安装中…" || runMessage == "已安装") {
+        } else if (runMessage == "已安装") {
             expanded = false
         }
     }
@@ -4393,22 +4389,32 @@ private fun ProMaxIsland(
                                                                             android.widget.Toast.makeText(navCtx, "该模块没有 action.sh", android.widget.Toast.LENGTH_SHORT).show()
                                                                         }
                                                                     } else {
-                                                                        // 官方做法：用普通 su shell 执行 action.sh（--mount-master 会因命名空间失败）
-                                                                        val out = withContext(Dispatchers.IO) {
+                                                                        // 输出到抽屉终端（实时），不再弹 Toast
+                                                                        withContext(Dispatchers.Main) {
+                                                                            onShowTermDrawer("模块：${m.id}\n")
+                                                                        }
+                                                                        kotlinx.coroutines.delay(1000)   // 先让抽屉展开
+                                                                        withContext(Dispatchers.IO) {
                                                                             runCatching {
                                                                                 val pr = Runtime.getRuntime().exec(arrayOf("su", "-c",
                                                                                     "cd \"/data/adb/modules/${m.id}\" && sh action.sh 2>&1"))
-                                                                                val t = pr.inputStream.bufferedReader().readText()
+                                                                                var acc = ""
+                                                                                val reader = pr.inputStream.bufferedReader()
+                                                                                var line = reader.readLine()
+                                                                                while (line != null) {
+                                                                                    acc = (acc + line + "\n").takeLast(40000)
+                                                                                    val snapshot = acc
+                                                                                    withContext(Dispatchers.Main) {
+                                                                                        onShowTermDrawer("模块：${m.id}\n" + snapshot)
+                                                                                    }
+                                                                                    line = reader.readLine()
+                                                                                }
                                                                                 pr.waitFor()
-                                                                                t
-                                                                            }.getOrDefault("")
-                                                                        }
-                                                                        withContext(Dispatchers.Main) {
-                                                                            android.widget.Toast.makeText(
-                                                                                navCtx,
-                                                                                if (out.isBlank()) "已执行 ${m.id}" else out.take(120),
-                                                                                android.widget.Toast.LENGTH_LONG
-                                                                            ).show()
+                                                                                val fin = acc
+                                                                                withContext(Dispatchers.Main) {
+                                                                                    onShowTermDrawer("模块：${m.id}\n" + fin + "已完成 .OK\n")
+                                                                                }
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
@@ -7378,8 +7384,9 @@ internal fun loadSuperUserPicker(ctx: android.content.Context) {
                     val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
                     !isSystem && ai.packageName != "android" && ai.packageName != ctx.packageName
                 }
-                    .sortedBy { it.label }
                     .map { SuApp(it.packageName, it.label, it.uid, it.allowSu, null) }
+                    // 已授权的置顶，其余按名称
+                    .sortedWith(compareByDescending<SuApp> { it.allowed }.thenBy { it.label })
             } else {
                 pm.getInstalledApplications(0)
                     .filter {
@@ -7411,7 +7418,13 @@ internal fun loadSuperUserPicker(ctx: android.content.Context) {
                 uiPickerMarks = apps.filter { it.allowed }.associate { it.label to "已签名" }
                 uiPickerAction = { sel ->
                     val app = apps.firstOrNull { it.label == sel }
-                    suConfirmHandler?.invoke(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                    // 先弹确认，确定后再签名/取消签名
+                    pickConfirmOk = "确定"
+                    pickConfirmAccentWord = null
+                    // 已签名 → 「卸载 <名> 签名」；未签名 → 「签名 <名>」
+                    pickConfirm = (if (app?.allowed == true) "卸载 " + sel + " 签名" else "签名 " + sel) to {
+                        suConfirmHandler?.invoke(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                    }
                 }
             }
         } catch (t: Throwable) {
@@ -7426,6 +7439,7 @@ internal fun gameCleanCache(ctx: android.content.Context) {
     uiPicker = emptyList()
     uiPickerIcons = null
     uiPickerSelected = null
+    uiPickerMarks = emptyMap()   // 游戏清理不显示「已签名」
     // 后台线程加载应用列表，避免卡 UI
     Thread {
     try {
@@ -7599,7 +7613,7 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("rm -f '/data/data/").append(pkg).append("/files/'*.log 2>/dev/null; ")
                 // 杀进程让标识重新初始化（同小轩工具箱）
                 sb.append("am force-stop ").append(pkg).append(" 2>/dev/null; ")
-                sb.append("echo \"清理完成: 删除 \$F 个标识文件, 失败 \$N 个 | AndroidID=").append(androidId).append("\"")
+                sb.append("echo \"清理完成: 删除 \$F 个标识文件, 失败 \$N 个 | AndroidID=").append(androidId).append(" .OK\"")
                 val cmd = sb.toString()
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
                 val sbOut = StringBuilder()
