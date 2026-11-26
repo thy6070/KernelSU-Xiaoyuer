@@ -9288,34 +9288,54 @@ class FpsOverlayService : Service() {
     private fun startCpuBind() {
         logLine("startCpuBind 进入 pkg=" + activePkg)
         if (!isGamePkg(activePkg)) { logLine("绑核：非游戏包，跳过"); return }
-        // 自适应分核：cpufreq 按 max_freq 分三级（任何设备）
-        val policies = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); c=\$(cat \$p/affected_cpus 2>/dev/null); [ -n \"\$m\" ] && echo \"\$m \$c\"; done | sort -n", 2L)
-        val groups = ArrayList<Pair<Long, String>>()
-        for (line in policies.lines()) {
-            val parts = line.trim().split(" ", limit = 2)
-            if (parts.size < 2) continue
-            val m = parts[0].toLongOrNull() ?: continue
-            groups.add(m to parts[1].replace(" ", ","))
+        // 自适应分核（通用）：优先用内核 cpu_capacity（真实算力），没有再用 cpufreq 频率
+        // 步骤：① 每核 capacity ② 相同 capacity/频率合并成一档 ③ 按算力升序分成 small/mid/big
+        // 注意：big 只取最高一档（避免把 X4m/A720 混进大核），small 取最低一档
+        val capsOut = sh("for c in /sys/devices/system/cpu/cpu[0-9]*/cpu_capacity; do [ -f \$c ] && echo \"\$(dirname \$c | sed 's#.*/cpu##') \$(cat \$c)\"; done 2>/dev/null", 2L)
+        var big = ""
+        var mid = ""
+        var small = ""
+        val capMap = LinkedHashMap<Int, Int>()   // cpu -> capacity
+        for (line in capsOut.lines()) {
+            val p = line.trim().split(" ")
+            if (p.size < 2) continue
+            val cpu = p[0].toIntOrNull() ?: continue
+            val cap = p[1].toIntOrNull() ?: continue
+            if (cap > 0) capMap[cpu] = cap
         }
-        if (groups.size < 2) { logLine("绑核：cpufreq 分组失败(读到" + groups.size + "组)"); return }
-        // 自适应芯片结构（任意组数，按 max_freq 升序）：
-        //   big  = 最高两组的并集（保证大核至少两档，避免只绑单核）
-        //   mid  = 中间所有组（4 组以上时）；3 组取中间那组；2 组及以下取最低组
-        //   small= 最低组
-        val small = groups[0].second
-        val bigFrom = if (groups.size >= 2) groups.size - 2 else 0
-        fun mergeGroups(from: Int, toExclusive: Int): String =
-            groups.subList(from, toExclusive)
-                .flatMap { it.second.split(",") }
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-                .joinToString(",")
-        val big = mergeGroups(bigFrom, groups.size)
-        val mid = when {
-            groups.size >= 4 -> mergeGroups(1, groups.size - 2)
-            groups.size == 3 -> groups[1].second
-            else -> groups[0].second
+        if (capMap.size >= 2) {
+            // 按 capacity 分档（相同 capacity 归为同一档）
+            val byCap = capMap.entries.groupBy({ it.value }, { it.key }).toSortedMap()
+            val tiers = byCap.values.map { it.sorted().joinToString(",") }.toMutableList()
+            small = tiers.first()
+            big = tiers.last()
+            mid = if (tiers.size >= 3) tiers.subList(1, tiers.size - 1).joinToString(",") else big
+            logLine("绑核(capacity): 档位=" + byCap.keys.joinToString("/") + " small=" + small + " mid=" + mid + " big=" + big)
+        }
+        if (big.isEmpty() || small.isEmpty()) {
+            // 回退：按 cpufreq max_freq 分档（相同频率合并）
+            val policies = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do m=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); c=\$(cat \$p/affected_cpus 2>/dev/null); [ -n \"\$m\" ] && echo \"\$m|\$c\"; done", 2L)
+            val freqTiers = LinkedHashMap<Long, MutableList<String>>()
+            for (line in policies.lines()) {
+                val parts = line.trim().split("|", limit = 2)
+                if (parts.size < 2) continue
+                val m = parts[0].toLongOrNull() ?: continue
+                val cpus = parts[1].trim().split(" ").filter { it.isNotBlank() }
+                freqTiers.getOrPut(m) { ArrayList() }.addAll(cpus)
+            }
+            if (freqTiers.size >= 2) {
+                val sorted = freqTiers.entries.sortedBy { it.key }
+                fun merge(list: List<Map.Entry<Long, MutableList<String>>>): String =
+                    list.flatMap { it.value }.distinct().sorted().joinToString(",")
+                small = merge(listOf(sorted.first()))
+                big = merge(listOf(sorted.last()))
+                mid = if (sorted.size >= 3) merge(sorted.subList(1, sorted.size - 1)) else big
+                logLine("绑核(freq): 档位=" + sorted.map { it.key }.joinToString("/") + " small=" + small + " mid=" + mid + " big=" + big)
+            }
+            if (big.isEmpty() || small.isEmpty()) {
+                logLine("绑核：无法识别核心结构(读到 capacity=" + capMap.size + " freqTiers=" + freqTiers.size + ")")
+                return
+            }
         }
         // 双通道：eBPF 优先（AppOpt），不支持则走 netlink（fpsbind）
         val hasEbpf = sh("ls /sys/fs/bpf >/dev/null 2>&1 && ls /sys/kernel/btf/vmlinux >/dev/null 2>&1 && echo yes", 6L).trim() == "yes"
@@ -9349,7 +9369,7 @@ class FpsOverlayService : Service() {
         val pkgTail = activePkg.substringAfterLast(".").ifBlank { activePkg }
         val conf = File(filesDir, "applist.conf")
         conf.writeText("# 自适应分核: big=" + big + " mid=" + mid + " small=" + small + "\n" +
-            activePkg + "=" + big + "\n" +   // 激进：未匹配线程也绑大核
+            activePkg + "=" + mid + "\n" +   // 自适应：未匹配线程走中核
             activePkg + "{*" + pkgTail + "*}" + "=" + big + "\n" +
             activePkg + "{*Render*}" + "=" + big + "\n" +
             activePkg + "{*render*}" + "=" + big + "\n" +
@@ -9360,7 +9380,7 @@ class FpsOverlayService : Service() {
             activePkg + "{*unity*}" + "=" + big + "\n" +
             activePkg + "{*main*}" + "=" + big + "\n" +
             activePkg + "{*Main*}" + "=" + big + "\n" +
-            activePkg + "{*Script*}" + "=" + big + "\n" +
+            activePkg + "{*Script*}" + "=" + mid + "\n" +
             activePkg + "{*Audio*}" + "=" + small + "\n" +
             activePkg + "{*audio*}" + "=" + small + "\n" +
             activePkg + "{*Net*}" + "=" + small + "\n" +
