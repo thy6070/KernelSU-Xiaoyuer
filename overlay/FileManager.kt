@@ -723,7 +723,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 termDrawer = nm0 + "  v" + (info0?.versionName ?: "") + "  " + (info0?.packageName ?: "") + "\n准备将此程序加载至桌面\n"
                                 termDrawerConfirm = {
                                     termDrawerConfirm = null
-                                    kotlinx.coroutines.delay(1000)   // 先让抽屉展开
+                                    // 先让抽屉展开（1 秒）再安装：用主线程 postDelayed，避免在非协程里 delay
+                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                     installApkReport(appCtx, p,
                                     { line, okLine ->
                                         termDrawer = (termDrawer ?: "") + line + (if (okLine) " .OK" else " .NO") + "\n"
@@ -754,6 +755,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             }
                                         }
                                     })
+                                    }, 1000)
                                 }
                                 return@withContext
                             }
