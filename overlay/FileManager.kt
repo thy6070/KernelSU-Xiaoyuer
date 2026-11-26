@@ -2404,16 +2404,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 Text(
                     text = run {
                         val w = pickConfirmAccentWord
-                        if (w != null && pc.first.contains(w)) {
-                            androidx.compose.ui.text.buildAnnotatedString {
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            if (w != null && pc.first.contains(w)) {
                                 val i = pc.first.indexOf(w)
                                 append(pc.first.substring(0, i))
                                 pushStyle(androidx.compose.ui.text.SpanStyle(color = Color(pickConfirmAccentColor)))
                                 append(w)
                                 pop()
                                 append(pc.first.substring(i + w.length))
+                            } else {
+                                append(pc.first)
                             }
-                        } else pc.first
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
