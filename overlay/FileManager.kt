@@ -4349,10 +4349,7 @@ private fun ProMaxIsland(
                                         .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable {
                                             // 打开全屏终端（可输入命令）
-                                            expanded = false
-                                            navMode = false
-                                            termText = ""
-                                            termFull = true
+                                            onOpenTerminal()
                                         }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
