@@ -545,16 +545,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         leftPath = np
                     }
                 },
-                onLongPress = { lp ->
-                    // 只看 root 判定（File.isDirectory 在无权限时会误判成文件）
-                    longPressIsDir = runCatching {
-                        val pr = Runtime.getRuntime().exec(
-                            arrayOf(suBin(), "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
-                        )
-                        val o = pr.inputStream.bufferedReader().readText()
-                        pr.waitFor()
-                        o.trim() == "y"
-                    }.getOrDefault(false)
+                onLongPress = { lp, dirFlag ->
+                    // 与图标同源：直接用列表里的 isDir
+                    longPressIsDir = dirFlag
                     longPressFromRight = false
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
@@ -624,16 +617,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         rightPath = np2
                     }
                 },
-                onLongPress = { lp ->
-                    // 只看 root 判定（File.isDirectory 在无权限时会误判成文件）
-                    longPressIsDir = runCatching {
-                        val pr = Runtime.getRuntime().exec(
-                            arrayOf(suBin(), "-c", "test -d '" + lp.replace("'", "'\\''") + "' && echo y")
-                        )
-                        val o = pr.inputStream.bufferedReader().readText()
-                        pr.waitFor()
-                        o.trim() == "y"
-                    }.getOrDefault(false)
+                onLongPress = { lp, dirFlag ->
+                    // 与图标同源：直接用列表里的 isDir
+                    longPressIsDir = dirFlag
                     longPressFromRight = true
                     // 长按新目标时先收起终端，避免叠在一起
                     showTerminal = false
@@ -1486,7 +1472,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.setDimAmount(0f)
                 } catch (t: Throwable) {}
             }
-            val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
+            val isDirCm = longPressIsDir
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier
                 .fillMaxSize()
@@ -5936,7 +5922,7 @@ private fun BrowserPane(
     refreshTick: Int = 0,
     selectedPath: String? = null,
     highlightName: String? = null,
-    onLongPress: (String) -> Unit = {},
+    onLongPress: (String, Boolean) -> Unit = { _, _ -> },
     onLongPressRow: (String, Int) -> Unit = { _, _ -> },
     onRowPos: (String, Float) -> Unit = { _, _ -> },
     pathAlignRight: Boolean = false,
@@ -6082,7 +6068,7 @@ private fun BrowserPane(
                 onLongClick = {
                     // 先记录行号再开菜单，否则菜单会先用旧位置出现再跳
                     onLongPressRow(rowPath, idx)
-                    onLongPress(rowPath)
+                    onLongPress(rowPath, entry.isDir)
                 }
             )
         }
