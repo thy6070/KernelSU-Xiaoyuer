@@ -725,7 +725,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         val pkgNow = runCatching {
                                             appCtx.packageManager.getPackageArchiveInfo(p, 0)?.packageName ?: ""
                                         }.getOrDefault("")
-                                        withContext(Dispatchers.Main) {
+                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
                                             if (doneOk) {
                                                 pickConfirmOk = "打开"
                                                 pickConfirmAccentWord = "完成"
@@ -7028,17 +7028,19 @@ internal fun installApkReport(ctx: android.content.Context, path: String, onLine
         }
         // ④ root 安装
         onLine("root 安装日志：", true)
-        val (ok, out) = try {
+        val pair: Pair<Boolean, String> = try {
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                 "cp -f '" + path.replace("'", "'\\''") + "' /data/local/tmp/xy_install.apk && " +
                     "chmod 644 /data/local/tmp/xy_install.apk && " +
                     "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1"))
             val t = pr.inputStream.bufferedReader().readText()
             pr.waitFor()
-            (t.contains("Success"), t.trim().takeLast(300))
+            Pair(t.contains("Success"), t.trim().takeLast(300))
         } catch (t: Throwable) {
-            (false, t.message ?: "执行失败")
+            Pair(false, t.message ?: "执行失败")
         }
+        val ok = pair.first
+        val out = pair.second
         out.split("\n").filter { it.isNotBlank() }.forEach { onLine(it, ok) }
         // ⑤ 结果
         onLine(if (ok) "已加载至桌面" else "安装失败", ok)
