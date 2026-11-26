@@ -7287,7 +7287,7 @@ internal fun loadSuperUserPicker(ctx: android.content.Context) {
                     val cv = android.graphics.Canvas(bmp)
                     d.setBounds(0, 0, cv.width, cv.height)
                     d.draw(cv)
-                    androidx.compose.ui.graphics.asImageBitmap(bmp)
+                    bmp.asImageBitmap()
                 } catch (t: Throwable) { null }
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
