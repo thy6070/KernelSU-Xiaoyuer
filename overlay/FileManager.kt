@@ -720,7 +720,32 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     { line, okLine ->
                                         termDrawer = (termDrawer ?: "") + line + (if (okLine) " .OK" else " .NO") + "\n"
                                     },
-                                    { })
+                                    { doneOk ->
+                                        val nm = file.removeSuffix(".apk")
+                                        val pkgNow = runCatching {
+                                            appCtx.packageManager.getPackageArchiveInfo(p, 0)?.packageName ?: ""
+                                        }.getOrDefault("")
+                                        withContext(Dispatchers.Main) {
+                                            if (doneOk) {
+                                                pickConfirmOk = "打开"
+                                                pickConfirmAccentWord = "完成"
+                                                pickConfirmAccentColor = 0xFF007AFF
+                                                pickConfirm = nm + " 完成" to {
+                                                    runCatching {
+                                                        val it2 = appCtx.packageManager.getLaunchIntentForPackage(pkgNow)
+                                                        if (it2 != null) appCtx.startActivity(it2.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                                                    }
+                                                }
+                                            } else {
+                                                pickConfirmOk = "重试"
+                                                pickConfirmAccentWord = "失败"
+                                                pickConfirmAccentColor = 0xFFFF3B30
+                                                pickConfirm = nm + " 失败" to {
+                                                    pickConfirm = null
+                                                }
+                                            }
+                                        }
+                                    })
                                 return@withContext
                             }
                             val cmd = when {
@@ -1082,20 +1107,43 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         onSuOpen = { suOpenTick += 1 },
         onShowTermDrawer = { txt -> termDrawer = txt },
         onShowSuConfirm = { pkg, uid, label, signed ->
-            pickConfirm = (if (signed) "卸载 $label 签名" else "签名 $label") to {
-                // 不收起抽屉，只刷新列表状态
-                uiScope.launch {
-                    withContext(Dispatchers.IO) {
+            // 抽屉终端：应用信息 + 授权日志；完成后结果弹窗（打开 / 重试）
+            uiScope.launch {
+                val pm = appCtx.packageManager
+                val ver = runCatching { pm.getPackageInfo(pkg, 0).versionName ?: "" }.getOrDefault("")
+                termDrawer = "应用：" + label + "  v" + ver + "  " + pkg + "\n"
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val cur = me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)
+                        val next = cur?.copy(allowSu = !signed)
+                            ?: me.weishu.kernelsu.Natives.Profile(name = pkg, currentUid = uid, allowSu = !signed)
+                        me.weishu.kernelsu.Natives.setAppProfile(next)
+                    }.getOrDefault(false)
+                }
+                val act = if (signed) "取消签名" else "签名"
+                termDrawer = (termDrawer ?: "") + act + " " + label + (if (ok) " .OK" else " .NO") + "\n"
+                if (ok) {
+                    pickConfirmOk = "打开"
+                    pickConfirmAccentWord = "已签名"
+                    pickConfirmAccentColor = 0xFF007AFF
+                    pickConfirm = "已签名 " + label to {
+                        // 打开应用
                         runCatching {
-                            val cur = me.weishu.kernelsu.Natives.getAppProfile(pkg, uid)
-                            val next = cur?.copy(allowSu = !signed)
-                                ?: me.weishu.kernelsu.Natives.Profile(name = pkg, currentUid = uid, allowSu = !signed)
-                            me.weishu.kernelsu.Natives.setAppProfile(next)
+                            val it2 = pm.getLaunchIntentForPackage(pkg)
+                            if (it2 != null) appCtx.startActivity(it2.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                         }
+                        suOpenTick += 1
                     }
-                    // 刷新：重新加载超级用户列表（抽屉保持打开）
-                    refreshTick += 1
-                    suOpenTick += 1
+                } else {
+                    pickConfirmOk = "重试"
+                    pickConfirmAccentWord = "失败"
+                    pickConfirmAccentColor = 0xFFFF3B30
+                    val retry: () -> Unit = {
+                        pickConfirm = null
+                        // 重试：重新走一遍
+                        suOpenTick += 1
+                    }
+                    pickConfirm = "签名 " + label + " 失败" to retry
                 }
             }
         },
@@ -1246,9 +1294,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             if (p != null) {
                 uiScope.launch {
                     running = true
-                    termText = ""
+                    termDrawer = ""  // 用抽屉终端
                     runMessage = null
-                    showTerminal = true
+                    
                     // 和 KSU 管理器一致：读 id → 清理残留 → ksud 原版安装 → 验证
                     val q = "'" + p.replace("'", "'\''") + "'"
                     val cmd = "ZID=$(unzip -p " + q + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
@@ -1275,14 +1323,17 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             proc.inputStream.bufferedReader().useLines { lines ->
                                 lines.forEach { line ->
                                     withContext(Dispatchers.Main) {
-                                        termText = (termText + line + "\n").takeLast(20000)
+                                        termDrawer = ((termDrawer ?: "") + line + "\n")
                                     }
                                 }
                             }
                             proc.waitFor()
+                            withContext(Dispatchers.Main) {
+                                termDrawer = ((termDrawer ?: "") + "已结束 .OK\n")
+                            }
                         }
                     } catch (t: Throwable) {
-                        termText += "挂载失败: " + (t.message ?: "") + "\n"
+                        termDrawer = ((termDrawer ?: "") + "挂载失败: " + (t.message ?: "") + "\n已结束 .NO\n")
                     }
                     activeProc = null
                     running = false
@@ -1378,7 +1429,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("确定", fontSize = 15.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
@@ -2282,10 +2333,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier.clickable { closeTerm() }
                     )
                 }
+                val termListState = androidx.compose.foundation.lazy.rememberLazyListState()
+                val termLines = td.split("\n")
+                LaunchedEffect(termLines.size) {
+                    try {
+                        termListState.animateScrollToItem((termLines.size - 1).coerceAtLeast(0))
+                    } catch (t: Throwable) {}
+                }
                 androidx.compose.foundation.lazy.LazyColumn(
+                    state = termListState,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)
                 ) {
-                    val lines = td.split("\n")
+                    val lines = termLines
                     items(lines.size) { i ->
                         val ln = lines[i]
                         val okMark = ln.endsWith(".OK")
@@ -2343,7 +2402,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
             ) {
                 Text(
-                    text = pc.first,
+                    text = run {
+                        val w = pickConfirmAccentWord
+                        if (w != null && pc.first.contains(w)) {
+                            androidx.compose.ui.text.buildAnnotatedString {
+                                val i = pc.first.indexOf(w)
+                                append(pc.first.substring(0, i))
+                                pushStyle(androidx.compose.ui.text.SpanStyle(color = Color(pickConfirmAccentColor)))
+                                append(w)
+                                pop()
+                                append(pc.first.substring(i + w.length))
+                            }
+                        } else pc.first
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 18.dp, vertical = 16.dp),
@@ -2385,7 +2456,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("确定", fontSize = 15.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
@@ -6908,9 +6979,11 @@ internal fun installApkReport(ctx: android.content.Context, path: String, onLine
         // ① 图标 + 名称 + 版本
         var label = path.substringAfterLast('/')
         var ver = ""
+        var pkgName = ""
         var icon: android.graphics.Bitmap? = null
         try {
             val info = pm.getPackageArchiveInfo(path, 0)
+            pkgName = info?.packageName ?: ""
             val ai = info?.applicationInfo
             if (ai != null) {
                 ai.sourceDir = path
@@ -6924,7 +6997,7 @@ internal fun installApkReport(ctx: android.content.Context, path: String, onLine
                 android.graphics.Canvas(icon).also { c -> d.setBounds(0, 0, w, h); d.draw(c) }
             }
         } catch (t: Throwable) {}
-        onLine("应用：" + label + "  v" + ver, true)
+        onLine("应用：" + label + "  v" + ver + "  " + pkgName, true)
         // ② 准备
         onLine("准备将此程序加载至桌面", true)
         // ③ root 检测
@@ -7325,6 +7398,11 @@ var uiPickerMarks by androidx.compose.runtime.mutableStateOf<Map<String, String>
 var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
 // 抽屉确定/取消的确认弹窗：文案 + 动作
 var pickConfirm by androidx.compose.runtime.mutableStateOf<Pair<String, () -> Unit>?>(null)
+// 确认弹窗「确定」按钮文字（默认 确定；可设 打开 / 重试）
+var pickConfirmOk by androidx.compose.runtime.mutableStateOf("确定")
+// 确认弹窗标题中要高亮的词与颜色（如「已签名」蓝 / 「失败」红）
+var pickConfirmAccentWord by androidx.compose.runtime.mutableStateOf<String?>(null)
+var pickConfirmAccentColor by androidx.compose.runtime.mutableStateOf(0xFF007AFF)
 // 撤销：记录上一个文件操作（移动/复制/重命名/删除）
 data class UndoOp(val kind: String, val src: List<String>, val dst: List<String> = emptyList())
 var pendingUndo by androidx.compose.runtime.mutableStateOf<UndoOp?>(null)
