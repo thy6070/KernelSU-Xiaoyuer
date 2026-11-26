@@ -79,15 +79,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.DarkMode
-import androidx.compose.material.icons.rounded.AcUnit
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Smartphone
-import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.Hotel
-import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.AcUnit
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Smartphone
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Hotel
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.TransformOrigin
@@ -109,10 +109,10 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.AdminPanelSettings
-import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.AdminPanelSettings
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -135,20 +135,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.rounded.TaskAlt
-import androidx.compose.material.icons.rounded.InsertDriveFile
-import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Terminal
-import androidx.compose.material.icons.rounded.Fullscreen
-import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material.icons.outlined.InsertDriveFile
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.automirrored.outlined.Undo
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.DriveFileMove
-import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.InstallMobile
-import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.InstallMobile
+import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -219,7 +219,6 @@ data class FsEntry(val name: String, val isDir: Boolean, val sizeText: String = 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}) {
-    androidx.compose.material3.MaterialTheme(typography = AppTypography) {
     val appCtx = LocalContext.current
     val view = LocalView.current
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
@@ -420,11 +419,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var cmRenamePath by remember { mutableStateOf<String?>(null) }
     // 超级用户：点图标直接开抽屉（不激活灵动岛）
     var suOpenTick by remember { mutableStateOf(0) }
-    // 超级用户抽屉当前列表（点击回调用）
-    var suAppsGlobal by remember { mutableStateOf<List<SuApp>>(emptyList()) }
     // 抽屉终端：非空时显示输出
     var termDrawer by remember { mutableStateOf<String?>(null) }
-    var termDrawerTitle by remember { mutableStateOf("终端输出") }
     var cmRenameText by remember { mutableStateOf("") }
     // 提取：抽屉选择应用 → 应用操作菜单
     var appMenuPkg by remember { mutableStateOf<String?>(null) }
@@ -719,7 +715,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             run { }
                             // APK：走结构化安装报告（抽屉终端 5 行）
                             if (lower.endsWith(".apk")) {
-                                termDrawerTitle = file
                                 termDrawer = ""
                                 installApkReport(appCtx, p,
                                     { line, okLine ->
@@ -1109,17 +1104,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }.start()
         },
         suOpenTick = suOpenTick,
-        onSuOpen = {
-            // 直接调用与游戏清理同一个加载函数（不依赖 LaunchedEffect）
-            loadAppPicker(appCtx, "超级用户") { apps, _ ->
-                suAppsGlobal = apps
-                uiPickerMarks = apps.filter { it.allowed }.associate { it.label to "已签名" }
-                uiPickerAction = { sel ->
-                    val app = suAppsGlobal.firstOrNull { it.label == sel }
-                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
-                }
-            }
-        },
+        onSuOpen = { suOpenTick += 1 },
         onShowTermDrawer = { txt -> termDrawer = txt },
         onShowSuConfirm = { pkg, uid, label, signed ->
             // 抽屉终端：应用信息 + 授权日志；完成后结果弹窗（打开 / 重试）
@@ -1147,6 +1132,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             val it2 = pm.getLaunchIntentForPackage(pkg)
                             if (it2 != null) appCtx.startActivity(it2.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                         }
+                        suOpenTick += 1
                     }
                 } else {
                     pickConfirmOk = "重试"
@@ -1154,10 +1140,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     pickConfirmAccentColor = 0xFFFF3B30
                     val retry: () -> Unit = {
                         pickConfirm = null
-                        // 重试：重新走一遍（直接调用加载函数，不走旧触发）
-                        loadAppPicker(appCtx, "超级用户") { apps2, _ ->
-                            uiPickerMarks = apps2.filter { it.allowed }.associate { it.label to "已签名" }
-                        }
+                        // 重试：重新走一遍
+                        suOpenTick += 1
                     }
                     pickConfirm = "签名 " + label + " 失败" to retry
                 }
@@ -1310,7 +1294,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             if (p != null) {
                 uiScope.launch {
                     running = true
-                    termDrawerTitle = p.substringAfterLast('/')
                     termDrawer = ""  // 用抽屉终端
                     runMessage = null
                     
@@ -1339,12 +1322,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             activeProc = proc
                             proc.inputStream.bufferedReader().useLines { lines ->
                                 lines.forEach { line ->
-                                    // 跳过 unrar/7z 的 ASCII banner 和空行
-                                    val skip = line.isBlank() ||
-                                        line.contains("UNRAR") ||
-                                        line.trimStart().startsWith("//") ||
-                                        line.matches(Regex("^[\\s/_|\\\\.,()'\"-]+$"))
-                                    if (skip) return@forEach
                                     withContext(Dispatchers.Main) {
                                         termDrawer = ((termDrawer ?: "") + line + "\n")
                                     }
@@ -1396,7 +1373,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .background(Color(0xFFF2F2F7))
                     .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
             ) {
-                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = "重命名",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1C1C1E),
+                    textAlign = TextAlign.Center
+                )
                 androidx.compose.foundation.text.BasicTextField(
                     value = cmRenameText,
                     onValueChange = { cmRenameText = it },
@@ -1419,7 +1403,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable { cmRenamePath = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
+                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
                     }
                     Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
                     Box(
@@ -1445,7 +1429,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(pickConfirmOk, fontSize = 17.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
@@ -1734,6 +1718,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 解压 / 压缩（直接执行）
                 items.add(CmItem(if (cmIsArchive) "解压" else "压缩") {
                     cmFile(if (cmIsArchive) "unzip" else "zip", if (cmIsArchive) otherDir else "")
+                    if (cmIsArchive) {
+                        // 解压到对面后，定位/高亮对面目录
+                        try {
+                            FileLocate.side = if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) "R" else "L"
+                            FileLocate.path = otherDir
+                            FileLocate.tick += 1
+                        } catch (t: Throwable) {}
+                    }
                 })
                 // 复制路径
                 items.add(CmItem("复制路径") {
@@ -1999,7 +1991,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    fontFamily = AppFontFamily,
                     color = Color.Black,
                     textAlign = TextAlign.Center
                 )
@@ -2280,7 +2271,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         text = item,
                                         modifier = Modifier.weight(1f),
                                         fontSize = 15.sp,
-                                        fontFamily = AppFontFamily,
                                         color = Color.Black,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -2335,7 +2325,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(termDrawerTitle, color = Color(0xFF8E8E93), fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text("终端输出", color = Color(0xFF8E8E93), fontSize = 15.sp, modifier = Modifier.weight(1f))
                     Text(
                         "完成",
                         color = Color(0xFF0A84FF),
@@ -2359,22 +2349,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val ln = lines[i]
                         val okMark = ln.endsWith(".OK")
                         val noMark = ln.endsWith(".NO")
-                        Text(
-                            text = androidx.compose.ui.text.buildAnnotatedString {
-                                if (okMark || noMark) {
-                                    val body = ln.dropLast(3)
-                                    append(body)
-                                    pushStyle(androidx.compose.ui.text.SpanStyle(color = if (okMark) Color(0xFF007AFF) else Color(0xFFFF3B30)))
-                                    append(ln.takeLast(3))
-                                    pop()
-                                } else {
-                                    append(ansiToAnnotated(ln))
-                                }
-                            },
-                            fontSize = 11.sp,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
-                        )
+                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp)) {
+                            Text(
+                                text = ansiToAnnotated(ln),
+                                fontSize = 11.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (okMark || noMark) {
+                                Text(
+                                    text = if (okMark) "  .OK" else "  .NO",
+                                    fontSize = 11.sp,
+                                    color = if (okMark) Color(0xFF007AFF) else Color(0xFFFF3B30),
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
+                            }
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(14.dp))
@@ -2429,10 +2419,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    fontFamily = AppFontFamily,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
@@ -2450,7 +2439,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable { pickConfirm = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
+                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
                     }
                     Box(
                         modifier = Modifier
@@ -2469,7 +2458,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(pickConfirmOk, fontSize = 17.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
@@ -2955,7 +2944,6 @@ private fun ansiAnnotated(src: String): androidx.compose.ui.text.AnnotatedString
     }
     return b.toAnnotatedString()
 }
-    }   // MaterialTheme（全局字体）结束
 
 @Composable
 private fun ProMaxIsland(
@@ -3105,7 +3093,68 @@ private fun ProMaxIsland(
                 }
             }
         }
-
+        // 点超级用户图标：调用与游戏清理完全相同的加载函数
+        if (suOpenTick > 0) {
+            loadAppPicker(navCtx, "超级用户") { apps, icons ->
+                suApps = apps
+                uiPickerMarks = apps.filter { it.allowed }.associate { it.label to "已签名" }
+                uiPickerAction = { sel ->
+                    val app = suApps.firstOrNull { it.label == sel }
+                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                }
+            }
+        }
+        if (navTarget == "su" || (navTarget == "home" && jumpStep == 7)) {
+            val base = withContext(Dispatchers.IO) {
+                try {
+                    val repo = me.weishu.kernelsu.data.repository.SuperUserRepositoryImpl()
+                    val res = repo.getAppList()
+                    val apps = res.getOrNull()?.first ?: emptyList()
+                    val pm = navCtx.packageManager
+                    apps.filter { ai ->
+                        if (ai.packageName == navCtx.packageName) return@filter false
+                        if (ai.allowSu) return@filter true
+                        ai.packageInfo.applicationInfo?.let {
+                            (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
+                        } ?: true
+                    }.map { ai ->
+                        val icon = try {
+                            val d = ai.packageInfo.applicationInfo?.loadIcon(pm) ?: pm.getApplicationIcon(ai.packageName)
+                            val w = d.intrinsicWidth.coerceAtLeast(1)
+                            val h = d.intrinsicHeight.coerceAtLeast(1)
+                            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                            val canvas = android.graphics.Canvas(bmp)
+                            d.setBounds(0, 0, w, h)
+                            d.draw(canvas)
+                            bmp
+                        } catch (t: Throwable) {
+                            null
+                        }
+                        val allowed = runCatching {
+                            me.weishu.kernelsu.Natives.getAppProfile(ai.packageName, ai.uid).allowSu
+                        }.getOrDefault(ai.profile?.allowSu == true)
+                        SuApp(ai.packageName, ai.label, ai.uid, allowed, icon)
+                    }
+                } catch (t: Throwable) {
+                    emptyList()
+                }
+            }
+            suApps = base.sortedByDescending { it.allowed }
+            // 超级用户列表 → 抽屉（已 root 的应用置顶并标记）
+            try {
+                uiPickerTitle = "超级用户"
+                uiPickerSelected = null
+                uiPickerIcons = suApps.map { a ->
+                    a.icon?.let { bmp -> android.graphics.Bitmap.createScaledBitmap(bmp, 64, 64, true).asImageBitmap() }
+                }
+                uiPicker = suApps.map { a -> a.label }
+                uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
+                uiPickerAction = { sel ->
+                    val app = suApps.firstOrNull { it.label == sel }
+                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
+                }
+            } catch (t: Throwable) {}
+        }
     }
     val bootCtx = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -3161,7 +3210,12 @@ private fun ProMaxIsland(
         }
     }
     LaunchedEffect(runMessage) {
-        if (runMessage == "已完成") {
+        if (runMessage == "安装成功") {
+            installDone = true
+            extractDone = false
+            extractFailed = false
+            expanded = false
+        } else if (runMessage == "已完成") {
             extractDone = true
             extractFailed = false
             expanded = false
@@ -3396,7 +3450,7 @@ private fun ProMaxIsland(
         ) {
             if (wingIconExpanded) {
                 Icon(
-                    imageVector = Icons.Rounded.Fullscreen,
+                    imageVector = Icons.Outlined.Fullscreen,
                     contentDescription = "放大",
                     tint = Color.White,
                     modifier = Modifier.size(26.dp)
@@ -3489,8 +3543,9 @@ private fun ProMaxIsland(
                     contentDescription = null,
                     modifier = Modifier.size(26.dp).clip(RoundedCornerShape(percent = 22))
                 )
-                // 安装结果已改到抽屉终端（这里不再显示安装成功/失败）
                 val statusText = when {
+                    installDone -> "安装成功"
+                    extractFailed -> "安装失败"
                     extractDone -> "已完成"
                     else -> null
                 }
@@ -3521,7 +3576,7 @@ private fun ProMaxIsland(
                         textAlign = TextAlign.Center
                     )
                     Icon(
-                        imageVector = if (runMessage != null && !runOk) Icons.Rounded.Lock else Icons.Rounded.InsertDriveFile,
+                        imageVector = if (runMessage != null && !runOk) Icons.Outlined.Lock else Icons.Outlined.InsertDriveFile,
                         contentDescription = null,
                         tint = if (runMessage != null && !runOk) Color(0xFFFF3B30) else accent,
                         modifier = Modifier.size(22.dp).clickable { onClearSelection() }
@@ -3529,8 +3584,8 @@ private fun ProMaxIsland(
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
                     Icon(
-                        imageVector = if (!rootChecked || rootOk) Icons.Rounded.TaskAlt
-                                      else Icons.Rounded.Lock,
+                        imageVector = if (!rootChecked || rootOk) Icons.Outlined.TaskAlt
+                                      else Icons.Outlined.Lock,
                         contentDescription = if (rootChecked && !rootOk) "root unavailable" else "install",
                         tint = if (rootChecked && !rootOk) Color(0xFFFF3B30) else Color.White,
                         modifier = Modifier
@@ -3672,10 +3727,10 @@ private fun ProMaxIsland(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    NavIcon(Icons.Rounded.InsertDriveFile) { openNav("home") }
-                    NavIcon(Icons.Rounded.AdminPanelSettings) { onSuOpen() }
-                    NavIcon(Icons.Rounded.Layers) { openNav("module") }
-                    NavIcon(Icons.Rounded.Tune) {
+                    NavIcon(Icons.Outlined.InsertDriveFile) { openNav("home") }
+                    NavIcon(Icons.Outlined.AdminPanelSettings) { onSuOpen() }
+                    NavIcon(Icons.Outlined.Layers) { openNav("module") }
+                    NavIcon(Icons.Outlined.Tune) {
                         // 只改这一个图标：先完整收起，再展开到设置
                         reopenScope.launch {
                             navClosing = true
@@ -4125,7 +4180,7 @@ private fun ProMaxIsland(
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Icon(
-                                                            imageVector = Icons.Rounded.PlayArrow,
+                                                            imageVector = Icons.Outlined.PlayArrow,
                                                             contentDescription = "执行",
                                                             tint = Color(0xFF0A84FF),
                                                             modifier = Modifier.size(18.dp)
@@ -4167,7 +4222,7 @@ private fun ProMaxIsland(
                                                             contentAlignment = Alignment.Center
                                                         ) {
                                                             Icon(
-                                                                imageVector = Icons.Rounded.OpenInNew,
+                                                                imageVector = Icons.Outlined.OpenInNew,
                                                                 contentDescription = "打开UI",
                                                                 tint = Color(0xFF0A84FF),
                                                                 modifier = Modifier.size(18.dp)
@@ -4918,7 +4973,7 @@ private fun TerminalOverlay(
                     )
                     IconButton(onClick = onExit, modifier = Modifier.size(36.dp)) {
                         Icon(
-                            imageVector = Icons.Rounded.FullscreenExit,
+                            imageVector = Icons.Outlined.FullscreenExit,
                             contentDescription = "缩小",
                             tint = Color(0xFFB0B0B0)
                         )
@@ -5047,17 +5102,17 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
                     } catch (t: Throwable) { "未适配此机型" }
                 }
             }
-            ModeButton(Icons.Rounded.DarkMode, "FPS+", subtitle = "根据帧率调节频率")
-            ModeButton(Icons.Rounded.AcUnit, "禁用温控", subtitle = "小米/OPPO禁用温控")
-            ModeButton(Icons.Rounded.Folder, "执行此文件", slot = "path3", onRun = {
+            ModeButton(Icons.Outlined.DarkMode, "FPS+", subtitle = "根据帧率调节频率")
+            ModeButton(Icons.Outlined.AcUnit, "禁用温控", subtitle = "小米/OPPO禁用温控")
+            ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path3", onRun = {
                 onDismiss()
                 onRunExec(it)
             })
-            ModeButton(Icons.Rounded.Folder, "执行此文件", slot = "path2", onRun = {
+            ModeButton(Icons.Outlined.Folder, "执行此文件", slot = "path2", onRun = {
                 onDismiss()
                 onRunExec(it)
             })
-            ModeButton(Icons.Rounded.Folder, "执行此文件", onRun = {
+            ModeButton(Icons.Outlined.Folder, "执行此文件", onRun = {
                 onDismiss()
                 onRunExec(it)
             })
@@ -5749,7 +5804,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     }
                 }
             }
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -5882,8 +5937,8 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
             ) {
                 Text(
                     "执行文件路径",
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    fontSize = 17.sp,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
@@ -6315,7 +6370,7 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
                             }
                         }
                     }
-                    .padding(horizontal = 16.dp, vertical = 9.dp)
+                    .padding(horizontal = 18.dp, vertical = 9.dp)
             ) {
                 Text(text = if (busy) "验证中" else "激活", fontSize = 14.sp, color = Color.White)
             }
@@ -6367,7 +6422,7 @@ private fun FsRow(
                     else Color.Transparent
                 )
                 // 右侧不留内边距：大小/时间小字正好贴在分割线尽头
-                .padding(start = 16.dp, end = 2.dp, top = 11.dp, bottom = 11.dp),
+                .padding(start = 14.dp, end = 2.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             RowIcon(isDir = isDir, name = name, fullPath = fullPath)
@@ -6404,31 +6459,6 @@ private fun FsRow(
  * 曲率变化更平滑，视觉上更"圆润"，不会有硬切线。
  * smoothing 越大越接近 iOS 的 continuous corner。
  */
-// iOS 风格字体：Inter（最接近 SF Pro）
-val AppFontFamily = androidx.compose.ui.text.font.FontFamily(
-    androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_regular, androidx.compose.ui.text.font.FontWeight.Normal),
-    androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_semibold, androidx.compose.ui.text.font.FontWeight.SemiBold)
-)
-
-// 全局 iOS 字体（Inter）
-val AppTypography = androidx.compose.material3.Typography(
-    displayLarge = androidx.compose.material3.Typography().displayLarge.copy(fontFamily = AppFontFamily),
-    displayMedium = androidx.compose.material3.Typography().displayMedium.copy(fontFamily = AppFontFamily),
-    displaySmall = androidx.compose.material3.Typography().displaySmall.copy(fontFamily = AppFontFamily),
-    headlineLarge = androidx.compose.material3.Typography().headlineLarge.copy(fontFamily = AppFontFamily),
-    headlineMedium = androidx.compose.material3.Typography().headlineMedium.copy(fontFamily = AppFontFamily),
-    headlineSmall = androidx.compose.material3.Typography().headlineSmall.copy(fontFamily = AppFontFamily),
-    titleLarge = androidx.compose.material3.Typography().titleLarge.copy(fontFamily = AppFontFamily),
-    titleMedium = androidx.compose.material3.Typography().titleMedium.copy(fontFamily = AppFontFamily),
-    titleSmall = androidx.compose.material3.Typography().titleSmall.copy(fontFamily = AppFontFamily),
-    bodyLarge = androidx.compose.material3.Typography().bodyLarge.copy(fontFamily = AppFontFamily),
-    bodyMedium = androidx.compose.material3.Typography().bodyMedium.copy(fontFamily = AppFontFamily),
-    bodySmall = androidx.compose.material3.Typography().bodySmall.copy(fontFamily = AppFontFamily),
-    labelLarge = androidx.compose.material3.Typography().labelLarge.copy(fontFamily = AppFontFamily),
-    labelMedium = androidx.compose.material3.Typography().labelMedium.copy(fontFamily = AppFontFamily),
-    labelSmall = androidx.compose.material3.Typography().labelSmall.copy(fontFamily = AppFontFamily)
-)
-
 class SmoothCornerShape(
     private val cornerRadius: androidx.compose.ui.unit.Dp,
     private val smoothing: Float = 0.6f
@@ -6567,7 +6597,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
         )
     } else {
         Icon(
-            imageVector = if (isDir) Icons.Rounded.Folder else Icons.Rounded.InsertDriveFile,
+            imageVector = if (isDir) Icons.Outlined.Folder else Icons.Outlined.InsertDriveFile,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
             tint = if (isDir) Color(FOLDER_ICON) else (fileAccent(name) ?: Color(FILE_ICON))
