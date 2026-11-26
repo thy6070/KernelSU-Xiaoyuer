@@ -2875,8 +2875,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
             ) {
                 ModePanel(
-                    onDismiss = { navMode = false },
-                    onOpenTerminal = onOpenTerminal,
+                    onOpenTerminal = { termFull = true },
                     onRunExec = { path ->
                         if (path.endsWith(".so")) {
                             selectedFile = path
