@@ -8685,7 +8685,18 @@ class FpsOverlayService : Service() {
         startForegroundCompat()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
-        executor = Executors.newSingleThreadScheduledExecutor()
+        executor = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread({
+                // 采集线程用后台优先级（不与游戏抢 CPU）
+                try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND) } catch (t: Throwable) {}
+                // CPU 亲和：绑到小核（0-3），避免抢占游戏大核（root 下用 taskset）
+                try {
+                    val myPid = android.os.Process.myPid()
+                    Runtime.getRuntime().exec(arrayOf(suBin(), "-c", "taskset -p 0-3 " + myPid + " 2>/dev/null || taskset -p 0,1 " + myPid + " 2>/dev/null"))
+                } catch (t: Throwable) {}
+                r.run()
+            }, "fps-sampler").apply { isDaemon = true }
+        }
         executor?.schedule({ tick() }, 0L, TimeUnit.MILLISECONDS)
     }
 
@@ -9068,7 +9079,7 @@ class FpsOverlayService : Service() {
     private fun tick() {
         try {
             applyFpsFreeze()
-            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 3000L) {
+            if (layerName == null || System.currentTimeMillis() - lastLayerRefresh > 5000L) {
                 lastLayerRefresh = System.currentTimeMillis()
                 refreshLayer()
                 val ln = layerName
@@ -9078,7 +9089,7 @@ class FpsOverlayService : Service() {
             // 轻量前台检测（切游戏/进游戏才重扫层）：dumpsys window 比 activity 轻
             try {
                 val wnow = System.currentTimeMillis()
-                if (wnow - lastPkgRefresh > 2000L) {
+                if (wnow - lastPkgRefresh > 4000L) {
                     lastPkgRefresh = wnow
                     val newPkg = currentForegroundPkg()
                     if (newPkg.isNotEmpty() && newPkg != activePkg) {
@@ -9198,7 +9209,7 @@ class FpsOverlayService : Service() {
                 // CPU 频率采样（每 5 秒）：各簇当前频率 / 上限频率
                 try {
                     val nowC = System.currentTimeMillis()
-                    if (nowC - lastCpuSampleMs > 5000L && isGamePkg(activePkg)) {
+                    if (nowC - lastCpuSampleMs > 10000L && isGamePkg(activePkg)) {
                         lastCpuSampleMs = nowC
                         val cur = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo -n \$(cat \$p/scaling_cur_freq 2>/dev/null)/; done", 3L).trim()
                         val mx = sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo -n \$(cat \$p/scaling_max_freq 2>/dev/null)/; done", 3L).trim()
@@ -9208,7 +9219,7 @@ class FpsOverlayService : Service() {
                 // 绑核守护存活自愈：每 10 秒查一次 system_bg，没了就重新拉起
                 try {
                     val nowB = System.currentTimeMillis()
-                    if (nowB - lastBindCheckMs > 10000L && isGamePkg(activePkg)) {
+                    if (nowB - lastBindCheckMs > 20000L && isGamePkg(activePkg)) {
                         lastBindCheckMs = nowB
                         val fpOnB = getSharedPreferences("settings", 0).getBoolean("fps_plus", false)
                         if (fpOnB && fpsBindStarted && sh("pidof system_bg 2>/dev/null", 3L).trim().isEmpty()) {
@@ -9232,7 +9243,7 @@ class FpsOverlayService : Service() {
         } catch (t: Throwable) {
             logLine("tick 异常: " + t)
         }
-        try { executor?.schedule({ tick() }, 26L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}  // 26ms×3≈80ms 掉帧检测
+        try { executor?.schedule({ tick() }, 50L, TimeUnit.MILLISECONDS) } catch (t: Throwable) {}  // 50ms 节拍（精度不变，CPU 更低）
     }
 
     // ===== 日志：帧率 + FPS+ 全链路 =====
@@ -9338,7 +9349,7 @@ class FpsOverlayService : Service() {
         val pkgTail = activePkg.substringAfterLast(".").ifBlank { activePkg }
         val conf = File(filesDir, "applist.conf")
         conf.writeText("# 自适应分核: big=" + big + " mid=" + mid + " small=" + small + "\n" +
-            activePkg + "=" + mid + "\n" +
+            activePkg + "=" + big + "\n" +   // 激进：未匹配线程也绑大核
             activePkg + "{*" + pkgTail + "*}" + "=" + big + "\n" +
             activePkg + "{*Render*}" + "=" + big + "\n" +
             activePkg + "{*render*}" + "=" + big + "\n" +
@@ -9349,13 +9360,17 @@ class FpsOverlayService : Service() {
             activePkg + "{*unity*}" + "=" + big + "\n" +
             activePkg + "{*main*}" + "=" + big + "\n" +
             activePkg + "{*Main*}" + "=" + big + "\n" +
-            activePkg + "{*Script*}" + "=" + mid + "\n" +
+            activePkg + "{*Script*}" + "=" + big + "\n" +
             activePkg + "{*Audio*}" + "=" + small + "\n" +
             activePkg + "{*audio*}" + "=" + small + "\n" +
             activePkg + "{*Net*}" + "=" + small + "\n" +
             activePkg + "{*net*}" + "=" + small + "\n" +
             activePkg + "{*binder*}" + "=" + small + "\n" +
             activePkg + "{*Binder*}" + "=" + small + "\n")
+        // 激进：开启内核 sched_boost（提升游戏线程调度优先级）
+        sh("[ -f /proc/sys/kernel/sched_boost ] && echo 1 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
+           "[ -f /sys/kernel/debug/sched_features ] && echo NO_PLAN_IDLE > /sys/kernel/debug/sched_features 2>/dev/null; true", 1L)
+        logLine("激进绑核：sched_boost=1")
         // 调速器（骁龙/天玑自适应）：sugov_ext（MTK 平滑）/ schedutil（高通）
         sh("for p in /sys/devices/system/cpu/cpufreq/policy*/; do av=\$(cat \$p/scaling_available_governors 2>/dev/null); " +
            "case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null ;; " +
