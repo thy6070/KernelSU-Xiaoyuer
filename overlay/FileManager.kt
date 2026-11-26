@@ -2402,7 +2402,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { closeTerm() },
-            scrimColor = Color(0x55000000),
             sheetState = termSheetState,
             containerColor = Color(0xFFF2F2F7),
             shape = SmoothCornerShape(12.dp),
@@ -2493,7 +2492,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     if (pc != null) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { },
-            scrimColor = Color(0x33000000),
             properties = androidx.compose.ui.window.DialogProperties(
                 dismissOnClickOutside = false,
                 dismissOnBackPress = false
