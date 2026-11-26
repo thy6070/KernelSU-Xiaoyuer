@@ -2875,6 +2875,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
             ) {
                 ModePanel(
+                    onDismiss = { navMode = false },
+                    onOpenTerminal = onOpenTerminal,
                     onRunExec = { path ->
                         if (path.endsWith(".so")) {
                             selectedFile = path
@@ -5428,7 +5430,7 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
+private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}, onOpenTerminal: () -> Unit = {}) {
     Box(
         modifier = Modifier.fillMaxSize().clickable { onDismiss() },
         contentAlignment = Alignment.Center
