@@ -1115,16 +1115,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }.start()
         },
         suOpenTick = suOpenTick,
-        onSuOpen = {
-            loadAppPicker(appCtx, "超级用户") { apps, _ ->
-                suAppsGlobal = apps
-                uiPickerMarks = apps.filter { it.allowed }.associate { it.label to "已签名" }
-                uiPickerAction = { sel ->
-                    val app = suAppsGlobal.firstOrNull { it.label == sel }
-                    onShowSuConfirm(app?.pkg ?: "", app?.uid ?: -1, sel, app?.allowed == true)
-                }
-            }
-        },
+        onSuOpen = { suOpenTick += 1 },
         onShowTermDrawer = { txt -> termDrawer = txt },
         onShowSuConfirm = { pkg, uid, label, signed ->
             // 点确定 → 直接展开日志抽屉（不弹窗）；底下列表抽屉缩小（堆叠感）
