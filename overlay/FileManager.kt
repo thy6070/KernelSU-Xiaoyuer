@@ -156,6 +156,12 @@ import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.TableChart
+import androidx.compose.material.icons.rounded.TextSnippet
+import androidx.compose.material.icons.rounded.FontDownload
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -228,6 +234,7 @@ data class FsEntry(val name: String, val isDir: Boolean, val sizeText: String = 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}) {
+    androidx.compose.material3.MaterialTheme(typography = AppTypography) {
     val appCtx = LocalContext.current
     val view = LocalView.current
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
@@ -1324,11 +1331,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     withContext(Dispatchers.IO) {
                         try {
                             val q = "'" + p.replace("'", "'\''") + "'"
-                            Shell.cmd(
-                                "rm -rf /data/local/tmp/yx_arch && mkdir -p /data/local/tmp/yx_arch && " +
-                                    "( unzip -o -q " + q + " -d /data/local/tmp/yx_arch 2>&1 || " +
-                                    "tar -xf " + q + " -C /data/local/tmp/yx_arch 2>&1 )"
-                            ).exec()
+                            val lp2 = p.lowercase()
+                            // 按格式选解压命令（tar.gz 必须 -xzf）
+                            val extract = when {
+                                lp2.endsWith(".tar.gz") || lp2.endsWith(".tgz") -> "tar -xzf " + q
+                                lp2.endsWith(".tar.xz") || lp2.endsWith(".txz") -> "tar -xJf " + q
+                                lp2.endsWith(".tar.bz2") -> "tar -xjf " + q
+                                lp2.endsWith(".tar") -> "tar -xf " + q
+                                lp2.endsWith(".7z") -> "7z x -y -o/data/local/tmp/yx_arch " + q
+                                lp2.endsWith(".rar") -> "unrar x -o+ " + q + " /data/local/tmp/yx_arch/"
+                                else -> "unzip -o " + q + " -d /data/local/tmp/yx_arch"
+                            }
+                            suNow("rm -rf /data/local/tmp/yx_arch && mkdir -p /data/local/tmp/yx_arch && cd /data/local/tmp/yx_arch && " + extract + " 2>&1", 60000L)
                         } catch (t: Throwable) {
                         }
                     }
@@ -2608,10 +2622,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val ln = lines[i]
                         val okMark = ln.endsWith(".OK")
                         val noMark = ln.endsWith(".NO")
+                        // 每行首次出现时淡入（打字机观感，不再"凭空出现"）
+                        val lineAlpha = remember(ln) { androidx.compose.animation.core.Animatable(0f) }
+                        LaunchedEffect(ln) {
+                            lineAlpha.animateTo(1f, tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                        }
                         Row(
                             modifier = Modifier
                                 .padding(horizontal = 16.dp, vertical = 1.dp)
-                                .animateItem(fadeInSpec = tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
+                                .graphicsLayer { alpha = lineAlpha.value },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val headIcon = termDrawerIcon
@@ -2875,7 +2894,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
             ) {
                 ModePanel(
-                    onOpenTerminal = { termFull = true },
                     onRunExec = { path ->
                         if (path.endsWith(".so")) {
                             selectedFile = path
@@ -3123,6 +3141,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     }
+    }   // MaterialTheme（全局 Inter 字体）结束
 }
 
 
@@ -4328,6 +4347,27 @@ private fun ProMaxIsland(
                                 Row(
                                     modifier = Modifier.fillMaxWidth()
                                         .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
+                                        .clickable {
+                                            // 打开全屏终端（可输入命令）
+                                            expanded = false
+                                            navMode = false
+                                            termText = ""
+                                            termFull = true
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "终端\n打开终端，可输入命令",
+                                        fontSize = 11.sp,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(text = "打开", fontSize = 12.sp, color = Color(0xFF0A84FF))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0x33FFFFFF), SmoothCornerShape(8.dp))
                                         .clickable { changeDeviceModel(navCtx) }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -5429,7 +5469,7 @@ private fun YukiWave(color: Color, running: Boolean, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}, onOpenTerminal: () -> Unit = {}) {
+private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}) {
     Box(
         modifier = Modifier.fillMaxSize().clickable { onDismiss() },
         contentAlignment = Alignment.Center
@@ -5453,10 +5493,6 @@ private fun ModePanel(onDismiss: () -> Unit, onRunExec: (String) -> Unit = {}, o
                     } catch (t: Throwable) { "未适配此机型" }
                 }
             }
-            ModeButton(Icons.Rounded.Terminal, "终端", subtitle = "打开终端（可输入命令）", onRun = {
-                onDismiss()
-                onOpenTerminal()
-            })
             ModeButton(Icons.Rounded.DarkMode, "FPS+", subtitle = "根据帧率调节频率")
             ModeButton(Icons.Rounded.AcUnit, "禁用温控", subtitle = "小米/OPPO禁用温控")
             ModeButton(Icons.Rounded.Folder, "执行此文件", slot = "path3", onRun = {
@@ -6652,7 +6688,7 @@ private fun FsRow(
                 fontSize = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AppFontFamily,   // iOS：Inter（不再用等宽）
                 color = Color(TEXT_COLOR)
             )
             // 不显示文件大小/时间小字
@@ -6858,23 +6894,36 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
         // 按类型配 iOS 风格图标 + 配色（简约）
         fun has(vararg exts: String) = exts.any { lowerName.endsWith(it) }
         val (ic, tintColor) = when {
-            has(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".svg") ->
-                Icons.Rounded.Image to Color(0xFF34C759)
-            has(".mp4", ".mkv", ".avi", ".mov", ".3gp", ".webm", ".ts") ->
-                Icons.Rounded.Movie to Color(0xFFFF2D55)
-            has(".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus") ->
-                Icons.Rounded.Audiotrack to Color(0xFFAF52DE)
-            has(".zip", ".tar", ".gz", ".tgz", ".7z", ".rar", ".xz", ".bz2", ".zst") ->
-                Icons.Rounded.FolderZip to Color(0xFFFF9500)
-            has(".apk", ".apks", ".xapk", ".apkm") ->
-                Icons.Rounded.Android to Color(0xFF34C759)
-            has(".sh", ".py", ".js", ".ts", ".kt", ".java", ".c", ".cpp", ".h", ".rs", ".go", ".lua", ".json", ".xml", ".yml", ".yaml", ".gradle", ".toml", ".ini", ".conf", ".prop") ->
-                Icons.Rounded.Code to Color(0xFF007AFF)
-            has(".txt", ".md", ".pdf", ".doc", ".docx", ".xls", ".ppt", ".log", ".csv") ->
-                Icons.Rounded.Description to Color(0xFF5AC8FA)
-            has(".so", ".bin", ".img", ".ko", ".elf", ".dex", ".jar") ->
-                Icons.Rounded.Memory to Color(0xFF8E8E93)
-            else -> Icons.Rounded.InsertDriveFile to Color(FILE_ICON)
+            // iOS 风：细线图标 + 系统色（不铺彩色底块），形状即类型，一眼可辨
+            has(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".svg", ".ico", ".raw") ->
+                Icons.Rounded.Image to Color(0xFF34C759)              // 图片：绿
+            has(".mp4", ".mkv", ".avi", ".mov", ".3gp", ".webm", ".ts", ".flv", ".wmv") ->
+                Icons.Rounded.Movie to Color(0xFFFF3B30)              // 视频：红
+            has(".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".amr", ".wma") ->
+                Icons.Rounded.Audiotrack to Color(0xFFAF52DE)         // 音频：紫
+            has(".zip", ".tar", ".gz", ".tgz", ".7z", ".rar", ".xz", ".bz2", ".zst", ".jar", ".apks") ->
+                Icons.Rounded.FolderZip to Color(0xFFFF9500)          // 压缩包：橙
+            has(".apk", ".xapk", ".apkm", ".apkx") ->
+                Icons.Rounded.Android to Color(0xFF34C759)            // 安装包：绿
+            has(".pdf") ->
+                Icons.Rounded.PictureAsPdf to Color(0xFFFF3B30)       // PDF：红
+            has(".xls", ".xlsx", ".csv", ".ods") ->
+                Icons.Rounded.TableChart to Color(0xFF34C759)         // 表格：绿
+            has(".doc", ".docx", ".rtf", ".odt", ".ppt", ".pptx") ->
+                Icons.Rounded.Description to Color(0xFF5856D6)        // 文档：靛
+            has(".txt", ".md", ".log", ".nfo", ".readme") ->
+                Icons.Rounded.TextSnippet to Color(0xFF8E8E93)        // 纯文本：灰
+            has(".sh", ".py", ".js", ".ts", ".kt", ".java", ".c", ".cpp", ".h", ".hpp", ".rs", ".go", ".lua", ".php", ".rb", ".swift", ".json", ".xml", ".yml", ".yaml", ".gradle", ".toml", ".ini", ".conf", ".prop", ".mk", ".cmake") ->
+                Icons.Rounded.Code to Color(0xFF5AC8FA)               // 代码：浅蓝
+            has(".so", ".bin", ".img", ".ko", ".elf", ".dex", ".o", ".a", ".lib") ->
+                Icons.Rounded.Memory to Color(0xFF8E8E93)             // 二进制：灰
+            has(".ttf", ".otf", ".woff", ".woff2") ->
+                Icons.Rounded.FontDownload to Color(0xFFFF9500)       // 字体：橙
+            has(".db", ".sqlite", ".sqlite3", ".db-wal", ".db-shm") ->
+                Icons.Rounded.Storage to Color(0xFF5AC8FA)            // 数据库：浅蓝
+            has(".iso", ".dmg", ".img.gz", ".raw") ->
+                Icons.Rounded.Album to Color(0xFFAF52DE)              // 镜像：紫
+            else -> Icons.Rounded.InsertDriveFile to Color(0xFF8E8E93) // 其它：灰
         }
         Icon(
             imageVector = ic,
@@ -8916,6 +8965,9 @@ class FpsOverlayService : Service() {
                 return null
             }
             val text = f.readText()
+            // 简单数值（fpsbinder2 的 timestats 兜底会直接写 "60.00"）
+            val simple = text.trim().toDoubleOrNull()
+            if (simple != null && simple >= 0.0 && simple < 2000.0) return simple
             val ns = text.lineSequence().firstOrNull()?.trim()?.toLongOrNull() ?: 0L
             if (ns > 0L) panelHz = 1_000_000_000.0 / ns
             parseLatencyText(text)
@@ -8972,6 +9024,9 @@ class FpsOverlayService : Service() {
             if (n.contains("ActivityRecord") || n.contains("InputSink") ||
                 n.contains("animation-leash") || n.contains("Surface(name=") ||
                 n.contains("Background for ") || n.contains("BackgroundFor")) continue
+            // 排除 WebView / 广告 / 悬浮窗类层（很多游戏的 WebViewActivity 层读不到帧）
+            if (n.contains("WebView") || n.contains("webview") ||
+                n.contains("Splash") || n.contains("Popup") || n.contains("Toast")) continue
             // 注意：BLAST 层带 hex 前缀（如 af8c923 SurfaceView[...](BLAST)）但可读，
             // 不能按 hex 排除（之前错误排除导致选 VRI 层读不到数据）
             // 强约束：只认前台应用自己的层，避免选中壁纸/系统动画层算出假帧率
