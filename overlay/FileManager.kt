@@ -1510,7 +1510,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     (cmView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.setDimAmount(0f)
                 } catch (t: Throwable) {}
             }
-            val isDirCm = runCatching { java.io.File(cmPath).isDirectory }.getOrDefault(false)
+            // 用长按时列表给的 isDir（File().isDirectory 在无权限时会误判成文件）
+            val isDirCm = longPressIsDir
             val cmName = cmPath.substringAfterLast('/')
             Box(modifier = Modifier
                 .fillMaxSize()
@@ -2097,10 +2098,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             skipPartiallyExpanded = true
         )
         val pickScope = androidx.compose.runtime.rememberCoroutineScope()
+        val pickSlide = androidx.compose.animation.core.Animatable(1f)
+        val pickScope2 = androidx.compose.runtime.rememberCoroutineScope()
         val closePick: () -> Unit = {
-            // 先播收起动画（内容完整滑下），动画结束再清空
-            pickScope.launch {
-                try { pickSheetState.hide() } catch (t: Throwable) {}
+            // 只对面板做平移动画（内容不参与），播完再关
+            pickScope2.launch {
+                try {
+                    pickSlide.animateTo(1f, androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+                } catch (t: Throwable) {}
                 uiPicker = null
                 uiPickerSelected = null
                 uiPickerIcons = null
@@ -2108,19 +2113,31 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
         }
         val pickW = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * 0.36f).dp
-        // 底部抽屉（恢复 ModalBottomSheet）
-        androidx.compose.material3.ModalBottomSheet(
-            // 确认弹窗（另一个 Dialog）弹出时会把抽屉顶掉 → 这里忽略 dismiss
-            onDismissRequest = { },
-            sheetState = pickSheetState,
-            containerColor = Color(0xFFF2F2F7),
-            shape = SmoothCornerShape(12.dp),
-            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            sheetGesturesEnabled = true,
-            contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) },
-            dragHandle = null
+        // 底部抽屉：自定义 Dialog + 只对面板做平移动画（内容不参与，避免大列表卡顿）
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { closePick() },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
         ) {
-            Column(
+            val pickView = androidx.compose.ui.platform.LocalView.current
+            val slide = pickSlide
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                applyImmersiveToDialog(pickView)
+                slide.animateTo(0f, androidx.compose.animation.core.tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            }
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            translationY = slide.value * size.height
+                        }
+                        .clip(SmoothCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        .background(Color(0xFFF2F2F7)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(
@@ -2273,6 +2290,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                 }
+            }
             }
         }
     }
