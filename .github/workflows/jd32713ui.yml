@@ -164,7 +164,7 @@ jobs:
           sed -i 's|</application>|<provider android:name="androidx.core.content.FileProvider" android:authorities="com.tencent.THY.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/></provider></application>|' src/manager/app/src/main/AndroidManifest.xml
           sed -i 's|</manifest>|<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/></manifest>|' src/manager/app/src/main/AndroidManifest.xml
           mkdir -p src/manager/app/src/main/res/xml
-          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<paths><external-files-path name="download" path="."/><cache-path name="cache" path="."/></paths>' > src/manager/app/src/main/res/xml/file_paths.xml
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<paths><files-path name="files" path="."/><cache-path name="cache" path="."/><external-path name="external" path="."/><external-files-path name="download" path="."/></paths>' > src/manager/app/src/main/res/xml/file_paths.xml
           grep -c "fileprovider" src/manager/app/src/main/AndroidManifest.xml || true
           # 每次构建递增版本号（云更新可识别）
           # 保持官方 Gradle 9.7.1 + AGP 9.4.1 原配置（8.13 与 Kotlin 2.x 构建脚本不兼容）
