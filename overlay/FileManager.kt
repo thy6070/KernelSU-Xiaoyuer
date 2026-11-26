@@ -1399,7 +1399,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 Text(
                     text = "重命名",
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
@@ -5890,7 +5890,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                 Text(
                     "执行文件路径",
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
