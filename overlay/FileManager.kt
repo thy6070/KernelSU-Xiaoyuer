@@ -1396,14 +1396,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     .background(Color(0xFFF2F2F7))
                     .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
             ) {
-                Text(
-                    text = "重命名",
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF1C1C1E),
-                    textAlign = TextAlign.Center
-                )
+                Spacer(modifier = Modifier.height(14.dp))
                 androidx.compose.foundation.text.BasicTextField(
                     value = cmRenameText,
                     onValueChange = { cmRenameText = it },
@@ -1426,7 +1419,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable { cmRenamePath = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
+                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
                     }
                     Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
                     Box(
@@ -1452,7 +1445,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 17.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
@@ -2457,7 +2450,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable { pickConfirm = null },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
+                        Text("取消", fontSize = 17.sp, color = Color(0xFFFF3B30))
                     }
                     Box(
                         modifier = Modifier
@@ -2476,7 +2469,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
+                        Text(pickConfirmOk, fontSize = 17.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
