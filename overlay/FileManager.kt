@@ -282,15 +282,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     LaunchedEffect(Unit) {
         runCatching {
             val fam = androidx.compose.ui.text.font.FontFamily(
-                androidx.compose.ui.text.font.Font("fonts/NotoSansSC-Regular.otf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.Normal),
-                androidx.compose.ui.text.font.Font("fonts/NotoSansSC-Medium.otf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.SemiBold)
+                androidx.compose.ui.text.font.Font("fonts/MiSans-Regular.ttf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.Normal),
+                androidx.compose.ui.text.font.Font("fonts/MiSans-Semibold.ttf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.SemiBold)
             )
             // 探一下确实存在再切（不存在会整段抛错，保持默认 Inter）
-            appCtx.assets.open("fonts/NotoSansSC-Regular.otf").close()
+            appCtx.assets.open("fonts/MiSans-Regular.ttf").close()
             AppFontFamily = fam
-            runCatching { java.io.File(appCtx.filesDir, "font_log.txt").appendText("Noto Sans SC loaded\n") }
+            runCatching {
+                java.io.File("/storage/emulated/0/字体日志.txt").appendText("MiSans loaded\n")
+            }
         }.onFailure { t ->
-            runCatching { java.io.File(appCtx.filesDir, "font_log.txt").appendText("Noto FAIL " + t + "\n") }
+            runCatching {
+                java.io.File("/storage/emulated/0/字体日志.txt").appendText("MiSans FAIL " + t + "\n")
+            }
         }
     }
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
@@ -370,8 +374,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 decorFitsSystemWindows = false
             )
         ) {
-            val cardView = androidx.compose.ui.platform.LocalView.current
-            LaunchedEffect(Unit) { applyImmersiveToDialog(cardView) }
             CardLoginSheet(appCtx) {
                 showCardSheet = false
             }
@@ -1677,13 +1679,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     value = cmRenameText,
                     onValueChange = { cmRenameText = it },
                     singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1C1C1E), fontSize = 17.sp, fontFamily = AppFontFamily),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color(0xFF1C1C1E), fontSize = 16.sp, lineHeight = 20.sp, fontFamily = AppFontFamily
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp)
+                        .height(34.dp)
                         .clip(SmoothCornerShape(10.dp))
                         .background(Color(0x11000000))
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .padding(horizontal = 10.dp)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x33000000)))
@@ -6952,13 +6957,17 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             value = key,
             onValueChange = { key = it },
             singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1C1C1E), fontSize = 17.sp, fontFamily = AppFontFamily),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = Color(0xFF1C1C1E), fontSize = 16.sp, lineHeight = 20.sp, fontFamily = AppFontFamily
+            ),
+            // 单行输入：固定 34dp（iOS 输入框高度），不再靠字号撑高
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp)
+                .height(34.dp)
                 .clip(SmoothCornerShape(10.dp))
                 .background(Color(0x11000000))
-                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .padding(horizontal = 10.dp)
         )
         Spacer(modifier = Modifier.height(12.dp))
         Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x33000000)))
@@ -6977,7 +6986,7 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Text("购买", fontSize = 15.sp, color = Color(0xFF007AFF))
+                Text("购买", fontSize = 15.sp, color = Color(0xFFFF3B30))
             }
             Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
             Box(
