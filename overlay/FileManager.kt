@@ -4888,7 +4888,7 @@ private fun ProMaxIsland(
                                                             contentAlignment = Alignment.Center
                                                         ) {
                                                             Icon(
-                                                                imageVector = Icons.Rounded.SystemUpdateAlt,
+                                                                imageVector = Icons.Rounded.Sync,
                                                                 contentDescription = "可更新 v${m.updateVer}",
                                                                 tint = Color.White,
                                                                 modifier = Modifier.size(18.dp)
