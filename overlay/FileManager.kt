@@ -276,27 +276,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         java.io.File(xyWorkRoot).mkdirs()
         java.io.File(xyArchRoot).mkdirs()
     }
-    // 字体：Noto Sans SC（思源黑体）——中文与 iOS 苹方同源，拉丁字母也是 Source Sans 系（接近 SF）
-    // 说明：Compose 的 FontFamily 不支持「Inter 缺字→跳 Noto」的运行时 fallback，
-    // 所以统一用一个含中英文的字族，保证中文不会掉回系统 OPPO Sans。
-    LaunchedEffect(Unit) {
-        runCatching {
-            val fam = androidx.compose.ui.text.font.FontFamily(
-                androidx.compose.ui.text.font.Font("fonts/MiSans-Regular.ttf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.Normal),
-                androidx.compose.ui.text.font.Font("fonts/MiSans-Semibold.ttf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.SemiBold)
-            )
-            // 探一下确实存在再切（不存在会整段抛错，保持默认 Inter）
-            appCtx.assets.open("fonts/MiSans-Regular.ttf").close()
-            AppFontFamily = fam
-            runCatching {
-                java.io.File("/storage/emulated/0/字体日志.txt").appendText("MiSans loaded\n")
-            }
-        }.onFailure { t ->
-            runCatching {
-                java.io.File("/storage/emulated/0/字体日志.txt").appendText("MiSans FAIL " + t + "\n")
-            }
-        }
-    }
+    // 字体：全局 MiSans（res/font，见文件末尾 AppFontFamily），不再有运行时切换/兜底
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
     var showCardSheet by remember { mutableStateOf(false) }
     // 启动清理：撤销回收站里超过 1 天的备份（避免占用空间）
@@ -10228,10 +10208,10 @@ fun ansiToAnnotated(src: String): androidx.compose.ui.text.AnnotatedString {
 // iOS 风格字体：Inter（最接近 SF Pro）
 // 默认用 res/font；运行时若解析失败，会切到 assets/fonts 版本（见 FileManagerScreen 里的 LaunchedEffect）
 var AppFontFamily by androidx.compose.runtime.mutableStateOf(
-    // 默认 Inter（res/font 一定存在）；运行时优先切到 assets 里的 Noto Sans SC（中文≈苹方）
+    // 默认就是 MiSans（res/font，构建时必然下载成功，失败则构建失败）
     androidx.compose.ui.text.font.FontFamily(
-        androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_regular, androidx.compose.ui.text.font.FontWeight.Normal),
-        androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_semibold, androidx.compose.ui.text.font.FontWeight.SemiBold)
+        androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.misans_regular, androidx.compose.ui.text.font.FontWeight.Normal),
+        androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.misans_semibold, androidx.compose.ui.text.font.FontWeight.SemiBold)
     )
 )
 val AppTypography = androidx.compose.material3.Typography(
