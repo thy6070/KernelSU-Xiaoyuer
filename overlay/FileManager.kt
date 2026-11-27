@@ -607,6 +607,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val outDir = java.io.File(appCtx.filesDir, "提取")
             if (!outDir.exists()) outDir.mkdirs()
             val dstFile = java.io.File(outDir, safe + ".apk")
+            termDrawerTitle = label
+            termDrawer = "提取应用：" + label + "\n" +
+                "包名：" + pkg + "\n" +
+                "目标：" + dstFile.absolutePath + "\n" +
+                "方式：pm path 定位 → su cp -f → chmod 644\n"
             withContext(Dispatchers.IO) {
                 try {
                     fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
@@ -905,9 +910,20 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                             // 模块 zip 也走抽屉终端；只有脚本/so 才用全屏终端
                             if (lower.endsWith(".zip")) {
+                                val zipId = runCatching {
+                                    ProcessBuilder(suBin(), "-c",
+                                        "unzip -p " + shq(p) + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\\r'")
+                                        .redirectErrorStream(true).start().let { pr ->
+                                            val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor(); o
+                                        }
+                                }.getOrDefault("")
                                 withContext(Dispatchers.Main) {
                                     termDrawerTitle = file
-                                    termDrawer = file + "\n"
+                                    termDrawer = file + "\n" +
+                                        "安装包：".padEnd(0) + p + "\n" +
+                                        "模块 id：" + (zipId.ifEmpty { "（无法读取 module.prop）" }) + "\n" +
+                                        "方式：ksud module install（/data/adb/ksud 优先，回退 libksud.so）\n" +
+                                        "清理残留：/data/adb/modules/" + zipId + " 与 modules_update/" + zipId + "\n"
                                 }
                             } else {
                                 withContext(Dispatchers.Main) { showTerminal = true }
@@ -1655,21 +1671,26 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
-                androidx.compose.foundation.text.BasicTextField(
-                    value = cmRenameText,
-                    onValueChange = { cmRenameText = it },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = Color(0xFF1C1C1E), fontSize = 16.sp, lineHeight = 20.sp, fontFamily = AppFontFamily
-                    ),
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp)
                         .height(34.dp)
                         .clip(SmoothCornerShape(10.dp))
                         .background(Color(0x11000000))
-                        .padding(horizontal = 10.dp)
-                )
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = cmRenameText,
+                        onValueChange = { cmRenameText = it },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = Color(0xFF1C1C1E), fontSize = 16.sp, lineHeight = 20.sp, fontFamily = AppFontFamily
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x33000000)))
                 Row(modifier = Modifier.fillMaxWidth().height(38.dp)) {
@@ -2347,10 +2368,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 内容：只保留「发现新版本」（删掉「提示」标题和版本号小字）
                 Text(
                     text = "发现新版本",
-                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 16.dp),
-                    fontSize = 17.sp,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.Black,
+                    color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
                 if (updateProgress >= 0) {
@@ -2387,7 +2408,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 // 左红取消 / 右蓝更新（进度中隐藏整行）
                 if (updateProgress < 0) {
-                    Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth().height(38.dp)) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -2591,10 +2612,44 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                         termDrawer = (termDrawer ?: "") + "当前 " + kv[0] + "：" + (kv.getOrNull(1) ?: "") + " .OK\n"
                                                     }
                                                 }
-                                                termDrawer = (termDrawer ?: "") + "修改项：ro.product.model → " + stripBrand(sel) + " .OK\n"
+                                                // 计算实际会被改写的 3 条属性（与 setModel 内部逻辑一致）
+                                                val realModel = run {
+                                                    val m = stripBrand(sel)
+                                                    when (m) {
+                                                        "Xiaomi 15" -> "24129PN74C"
+                                                        "Xiaomi 15 Pro" -> "2401DPN78C"
+                                                        "Xiaomi 15 Ultra" -> "25019PNF3C"
+                                                        "Xiaomi 16" -> "25113PN0EC"
+                                                        "Redmi K80" -> "24122RK2CC"
+                                                        "Redmi K70 Pro" -> "23117RK66C"
+                                                        "Xiaomi 14 Ultra" -> "24030PN60C"
+                                                        else -> m
+                                                    }
+                                                }
+                                                val brand0 = stripBrand(sel).substringBefore(" ").ifBlank { "Xiaomi" }
+                                                val spoofBrand = when (brand0) {
+                                                    "Redmi" -> "REDMI"; "Xiaomi" -> "Xiaomi"; "HUAWEI" -> "HUAWEI"
+                                                    "OPPO" -> "OPPO"; "vivo" -> "vivo"; "iQOO" -> "iQOO"
+                                                    "真我" -> "realme"; "一加" -> "OnePlus"; "红魔" -> "REDMAGIC"
+                                                    "荣耀" -> "HONOR"; "三星" -> "samsung"; "ROG" -> "ASUS"
+                                                    else -> brand0
+                                                }
+                                                val spoofMfr = when (brand0) {
+                                                    "Redmi", "Xiaomi" -> "Xiaomi"; "iQOO" -> "vivo"; "真我" -> "realme"
+                                                    "红魔" -> "nubia"; "一加" -> "OnePlus"; "三星" -> "samsung"
+                                                    "ROG" -> "ASUS"; else -> spoofBrand
+                                                }
+                                                val cur = curProps.filter { it.isNotBlank() }.associate { pr ->
+                                                    val kv = pr.split("=", limit = 2)
+                                                    kv[0].trim() to (kv.getOrNull(1) ?: "").trim()
+                                                }
+                                                termDrawer = (termDrawer ?: "") + "修改 ro.product.model：" + (cur["ro.product.model"] ?: "?") + " → " + realModel + " .OK\n"
+                                                termDrawer = (termDrawer ?: "") + "修改 ro.product.brand：" + (cur["ro.product.brand"] ?: "?") + " → " + spoofBrand + " .OK\n"
+                                                termDrawer = (termDrawer ?: "") + "修改 ro.product.manufacturer：" + (cur["ro.product.manufacturer"] ?: "?") + " → " + spoofMfr + " .OK\n"
                                                 withContext(Dispatchers.IO) {
                                                     try { setAct?.invoke(sel) } catch (t: Throwable) {}
                                                 }
+                                                termDrawer = (termDrawer ?: "") + "写入 /data/adb/post-fs-data.d/xy_spoof.sh .OK\n"
                                                 termDrawer = (termDrawer ?: "") + "设置机型 " + stripBrand(sel) + " .OK\n"
                                                 termDrawer = (termDrawer ?: "") + "已完成 .OK\n"
                                                 termDrawerConfirm = {
@@ -3014,8 +3069,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    fontSize = 17.sp,
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
@@ -3026,7 +3081,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .height(0.33.dp)
                         .background(Color(0x33000000))
                 )
-                Row(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                Row(modifier = Modifier.fillMaxWidth().height(38.dp)) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -4923,7 +4978,10 @@ private fun ProMaxIsland(
                                                                             }
                                                                             val sb = StringBuilder()
                                                                             sb.append("模块：").append(m.id).append("\n")
-                                                                            sb.append("下载更新：v").append(m.updateVer).append("\n")
+                                                                            sb.append("下载地址：").append(m.updateZip).append("\n")
+                                                                            sb.append("版本：").append(m.version).append(" → v").append(m.updateVer).append("\n")
+                                                                            sb.append("目标：").append(zipPath).append("\n")
+                                                                            sb.append("方式：/data/adb/ksud module install（root）\n")
                                                                             outText.split("\n").filter { it.isNotBlank() }.forEach { sb.append(it).append("\n") }
                                                                             sb.append("更新完成 .OK\n已完成 .OK\n")
                                                                             withContext(Dispatchers.Main) {
@@ -6518,28 +6576,36 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                     color = Color(0xFF1C1C1E),
                     textAlign = TextAlign.Center
                 )
-                androidx.compose.foundation.text.BasicTextField(
-                    value = pathInput,
-                    onValueChange = { pathInput = it },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1C1C1E), fontSize = 17.sp, fontFamily = AppFontFamily),
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp)
+                        .height(34.dp)
                         .clip(SmoothCornerShape(10.dp))
                         .background(Color(0x11000000))
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                )
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = pathInput,
+                        onValueChange = { pathInput = it },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = Color(0xFF1C1C1E), fontSize = 16.sp, lineHeight = 20.sp, fontFamily = AppFontFamily
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x33000000)))
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         "取消",
-                        modifier = Modifier.weight(1f).fillMaxHeight().clickable { showPathDialog = false }.padding(vertical = 8.dp),
+                        modifier = Modifier.weight(1f).fillMaxHeight().clickable { showPathDialog = false }.wrapContentHeight(Alignment.CenterVertically),
                         fontSize = 15.sp,
                         color = Color(0xFFFF3B30),
                         textAlign = TextAlign.Center
@@ -6933,22 +6999,27 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        androidx.compose.foundation.text.BasicTextField(
-            value = key,
-            onValueChange = { key = it },
-            singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(
-                color = Color(0xFF1C1C1E), fontSize = 16.sp, lineHeight = 20.sp, fontFamily = AppFontFamily
-            ),
-            // 单行输入：固定 34dp（iOS 输入框高度），不再靠字号撑高
+        // 单行输入：固定 34dp（iOS 输入框高度），Box 垂直居中
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp)
                 .height(34.dp)
                 .clip(SmoothCornerShape(10.dp))
                 .background(Color(0x11000000))
-                .padding(horizontal = 10.dp)
-        )
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            androidx.compose.foundation.text.BasicTextField(
+                value = key,
+                onValueChange = { key = it },
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = Color(0xFF1C1C1E), fontSize = 16.sp, lineHeight = 20.sp, fontFamily = AppFontFamily
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
         Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x33000000)))
         Row(modifier = Modifier.fillMaxWidth().height(38.dp)) {
@@ -8043,13 +8114,14 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("OSN=\$(getprop ro.serialno 2>/dev/null); ")
                 sb.append("echo \"ORIG|\$OID|\$OHOST|\$OSN\" > ${xyFlagRoot}/xy_orig_ids.txt; ")
                 sb.append("chmod 644 ${xyFlagRoot}/xy_orig_ids.txt; ")
+                sb.append("echo \"原始 android_id=\$OID\"; echo \"原始 net.hostname=\$OHOST\"; echo \"原始 ro.serialno=\$OSN\"; ")
                 // 全随机
-                sb.append("settings put secure android_id ").append(androidId).append(" 2>/dev/null && echo \"修改 android_id → ").append(androidId).append(" .OK\" || echo \"修改 android_id .NO\"; ")
+                sb.append("settings put secure android_id ").append(androidId).append(" 2>/dev/null && echo \"修改 android_id：\$OID → ").append(androidId).append(" .OK\" || echo \"修改 android_id .NO\"; ")
                 sb.append("settings put secure advertising_id ").append(hex(16)).append(" 2>/dev/null; ")
                 sb.append("settings put secure device_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
                 sb.append("settings put secure bluetooth_name 'Xy-").append(hex(6)).append("' 2>/dev/null; ")
-                sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null && echo \"修改 net.hostname → ").append(hostname).append(" .OK\" || echo \"修改 net.hostname .NO\"; ")
-                sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null && echo \"修改 ro.serialno → ").append(serial).append(" .OK\" || echo \"修改 ro.serialno .NO\"; ")
+                sb.append("resetprop net.hostname '").append(hostname).append("' 2>/dev/null && echo \"修改 net.hostname：\$OHOST → ").append(hostname).append(" .OK\" || echo \"修改 net.hostname .NO\"; ")
+                sb.append("resetprop ro.serialno '").append(serial).append("' 2>/dev/null && echo \"修改 ro.serialno：\$OSN → ").append(serial).append(" .OK\" || echo \"修改 ro.serialno .NO\"; ")
                 // 用户层可改的其余标识（boot序列号 / build.id / OAID系列）
                 sb.append("resetprop ro.boot.serialno '").append(serial).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.boot.bootserialno '").append(serial).append("' 2>/dev/null; ")
@@ -8114,7 +8186,8 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("rm -f '/data/data/").append(pkg).append("/files/'*.log 2>/dev/null; ")
                 // 杀进程让标识重新初始化（同小轩工具箱）
                 sb.append("am force-stop ").append(pkg).append(" 2>/dev/null; ")
-                sb.append("echo \"清理完成: 删除 \$F 个标识文件, 失败 \$N 个 | AndroidID=").append(androidId).append(" .OK\"")
+                sb.append("echo \"清理完成：删除 \$F 个标识文件，失败 \$N 个 .OK\"; ")
+                sb.append("echo \"持久化：/data/adb/service.d/xy_ids.sh（开机保持） .OK\"; ")
                 val cmd = sb.toString()
                 val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd))
                 val sbOut = StringBuilder()
