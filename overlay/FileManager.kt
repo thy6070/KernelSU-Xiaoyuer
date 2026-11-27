@@ -222,6 +222,12 @@ private const val TEXT_COLOR = 0xFF1C1C1E.toInt()
 private const val FOLDER_ICON = 0xFF007AFF.toInt()
 private const val FILE_ICON = 0xFF9A9A9A.toInt()
 
+// /data/local/tmp 只用于「必须可执行」的文件（exec 受 W^X 限制，只有这里能跑）；
+// 回收站/解压/临时 HOME 这些数据文件放到 App 私有目录，避免积少成多。
+var xyFlagRoot: String = "/data/local/tmp"
+var xyWorkRoot: String = "/data/local/tmp"
+var xyArchRoot: String = "/data/local/tmp/yx_arch"
+
 private val apkIconCache = ConcurrentHashMap<String, ImageBitmap?>()
 // 包名目录图标缓存（/data/user/0/<pkg>、Android/data/<pkg>）
 private val pkgIconCache = ConcurrentHashMap<String, ImageBitmap?>()
@@ -10211,12 +10217,6 @@ fun ansiToAnnotated(src: String): androidx.compose.ui.text.AnnotatedString {
 }
 
 // iOS 风格字体：Inter（最接近 SF Pro）
-// /data/local/tmp 只用于「必须可执行」的文件（exec 受 W^X 限制，只有这里能跑）；
-// 回收站/解压/临时 HOME 这些数据文件放到 App 私有目录，避免积少成多。
-var xyFlagRoot: String = "/data/local/tmp"
-var xyWorkRoot: String = "/data/local/tmp"
-var xyArchRoot: String = xyArchRoot
-
 // 默认用 res/font；运行时若解析失败，会切到 assets/fonts 版本（见 FileManagerScreen 里的 LaunchedEffect）
 var AppFontFamily by androidx.compose.runtime.mutableStateOf(
     // 默认 Inter（res/font 一定存在）；运行时优先切到 assets 里的 Noto Sans SC（中文≈苹方）
