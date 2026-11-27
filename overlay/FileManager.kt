@@ -1326,13 +1326,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val act = if (signed) "取消签名" else "签名"
                     termDrawer = (termDrawer ?: "") + "写入 setAppProfile(Profile) " + (if (ok) " .OK" else " .NO") + "\n"
                     termDrawer = (termDrawer ?: "") + act + " " + label + (if (ok) " .OK" else " .NO") + "\n"
-                    // 列表状态就地刷新（不用退出重进抽屉）
+                    // 列表状态就地刷新（不用退出重进抽屉）：直接改全局标记表
                     if (ok) {
                         runCatching {
-                            suApps = suApps.map { a ->
-                                if (a.pkg == pkg) a.copy(allowed = !signed) else a
-                            }
-                            uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
+                            val cur = uiPickerMarks
+                            uiPickerMarks = if (signed) cur - label else cur + (label to "已签名")
                         }
                     }
                     termDrawer = (termDrawer ?: "") + "已完成 " + (if (ok) ".OK" else ".NO") + "\n"
