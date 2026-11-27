@@ -176,7 +176,23 @@ jobs:
           cp -f manager/app/src/main/res/font/*.ttf src/manager/app/src/main/res/font/ 2>/dev/null || true
           cp -f manager/app/src/main/assets/fonts/Inter-Regular.ttf src/manager/app/src/main/res/font/inter_regular.ttf 2>/dev/null || true
           cp -f manager/app/src/main/assets/fonts/Inter-SemiBold.ttf src/manager/app/src/main/res/font/inter_semibold.ttf 2>/dev/null || true
+          # 中文字体：Noto Sans SC（思源黑体，与 iOS 苹方同源）——构建时下载，不进仓库
+          mkdir -p manager/app/src/main/assets/fonts
+          for w in Regular SemiBold; do
+            if [ ! -s "manager/app/src/main/assets/fonts/NotoSansSC-$w.otf" ]; then
+              curl -fsSL --retry 3 -m 180 -o "manager/app/src/main/assets/fonts/NotoSansSC-$w.otf" \
+                "https://github.com/notofonts/noto-cjk/raw/main/Sans/SubsetOTF/SC/NotoSansSC-$w.otf"
+            fi
+            cp -f "manager/app/src/main/assets/fonts/NotoSansSC-$w.otf" \
+              "src/manager/app/src/main/res/font/noto_$(echo $w | tr 'A-Z' 'a-z').otf" 2>/dev/null || true
+          done
+          # Noto 同时放进 assets（App 运行时从 assets 加载，避免依赖 R.font 编译期存在性）
+          mkdir -p src/manager/app/src/main/assets/fonts
+          cp -f manager/app/src/main/assets/fonts/NotoSansSC-*.otf src/manager/app/src/main/assets/fonts/ 2>/dev/null || true
+          cp -f manager/app/src/main/assets/fonts/Inter-*.ttf src/manager/app/src/main/assets/fonts/ 2>/dev/null || true
           ls -la src/manager/app/src/main/res/font/ || echo "font dir missing"
+          ls -la src/manager/app/src/main/assets/fonts/ | head -8
+          ls -la manager/app/src/main/assets/fonts/ | grep -i noto || echo "noto download failed"
           cp manager/app/src/main/res/mipmap-xxhdpi/mod_icon.png src/manager/app/src/main/res/mipmap-xxhdpi/mod_icon.png 2>/dev/null || true
           cp manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg src/manager/app/src/main/res/drawable-nodpi/ic_zysu.jpg
           mkdir -p src/manager/app/src/main/assets
