@@ -800,7 +800,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onMultiSelect = { p6 -> leftMultiSel = leftMultiSel + p6 },
                 onMultiDeselect = { p6 -> leftMultiSel = leftMultiSel - p6 },
                 onActivate = { longPressFromRight = false },
-                modifier = Modifier.weight(1f)
                 onZipExtractTo = { vp ->
                     val (zip, innerRaw) = ZipView.parse(vp)
                     val inner = innerRaw.trimEnd('/')
@@ -861,6 +860,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         refreshTick += 1
                     }
                 },
+                modifier = Modifier.weight(1f),
 
             )
         }
@@ -926,7 +926,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onMultiSelect = { p6 -> rightMultiSel = rightMultiSel + p6 },
                 onMultiDeselect = { p6 -> rightMultiSel = rightMultiSel - p6 },
                 onActivate = { longPressFromRight = true },
-                modifier = Modifier.weight(1f)
                 onZipExtractTo = { vp ->
                     val (zip, innerRaw) = ZipView.parse(vp)
                     val inner = innerRaw.trimEnd('/')
@@ -987,6 +986,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         refreshTick += 1
                     }
                 },
+                modifier = Modifier.weight(1f),
 
             )
         }
