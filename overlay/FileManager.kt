@@ -4861,26 +4861,26 @@ private fun ProMaxIsland(
                                                                         }
                                                                         if (zipPath == null) {
                                                                             withContext(Dispatchers.Main) {
-                                                                                termDrawer = (termDrawer ?: "") + "下载失败 .NO\n"
-                                                                                termDrawer = (termDrawer ?: "") + "已完成 .NO\n"
+                                                                                onShowTermDrawer("模块：${m.id}\n下载更新：v${m.updateVer}\n下载失败 .NO\n已完成 .NO\n")
                                                                             }
                                                                         } else {
-                                                                            withContext(Dispatchers.IO) {
+                                                                            val outText = withContext(Dispatchers.IO) {
                                                                                 runCatching {
                                                                                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                                                                                         "cp -f '" + zipPath + "' /data/local/tmp/xy_mod_update.zip ; " +
                                                                                             "/data/adb/ksud module install /data/local/tmp/xy_mod_update.zip 2>&1"))
                                                                                     val out = pr.inputStream.bufferedReader().readText()
                                                                                     pr.waitFor()
-                                                                                    val lines = out.split("\n").filter { it.isNotBlank() }
-                                                                                    withContext(Dispatchers.Main) {
-                                                                                        lines.forEach { termDrawer = (termDrawer ?: "") + it + "\n" }
-                                                                                    }
-                                                                                }
+                                                                                    out
+                                                                                }.getOrDefault("")
                                                                             }
+                                                                            val sb = StringBuilder()
+                                                                            sb.append("模块：").append(m.id).append("\n")
+                                                                            sb.append("下载更新：v").append(m.updateVer).append("\n")
+                                                                            outText.split("\n").filter { it.isNotBlank() }.forEach { sb.append(it).append("\n") }
+                                                                            sb.append("更新完成 .OK\n已完成 .OK\n")
                                                                             withContext(Dispatchers.Main) {
-                                                                                termDrawer = (termDrawer ?: "") + "更新完成 .OK\n"
-                                                                                termDrawer = (termDrawer ?: "") + "已完成 .OK\n"
+                                                                                onShowTermDrawer(sb.toString())
                                                                             }
                                                                         }
                                                                     }
