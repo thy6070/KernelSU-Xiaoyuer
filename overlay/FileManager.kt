@@ -4417,6 +4417,7 @@ private fun ProMaxIsland(
     fun closeIsland() {
         // 收起时清掉撤回记录，避免下次展开还显示"撤回上一个…"
         pendingUndo = null
+        undoPanelOnly = false   // 清掉「只显示撤回面板」标记，否则下次删除会自己弹出来
         reopenScope.launch {
             navClosing = true
             navMode = false
@@ -4599,9 +4600,9 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
                 .combinedClickable(
                     onLongClick = {
-                        // 长按分岛：始终打开导航栏（不进撤回面板）
+                        // 长按分岛：始终展开导航栏（不进撤回面板、不收起）
                         undoPanelOnly = false
-                        onOpen()
+                        openNav(null)
                     },
                     onClick = {
                     if (pendingUndo != null) {
@@ -5609,7 +5610,7 @@ private fun ProMaxIsland(
                                             if (isArchive) "解压" else "压缩",
                                             Color(0xFF0A84FF)
                                         ) {
-                                            if (isArchive) onFileOp("unzip", oppositePath)
+                                            if (isArchive) onArchiveEnter()   // 虚拟浏览，不整包解压
                                             else onFileOp("zip", "")
                                             closeIsland()
                                         }
@@ -7228,6 +7229,13 @@ private fun BrowserPane(
     val paneCtx = androidx.compose.ui.platform.LocalContext.current
     val paneScope = androidx.compose.runtime.rememberCoroutineScope()
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
+    // 刚进目录 700ms 内才播「行进入动画」，滚动时不播
+    var rowAnimWindow by remember { mutableStateOf(true) }
+    LaunchedEffect(path) {
+        rowAnimWindow = true
+        kotlinx.coroutines.delay(700)
+        rowAnimWindow = false
+    }
     var multiMode by remember { mutableStateOf(false) }
     var pullDy by remember { mutableStateOf(0f) }
     val listState = rememberLazyListState()
@@ -7335,7 +7343,13 @@ private fun BrowserPane(
             },
             label = "dirTransition"
         ) { _ ->
-        Box(modifier = Modifier.fillMaxSize()) {
+        // 轻微倾斜：左栏右低左高→回正；右栏左低右高→回正（对称的"落定"感）
+        val tilt = remember { androidx.compose.animation.core.Animatable(if (pathAlignRight) -1.1f else 1.1f) }
+        LaunchedEffect(path) {
+            tilt.snapTo(if (pathAlignRight) -1.1f else 1.1f)
+            tilt.animateTo(0f, tween(420, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+        }
+        Box(modifier = Modifier.fillMaxSize().graphicsLayer { rotationZ = tilt.value }) {
         // 下拉/刷新指示器：跟手下拉时旋转放大，刷新中转圈
         val pullProgress = (pullDy / 150f).coerceIn(0f, 1f)
         if (pullProgress > 0.02f || pullRefreshing) {
@@ -7418,7 +7432,7 @@ private fun BrowserPane(
             val rowPath = joinPath(path, entry.name)
             FsRow(
                 index = idx,
-                animateIn = true,
+                animateIn = rowAnimWindow,
                 enterFrom = enterFromDir,
                 name = entry.name,
                 isDir = entry.isDir,
@@ -9100,6 +9114,8 @@ var uiPickerMarks by androidx.compose.runtime.mutableStateOf<Map<String, String>
 
 // 加密压缩包：密码输入弹窗（iOS 重命名同款）
 var pickCancelClosesDrawer by androidx.compose.runtime.mutableStateOf(false)
+// 目录切换标记：行进入动画只在新目录第一屏播放
+var dirEnterTick by androidx.compose.runtime.mutableIntStateOf(0)
 var zipPwdVisible by androidx.compose.runtime.mutableStateOf(false)
 var zipPwdText by androidx.compose.runtime.mutableStateOf("")
 var zipPwdName by androidx.compose.runtime.mutableStateOf("")
