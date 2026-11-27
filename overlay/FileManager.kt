@@ -236,6 +236,10 @@ data class FsEntry(val name: String, val isDir: Boolean, val sizeText: String = 
 @Composable
 fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}) {
     androidx.compose.material3.MaterialTheme(typography = AppTypography) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.material3.LocalTextStyle provides
+            androidx.compose.material3.LocalTextStyle.current.copy(fontFamily = AppFontFamily)
+    ) {
     val appCtx = LocalContext.current
     val view = LocalView.current
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
@@ -501,7 +505,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     var activeProc by remember { mutableStateOf<Process?>(null) }
     val panelP = remember { Animatable(0f) }
     val uiScope = rememberCoroutineScope()
-    // 重置（游戏清理）：先进抽屉展示，点右上确定/双击电源键才开始
+    // 日志逐行输出（每条之间留一点间隔，避免一下全冒出来）
+    suspend fun appendLineTyped(line: String) {
+        termDrawer = (termDrawer ?: "") + line + "\n"
+        kotlinx.coroutines.delay(90)
+    }
+
+    // 重置（游戏清理）：先进抽屉展示，点右上确定/电源键开始
     fun runResetFor(label: String) {
         val appSel = uiPickerAction
         termDrawerTitle = label
@@ -516,7 +526,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }.getOrNull()
             }
             termDrawerIcon = ic
-            termDrawer = label + "\n▶ 连按两下关机键开始 / 点右上角确认开始\n"
+            termDrawer = label + "\n"
             val doReset: () -> Unit = {
                 stopWatchPowerKey()
                 resetLineSink = { line -> termDrawer = (termDrawer ?: "") + line + "\n" }
@@ -539,7 +549,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 pickConfirmOk = "确定"; pickConfirmAccentWord = null
                 pickConfirm = "重置 " + label + "？" to { doReset() }
             }
-            watchPowerKey { doReset() }
+
         }
     }
 
@@ -792,15 +802,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 termDrawer = nm0 + "  v" + (info0?.versionName ?: "") + "  " + (info0?.packageName ?: "") + "\n准备将此程序加载至桌面\n"
                                 termDrawerConfirm = {
                                     termDrawerConfirm = null
-                                    // 先弹确认（和抽屉其它操作一致），确定后再安装
                                     pickConfirmOk = "安装"
                                     pickConfirmAccentWord = null
                                     pickConfirm = "安装 " + nm0 + " ？" to {
-                                    // 先让抽屉展开（1 秒）再安装：用主线程 postDelayed，避免在非协程里 delay
-                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    // 立即给反馈（不然用户以为没反应）
+                                    termDrawer = (termDrawer ?: "") + "开始安装 " + nm0 + " …\n"
+                                    termDrawerTitle = file
                                     installApkReport(appCtx, p,
                                     { line, okLine ->
-                                        termDrawer = (termDrawer ?: "") + line + (if (okLine) " .OK" else " .NO") + "\n"
+                                        // 子线程回调 → 必须切主线程更新 Compose 状态
+                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                            termDrawer = (termDrawer ?: "") + line + (if (okLine) " .OK" else " .NO") + "\n"
+                                        }
                                     },
                                     { doneOk ->
                                         val nm = file.removeSuffix(".apk")
@@ -828,7 +841,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             }
                                         }
                                     })
-                                    }, 1000)
                                     }
                                 }
                                 return@withContext
@@ -1274,8 +1286,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     d.setBounds(0, 0, w0, h0); d.draw(cv)
                     b.asImageBitmap()
                 }.getOrNull()
-                termDrawer = label + "  v" + ver + "  " + pkg + "\n" +
-                    "▶ 连按两下关机键开始 / 点右上角确认开始\n"
+                termDrawer = label + "  v" + ver + "  " + pkg + "\n"
                 // 点「确定」/ 双击电源键 → 先弹确认弹窗，确定后才开始
                 val askStart: () -> Unit = {
                     stopWatchPowerKey()
@@ -1289,11 +1300,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     termDrawerConfirm = null
                     askStart()
                 }
-                // 电源键双击：不弹确认，直接开始
-                watchPowerKey {
-                    stopWatchPowerKey()
-                    doExec()
-                }
+
             }
         },
         onExtractApp = { pkg, label ->
@@ -1301,12 +1308,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 withContext(Dispatchers.IO) {
                     try {
                         val safe = label.replace("/", "_").replace("\"", "_")
-                        // 提取到单独目录：files/提取/
-                        val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
-                            "mkdir -p \"/data/user/0/com.tencent.THY/files/提取\"; " +
-                            "cp \"\$P\" \"/data/user/0/com.tencent.THY/files/提取/$safe.apk\" && " +
-                            "chmod 644 \"/data/user/0/com.tencent.THY/files/提取/$safe.apk\""
-                        ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
+                        // 提取到单独目录：<app files>/提取（App 自己创建，权限没问题）
+                        val outDir = java.io.File(appCtx.filesDir, "提取")
+                        if (!outDir.exists()) outDir.mkdirs()
+                        val dstFile = java.io.File(outDir, safe + ".apk")
+                        val cmd = "P=\$(pm path " + pkg + " | head -1 | sed 's/package://'); " +
+                            "[ -n \"\$P\" ] && cp -f \"\$P\" '" + dstFile.absolutePath.replace("'", "'\\''") + "' && " +
+                            "chmod 644 '" + dstFile.absolutePath.replace("'", "'\\''") + "' ; " +
+                            "ls -l '" + dstFile.absolutePath.replace("'", "'\\''") + "' 2>&1"
+                        val pr = ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start()
+                        val outTxt = pr.inputStream.bufferedReader().readText()
+                        pr.waitFor()
+                        runCatching {
+                            java.io.File("/data/local/tmp/xy_extract_log.txt").appendText(
+                                "extract " + pkg + " -> " + dstFile.absolutePath + " out=" + outTxt.take(200) + "\n"
+                            )
+                        }
                     } catch (t: Throwable) {
                     }
                 }
@@ -1351,6 +1368,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         onOpenTerminal = { termFull = true },
         onPreview = { previewPath = it },
         onOpen = {
+            undoPanelOnly = false
             // 分岛点击：打开模式面板（FPS+/禁用温控/执行此文件）
             uiScope.launch {
                 panelP.snapTo(0f)
@@ -1391,8 +1409,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         onArchiveEnter = {
             // 定位（高亮）时没有选中态，回退用 leftHighlight 路径
             val p0 = longPressPath ?: selectedFile ?: leftHighlight
-            // 校验：必须是真实存在的文件（防用残留路径解压旧包）
-            val p = if (p0 != null && runCatching { java.io.File(p0).isFile }.getOrDefault(false)) p0 else null
+            // 校验：必须真实存在（用 root 判断，App 读不到 Android/data 下文件但 root 能）
+            val p = if (p0 != null && runCatching {
+                    suNow("test -f '" + p0.replace("'", "'\\''") + "' && echo ok 2>/dev/null").contains("ok")
+                }.getOrDefault(false)) p0 else null
             if (p != null) {
                 uiScope.launch {
                     running = true
@@ -1648,7 +1668,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { appMenuPkg = null },
             properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnClickOutside = false,
+                dismissOnClickOutside = true,
                 dismissOnBackPress = true,
                 usePlatformDefaultWidth = false,
                 decorFitsSystemWindows = false
@@ -1700,7 +1720,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 )
                 Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x22000000)))
                 val amItems = listOf(
-                    (if (appMenuSigned) "卸载 " + appMenuLabel + " 签名" else "签名 " + appMenuLabel) to {
+                    (if (appMenuSigned) "卸载签名" else "签名") to {
                         val pkgTmp = amPkg
                         val labelTmp = appMenuLabel
                         val signedTmp = appMenuSigned
@@ -1785,14 +1805,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     if (i < amItems.size - 1) {
                         Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x22000000)))
                     }
-                }
-                Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x22000000)))
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(42.dp).clickable { appMenuPkg = null },
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("取消", fontSize = 16.sp, color = Color(0xFF007AFF), textAlign = TextAlign.Center)
                 }
             }
             }
@@ -2488,8 +2500,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             // 改机型：日志抽屉 → 执行 → 结果 → 右上确定弹重启
                                             val setAct = uiPickerAction
                                             termDrawerTitle = stripBrand(sel)
-                                            termDrawer = "目标机型：" + stripBrand(sel) + "\n" +
-                                                "▶ 连按两下关机键开始 / 点右上角确认开始\n"
+                                            termDrawer = "目标机型：" + stripBrand(sel) + "\n"
                                             uiScope.launch {
                                                 kotlinx.coroutines.delay(1000)   // 先让抽屉展开
                                                 // 先读当前机型（修改前）：逐项详细
@@ -2637,6 +2648,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         text = if (pickTitle == "选择机型") item.substringAfter("】", item).trim() else item,
                                         modifier = Modifier.weight(1f),
                                         fontSize = 15.sp,
+                                        fontFamily = AppFontFamily,
                                         color = Color.Black,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -2718,6 +2730,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     Text(
                         "取消",
                         color = Color(0xFFFF3B30),
+                        fontFamily = AppFontFamily,
                         fontSize = 17.sp,
                         modifier = Modifier.clickable { closeTerm() }
                     )
@@ -2727,6 +2740,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Text(
                             "确定",
                             color = Color(0xFF007AFF),
+                            fontFamily = AppFontFamily,
                             fontSize = 17.sp,
                             modifier = Modifier.clickable {
                                 termDrawerConfirm = null
@@ -2737,6 +2751,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         Text(
                             "确定",
                             color = Color(0xFF007AFF),
+                            fontFamily = AppFontFamily,
                             fontSize = 17.sp,
                             modifier = Modifier.clickable { closeTerm() }
                         )
@@ -2772,15 +2787,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     .background(Color(0x33000000))
                             )
                         }
-                        // 每行首次出现时淡入（打字机观感，不再"凭空出现"）
+                        // 每行按索引错开做「淡入 + 上滑」动画（不是延迟内容，是动画错峰）
                         val lineAlpha = remember(ln) { androidx.compose.animation.core.Animatable(0f) }
+                        val lineShift = remember(ln) { androidx.compose.animation.core.Animatable(10f) }
                         LaunchedEffect(ln) {
-                            lineAlpha.animateTo(1f, tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                            kotlinx.coroutines.delay((i % 12) * 45L)
+                            kotlinx.coroutines.launch { lineShift.animateTo(0f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+                            lineAlpha.animateTo(1f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing))
                         }
                         Row(
                             modifier = Modifier
                                 .padding(horizontal = 16.dp, vertical = 1.dp)
-                                .graphicsLayer { alpha = lineAlpha.value },
+                                .graphicsLayer {
+                                    alpha = lineAlpha.value
+                                    translationY = lineShift.value
+                                },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val headIcon = termDrawerIcon
@@ -3292,6 +3313,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         }
     }
     }
+    }   // CompositionLocalProvider（LocalTextStyle=Inter）结束
     }   // MaterialTheme（全局 Inter 字体）结束
 }
 
@@ -3544,6 +3566,8 @@ private fun ProMaxIsland(
     onRefresh: () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // 只有点胶囊「撤回」图标进入时，才显示「撤回上一个事件」面板
+    var undoPanelOnly by remember { mutableStateOf(false) }
     var bgModePick by remember { mutableStateOf<String?>(null) }
     var bgModeIsImg by remember { mutableStateOf(false) }
     val bgCtx = androidx.compose.ui.platform.LocalContext.current
@@ -3930,7 +3954,8 @@ private fun ProMaxIsland(
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
                 .clickable {
                     if (pendingUndo != null) {
-                        // 有撤销事件：展开胶囊（只显示撤回按钮）
+                        // 有撤销事件：展开胶囊（只显示撤回）
+                        undoPanelOnly = true
                         reopenScope.launch {
                             navMode = true
                             navTarget = null
@@ -4099,7 +4124,7 @@ private fun ProMaxIsland(
             // 撤回按钮：独立浮层（不放进导航栏面板，收起只收它自己）
             AnimatedVisibility(
                 // 只在展开面板时显示（删除后收起面板不直接弹撤回按钮）
-                visible = (navMode || navTarget != null) && navTarget == null && pendingUndo != null,
+                visible = undoPanelOnly && pendingUndo != null,
                 // 与其他按钮/面板同一套：高度伸缩 + 淡入淡出
                 enter = androidx.compose.animation.expandVertically(
                     animationSpec = tween(260, easing = zyEase),
@@ -4188,6 +4213,8 @@ private fun ProMaxIsland(
                         Text(
                             text = "撤回上一个事件",
                             fontSize = 14.sp,
+                            lineHeight = 18.sp,
+                            fontFamily = AppFontFamily,
                             color = Color.White,
                             textAlign = TextAlign.Center
                         )
@@ -6209,6 +6236,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                 // 深色胶囊上的小字：浅灰白
                 color = Color(0x99FFFFFF),
                 fontSize = 9.sp,
+                lineHeight = 11.sp,
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -7462,6 +7490,11 @@ private fun findAllMatches(text: String, q: String): List<Pair<Int, Int>> {
 // 安装 APK 并输出结构化报告（5 行，行尾 .OK/.NO）
 internal fun installApkReport(ctx: android.content.Context, path: String, onLine: (String, Boolean) -> Unit, onDone: (Boolean) -> Unit) {
     Thread {
+        fun dbg(m: String) {
+            runCatching { java.io.File("/data/local/tmp/xy_install_log.txt").appendText(System.currentTimeMillis().toString() + " " + m + "\n") }
+        }
+        try {
+        dbg("start path=" + path)
         val pm = ctx.packageManager
         // ① 图标 + 名称 + 版本
         var label = path.substringAfterLast('/')
@@ -7533,6 +7566,12 @@ internal fun installApkReport(ctx: android.content.Context, path: String, onLine
         onLine(if (ok) "已加载至桌面" else "安装失败", ok)
         onLine("已完成", ok)
         onDone(ok)
+        dbg("done ok=" + ok)
+        } catch (t: Throwable) {
+            dbg("EX " + t)
+            onLine("安装异常: " + (t.message ?: ""), false)
+            onDone(false)
+        }
     }
 }
 
