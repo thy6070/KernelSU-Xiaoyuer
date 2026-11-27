@@ -270,35 +270,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         java.io.File(xyWorkRoot).mkdirs()
         java.io.File(xyArchRoot).mkdirs()
     }
-    // 字体：Inter（英文/数字，最接近 SF Pro）+ Noto Sans SC（中文，与苹方同源）
-    // 用 CustomFallbackBuilder 把英文优先、中文回退串起来（API 29+）
+    // 字体：Noto Sans SC（思源黑体）——中文与 iOS 苹方同源，拉丁字母也是 Source Sans 系（接近 SF）
+    // 说明：Compose 的 FontFamily 不支持「Inter 缺字→跳 Noto」的运行时 fallback，
+    // 所以统一用一个含中英文的字族，保证中文不会掉回系统 OPPO Sans。
     LaunchedEffect(Unit) {
         runCatching {
-            val ctx = appCtx
-            val inter = android.graphics.Typeface.Builder(ctx.assets, "fonts/Inter-Regular.ttf").build()
-            val interSemi = android.graphics.Typeface.Builder(ctx.assets, "fonts/Inter-SemiBold.ttf").build()
-            val noto = android.graphics.Typeface.Builder(ctx.assets, "fonts/NotoSansSC-Regular.otf").build()
-            val notoSemi = android.graphics.Typeface.Builder(ctx.assets, "fonts/NotoSansSC-Medium.otf").build()
-            val family = if (android.os.Build.VERSION.SDK_INT >= 29) {
-                val r = android.graphics.Typeface.CustomFallbackBuilder(inter)
-                    .addCustomFallback(noto).build()
-                val s2 = android.graphics.Typeface.CustomFallbackBuilder(interSemi)
-                    .addCustomFallback(notoSemi).build()
-                androidx.compose.ui.text.font.FontFamily(
-                    androidx.compose.ui.text.font.Font(androidx.compose.ui.text.platform.Typeface(r), androidx.compose.ui.text.font.FontWeight.Normal),
-                    androidx.compose.ui.text.font.Font(androidx.compose.ui.text.platform.Typeface(s2), androidx.compose.ui.text.font.FontWeight.SemiBold)
-                )
-            } else null
-            if (family != null) {
-                AppFontFamily = family
-                runCatching {
-                    java.io.File(ctx.filesDir, "font_log.txt").appendText("Inter+Noto fallback loaded\n")
-                }
-            }
+            val fam = androidx.compose.ui.text.font.FontFamily(
+                androidx.compose.ui.text.font.Font("fonts/NotoSansSC-Regular.otf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.Normal),
+                androidx.compose.ui.text.font.Font("fonts/NotoSansSC-Medium.otf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.SemiBold)
+            )
+            // 探一下确实存在再切（不存在会整段抛错，保持默认 Inter）
+            appCtx.assets.open("fonts/NotoSansSC-Regular.otf").close()
+            AppFontFamily = fam
+            runCatching { java.io.File(appCtx.filesDir, "font_log.txt").appendText("Noto Sans SC loaded\n") }
         }.onFailure { t ->
-            runCatching {
-                java.io.File(appCtx.filesDir, "font_log.txt").appendText("Inter+Noto FAIL " + t + "\n")
-            }
+            runCatching { java.io.File(appCtx.filesDir, "font_log.txt").appendText("Noto FAIL " + t + "\n") }
         }
     }
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
@@ -6349,8 +6335,8 @@ private fun ModeButton(
                                         "resetprop ro.boot.warranty_bit 0 2>/dev/null; true")
                                     // download through the app (Android has no curl), then hand it to ksud
                                     su("mkdir -p /data/local/tmp")
+                                    val cacheZip = java.io.File(ctx3.cacheDir, "as.zip")
                                     try {
-                                        val cacheZip = java.io.File(ctx3.cacheDir, "as.zip")
                                         if (!cacheZip.exists() || cacheZip.length() < 10000) {
                                             val conn = java.net.URL(
                                                 "https://gitlab.com/api/v4/projects/87739512/packages/generic/AlwaysStrong/v1.0.5-r2/AlwaysStrong-v1.0.5.zip"
@@ -7169,7 +7155,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
                     // 先 cp，失败再用 cat 兜底（大文件/特殊路径更稳）
                     suNow("cp -f " + qq + " '" + tmp.absolutePath + "' 2>/dev/null || cat " + qq + " > '" + tmp.absolutePath + "'")
                     runCatching {
-                        java.io.File(appCtx.cacheDir, "xy_thumb_log.txt").appendText(
+                        java.io.File(ctx.cacheDir, "xy_thumb_log.txt").appendText(
                             "thumb " + fullPath + " -> " + tmp.length() + "\n"
                         )
                     }
