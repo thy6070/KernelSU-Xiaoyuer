@@ -257,15 +257,72 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     ) {
     val appCtx = LocalContext.current
     val view = LocalView.current
+    // 工作目录：回收站/临时 HOME 放 App 缓存，解压目录放 files（root 与 App 都可访问）
+    runCatching {
+        xyFlagRoot = appCtx.cacheDir.absolutePath
+        xyWorkRoot = appCtx.cacheDir.absolutePath + "/xy"
+        xyArchRoot = appCtx.filesDir.absolutePath + "/解压"
+        java.io.File(xyWorkRoot).mkdirs()
+        java.io.File(xyArchRoot).mkdirs()
+    }
+    // 字体：res/font 有时解析不到（资源混淆/压缩），这里再用 assets 里的 Inter 兜一次
+    LaunchedEffect(Unit) {
+        runCatching {
+            val fam = androidx.compose.ui.text.font.FontFamily(
+                androidx.compose.ui.text.font.Font("fonts/Inter-Regular.ttf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.Normal),
+                androidx.compose.ui.text.font.Font("fonts/Inter-SemiBold.ttf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.SemiBold)
+            )
+            AppFontFamily = fam
+            runCatching {
+                java.io.File(appCtx.filesDir, "font_log.txt").appendText(
+                    "assets Inter loaded ok; res font = " + runCatching {
+                        appCtx.resources.getFont(com.tencent.THY.R.font.inter_regular)
+                    }.isSuccess + "\n"
+                )
+            }
+        }.onFailure { t ->
+            runCatching { java.io.File(appCtx.filesDir, "font_log.txt").appendText("assets Inter FAIL " + t + "\n") }
+        }
+    }
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
     var showCardSheet by remember { mutableStateOf(false) }
     // 启动清理：撤销回收站里超过 1 天的备份（避免占用空间）
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             try {
+                // ① 回收站：只留 1 天
                 ProcessBuilder(suBin(), "--mount-master", "-c",
-                    "find /data/local/tmp/xy_trash -mindepth 1 -mtime +1 -exec rm -rf {} + 2>/dev/null || true")
+                    "find " + xyWorkRoot + "/xy_trash -mindepth 1 -mtime +1 -exec rm -rf {} + 2>/dev/null || true")
                     .redirectErrorStream(true).start().waitFor()
+                // ② App 缓存：单个日志超过 256KB 就清空，避免无限增长
+                runCatching {
+                    appCtx.cacheDir.listFiles()?.forEach { f ->
+                        if (f.isFile && f.length() > 262144 && (f.name.endsWith(".txt") || f.name.endsWith(".log"))) {
+                            f.writeText("")
+                        }
+                    }
+                }
+                // ③ 解压临时目录：超过 1 天没动的直接清掉（用户多半已经看完了）
+                runCatching {
+                    val archDir = java.io.File(appCtx.filesDir, "解压")
+                    val deadline = System.currentTimeMillis() - 24L * 3600 * 1000
+                    archDir.listFiles()?.forEach { f ->
+                        if (f.lastModified() < deadline) runCatching { f.deleteRecursively() }
+                    }
+                }
+                // ④ 缓存目录总量超过 100MB：按修改时间清掉最旧的一批文件
+                runCatching {
+                    val all = appCtx.cacheDir.walkTopDown().filter { it.isFile }.toList()
+                    var total = all.sumOf { it.length() }
+                    if (total > 100L * 1024 * 1024) {
+                        all.sortedBy { it.lastModified() }.forEach { f ->
+                            if (total > 80L * 1024 * 1024) {
+                                total -= f.length()
+                                runCatching { f.delete() }
+                            }
+                        }
+                    }
+                }
             } catch (t: Throwable) {}
         }
     }
@@ -306,24 +363,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         ) {
             val cardView = androidx.compose.ui.platform.LocalView.current
             LaunchedEffect(Unit) { applyImmersiveToDialog(cardView) }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0x66000000)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    modifier = Modifier
-                        .width(320.dp)
-                        .shadow(30.dp, SmoothCornerShape(20.dp), clip = false,
-                            ambientColor = Color(0x40000000), spotColor = Color(0x40000000))
-                        .clip(SmoothCornerShape(20.dp))
-                        .background(Color(0xFFF2F2F7))
-                ) {
-                    CardLoginSheet(appCtx) {
-                        showCardSheet = false
-                    }
-                }
+            CardLoginSheet(appCtx) {
+                showCardSheet = false
             }
         }
     }
@@ -570,20 +611,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     val appMenuExtract: (String, String) -> Unit = { pkg, label ->
         uiScope.launch {
+            val safe = label.replace("/", "_").replace("\"", "_")
+            // 和 onExtractApp 一致：提取到独立子目录 files/提取/
+            val outDir = java.io.File(appCtx.filesDir, "提取")
+            if (!outDir.exists()) outDir.mkdirs()
+            val dstFile = java.io.File(outDir, safe + ".apk")
             withContext(Dispatchers.IO) {
                 try {
-                    val safe = label.replace("/", "_").replace("\"", "_")
-                    val cmd = "P=\$(pm path $pkg | head -1 | sed 's/package://'); " +
-                        "mkdir -p \"/data/user/0/com.tencent.THY/files\"; " +
-                        "cp \"\$P\" \"/data/user/0/com.tencent.THY/files/$safe.apk\" && " +
-                        "chmod 644 \"/data/user/0/com.tencent.THY/files/$safe.apk\""
+                    fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
+                    val cmd = "P=\$(pm path " + q(pkg) + " | head -1 | sed 's/package://'); " +
+                        "[ -n \"\$P\" ] && cp -f \"\$P\" " + q(dstFile.absolutePath) + " && " +
+                        "chmod 644 " + q(dstFile.absolutePath)
                     ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
                 } catch (t: Throwable) {}
             }
             try {
-                val safe = label.replace("/", "_").replace("\"", "_")
                 FileLocate.side = "L"
-                FileLocate.path = "/data/user/0/com.tencent.THY/files/" + safe + ".apk"
+                FileLocate.path = dstFile.absolutePath
                 FileLocate.tick += 1
             } catch (t: Throwable) {}
             refreshTick += 1
@@ -643,7 +687,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     leftHighlight = null
                     // 从压缩包临时目录返回 → 回到压缩包原目录
                     // 只有离开压缩包目录才返回原目录；包内子目录正常进入
-                    if (leftPath.startsWith("/data/local/tmp/yx_arch") && !np.startsWith("/data/local/tmp/yx_arch")) {
+                    if (leftPath.startsWith(xyArchRoot) && !np.startsWith(xyArchRoot)) {
                         leftPath = archiveReturnPath ?: np
                     } else {
                         leftPath = np
@@ -715,7 +759,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     longPressPath = null
                     rightHighlight = null
                     // 从压缩包临时目录返回 → 回到压缩包原目录
-                    if (rightPath.startsWith("/data/local/tmp/yx_arch") && !np2.startsWith("/data/local/tmp/yx_arch")) {
+                    if (rightPath.startsWith(xyArchRoot) && !np2.startsWith(xyArchRoot)) {
                         rightPath = archiveReturnPath ?: np2
                     } else {
                         rightPath = np2
@@ -882,7 +926,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     // 我们的安装方式：-r 覆盖 + -d 允许降级 + -g 授予权限
                                     "cp -f " + shq(p) + " /data/local/tmp/xy_install.apk ; " +
                                         "chmod 644 /data/local/tmp/xy_install.apk ; " +
-                                        "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1"
+                                        "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 ; " +
+                                        "rm -f /data/local/tmp/xy_install.apk"
                                 lower.endsWith(".zip") -> {
                                     // 模块 zip：走官方 ksud（/data/adb/ksud 优先）
                                     // 用 shell 判断（root 能查 /data/adb）；app 的 canExecute 会误判
@@ -891,7 +936,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     // 1) 从 zip 读模块 id → 清理残留（防残缺安装）2) ksud 安装 3) 验证
                                     "ZID=$(unzip -p " + shq(p) + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
                                         "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
-                                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                                        "export HOME=" + xyWorkRoot + " ; export TMPDIR=" + xyWorkRoot + " ; " +
                                         "KSUD=" + shq(libKsud) + " ; [ -x \"\$KSUD\" ] || KSUD=/data/adb/ksud ; " +
                                         "\"\$KSUD\" module install " + shq(p) + " 2>&1 ; " +
                                         "echo '--- verify:' ; " +
@@ -902,7 +947,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     val key = soKey.trim()
                                     "cp -f \"$p\" /data/local/tmp/xy_exec.so 2>/dev/null ; " +
                                         "chmod 755 /data/local/tmp/xy_exec.so 2>/dev/null ; " +
-                                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                                        "export HOME=" + xyWorkRoot + " ; export TMPDIR=" + xyWorkRoot + " ; " +
                                         (if (key.isEmpty()) "/data/local/tmp/xy_exec.so" else "/data/local/tmp/xy_exec.so -k \"$key\"") +
                                         " 2>&1 ; rm -f /data/local/tmp/xy_exec.so"
                                 }
@@ -991,11 +1036,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     if (cmd.isNotEmpty()) {
                         if (op == "delete") {
                             // 只保留本次备份：先清空回收站再备份
-                            val trash = "/data/local/tmp/xy_trash/last"
+                            val trash = xyWorkRoot + "/xy_trash/last"
                             val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; for f in " + list + "; do cp -a \"\$f\" " + q(trash) + "/ 2>/dev/null || true; done"
                             ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
                         }
-                        val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd + " >> /data/local/tmp/xy_archive_log.txt 2>&1")
+                        val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd + " >> '" + appCtx.cacheDir.absolutePath + "/xy_archive_log.txt' 2>&1")
                             .redirectErrorStream(true).start()
                         proc.inputStream.bufferedReader().readText()
                         proc.waitFor()
@@ -1040,7 +1085,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                         "rename" -> "mv -f " + q(srcPath) + " " + q(dir + "/" + arg)
                         "delete" -> "rm -rf " + q(srcPath)
-                        "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3"
+                        "install" -> "cp -f " + q(srcPath) + " /data/local/tmp/xy_install.apk && chmod 644 /data/local/tmp/xy_install.apk && pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 | tail -n 3 ; rm -f /data/local/tmp/xy_install.apk"
                         "edit" -> "chmod 644 " + q(srcPath)
                         else -> ""
                     }
@@ -1048,11 +1093,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     if (cmd.isNotEmpty()) {
                         if (op == "delete") {
                             // 只保留本次备份：先清空回收站再备份
-                            val trash = "/data/local/tmp/xy_trash/last"
+                            val trash = xyWorkRoot + "/xy_trash/last"
                             val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; cp -a " + q(srcPath) + " " + q(trash) + "/ 2>/dev/null || true"
                             ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
                         }
-                        val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd + " >> /data/local/tmp/xy_archive_log.txt 2>&1")
+                        val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd + " >> '" + appCtx.cacheDir.absolutePath + "/xy_archive_log.txt' 2>&1")
                             .redirectErrorStream(true).start()
                         val txt = proc.inputStream.bufferedReader().readText()
                         proc.waitFor()
@@ -1342,7 +1387,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val outTxt = pr.inputStream.bufferedReader().readText()
                         pr.waitFor()
                         runCatching {
-                            java.io.File("/data/local/tmp/xy_extract_log.txt").appendText(
+                            java.io.File(appCtx.cacheDir, "xy_extract_log.txt").appendText(
                                 "extract " + pkg + " -> " + dstFile.absolutePath + " out=" + outTxt.take(200) + "\n"
                             )
                         }
@@ -1450,25 +1495,25 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 lp2.endsWith(".tar.xz") || lp2.endsWith(".txz") -> "tar -xJf " + q
                                 lp2.endsWith(".tar.bz2") -> "tar -xjf " + q
                                 lp2.endsWith(".tar") -> "tar -xf " + q
-                                lp2.endsWith(".7z") -> "7z x -y -o/data/local/tmp/yx_arch " + q
-                                lp2.endsWith(".rar") -> "unrar x -o+ " + q + " /data/local/tmp/yx_arch/"
-                                else -> "unzip -o " + q + " -d /data/local/tmp/yx_arch"
+                                lp2.endsWith(".7z") -> "7z x -y -o" + xyArchRoot + " " + q
+                                lp2.endsWith(".rar") -> "unrar x -o+ " + q + " " + xyArchRoot + "/"
+                                else -> "unzip -o " + q + " -d " + xyArchRoot
                             }
-                            suNow("rm -rf /data/local/tmp/yx_arch && mkdir -p /data/local/tmp/yx_arch && cd /data/local/tmp/yx_arch && " + extract + " 2>&1", 60000L)
+                            suNow("rm -rf " + xyArchRoot + " && mkdir -p " + xyArchRoot + " && cd " + xyArchRoot + " && " + extract + " 2>&1", 60000L)
                         } catch (t: Throwable) {
                         }
                     }
                     running = false
                     showTerminal = false
                     // 解压后校验：目录非空才进入（否则提示失败）
-                    val arch = java.io.File("/data/local/tmp/yx_arch")
+                    val arch = java.io.File(xyArchRoot)
                     val hasContent = runCatching { arch.listFiles()?.isNotEmpty() == true }.getOrDefault(false)
                     if (hasContent) {
                         // 只刷新触发「进入」的那一侧，并从头显示（不恢复旧滚动位置）
                         archiveReturnPath = if (longPressFromRight) rightPath else leftPath
-                        dirScroll.remove("/data/local/tmp/yx_arch")
-                        if (longPressFromRight) rightPath = "/data/local/tmp/yx_arch"
-                        else leftPath = "/data/local/tmp/yx_arch"
+                        dirScroll.remove(xyArchRoot)
+                        if (longPressFromRight) rightPath = xyArchRoot
+                        else leftPath = xyArchRoot
                     } else {
                         runMessage = "解压失败或无内容"
                     }
@@ -1517,7 +1562,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val q = "'" + p.replace("'", "'\''") + "'"
                     val cmd = "ZID=$(unzip -p " + q + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
                         "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
-                        "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                        "export HOME=" + xyWorkRoot + " ; export TMPDIR=" + xyWorkRoot + " ; " +
                         "KSUD=" + shq(appCtx.applicationInfo.nativeLibraryDir + "/libksud.so") + " ; [ -x \"\$KSUD\" ] || KSUD=/data/adb/ksud ; " +
                         "\"\$KSUD\" module install " + q + " 2>&1 ; " +
                         "echo '--- verify:' ; " +
@@ -1653,13 +1698,21 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 if (np.isNotEmpty()) {
                                     val old = rnP
                                     val dir = old.substringBeforeLast('/', "/")
+                                    val target = dir + "/" + np
                                     cmRenamePath = null
                                     uiScope.launch {
-                                        withContext(Dispatchers.IO) {
+                                        val okRename = withContext(Dispatchers.IO) {
                                             runCatching {
                                                 fun q(x: String) = "'" + x.replace("'", "'\\''") + "'"
-                                                com.topjohnwu.superuser.Shell.cmd("mv -f " + q(old) + " " + q(dir + "/" + np)).exec()
-                                            }
+                                                val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                                    "mv -f " + q(old) + " " + q(target) + " 2>&1 ; test -e " + q(target) + " && echo OK"))
+                                                val out = pr.inputStream.bufferedReader().readText()
+                                                pr.waitFor()
+                                                out.contains("OK")
+                                            }.getOrDefault(false)
+                                        }
+                                        if (!okRename) {
+                                            android.widget.Toast.makeText(appCtx, "重命名失败（权限或同名）", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                         refreshTick += 1
                                     }
@@ -1667,7 +1720,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(pickConfirmOk, fontSize = 15.sp, color = Color(0xFF007AFF))
+                        Text("确定", fontSize = 15.sp, color = Color(0xFF007AFF))
                     }
                 }
             }
@@ -3109,7 +3162,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 withContext(Dispatchers.IO) {
                                     try {
                                         fun q3(x2: String) = "'" + x2.replace("'", "'\''") + "'"
-                                        val cmd = "export HOME=/data/local/tmp; export TMPDIR=/data/local/tmp; " +
+                                        val cmd = "export HOME=" + xyWorkRoot + "; export TMPDIR=" + xyWorkRoot + "; " +
                                             "cd " + q3(java.io.File(path).parent ?: "/") + " 2>/dev/null; " +
                                             "chmod 755 " + q3(path) + " 2>/dev/null; " +
                                             "sh " + q3(path) + " 2>&1"
@@ -4205,7 +4258,7 @@ private fun ProMaxIsland(
                                         withContext(Dispatchers.IO) {
                                             try {
                                                 fun q(s: String) = "'" + s.replace("'", "'\''") + "'"
-                                                val trash = "/data/local/tmp/xy_trash/last"
+                                                val trash = xyWorkRoot + "/xy_trash/last"
                                                 when (op.kind) {
                                                     "delete" -> {
                                                         op.src.forEach { src ->
@@ -4868,8 +4921,7 @@ private fun ProMaxIsland(
                                                                             val outText = withContext(Dispatchers.IO) {
                                                                                 runCatching {
                                                                                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                                                                        "cp -f '" + zipPath + "' /data/local/tmp/xy_mod_update.zip ; " +
-                                                                                            "/data/adb/ksud module install /data/local/tmp/xy_mod_update.zip 2>&1"))
+                                                                                        "/data/adb/ksud module install '" + zipPath + "' 2>&1 ; rm -f '" + zipPath + "'"))
                                                                                     val out = pr.inputStream.bufferedReader().readText()
                                                                                     pr.waitFor()
                                                                                     out
@@ -5421,7 +5473,7 @@ private fun ProMaxIsland(
                                         // 只改第 2 行，保留 1/3/4/5（之前 printf 会截断后面几行）
                                         val cmd = "F='/data/user/0/com.tencent.THY/files/小鱼儿密钥' ; mkdir -p '/data/user/0/com.tencent.THY/files' ; " +
                                             "[ -f \"\$F\" ] || : > \"\$F\" ; " +
-                                            "awk -v n=2 -v v=" + sq(manual) + " 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}' \"\$F\" > /data/local/tmp/xy_kf2 && cat /data/local/tmp/xy_kf2 > \"\$F\" ; rm -f /data/local/tmp/xy_kf2 ; chmod 600 \"\$F\""
+                                            "awk -v n=2 -v v=" + sq(manual) + " 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}' \"\$F\" > ${xyFlagRoot}/xy_kf2 && cat ${xyFlagRoot}/xy_kf2 > \"\$F\" ; rm -f ${xyFlagRoot}/xy_kf2 ; chmod 600 \"\$F\""
                                         Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd)).waitFor()
                                         manual
                                     } else {
@@ -5827,7 +5879,7 @@ private fun ModeButton(
             val off = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                        "if [ -f /data/local/tmp/xy_thermal_off ] || [ -d /data/local/tmp/thermal_bak ] || [ -f /data/local/tmp/xy_thermal_stopped ]; then echo 1; elif [ \"\$(getprop init.svc.horae 2>/dev/null)\" = \"stopped\" ]; then echo 1; else echo 0; fi"))
+                        "if [ -f ${xyFlagRoot}/xy_thermal_off ] || [ -d ${xyFlagRoot}/thermal_bak ] || [ -f ${xyFlagRoot}/xy_thermal_stopped ]; then echo 1; elif [ \"\$(getprop init.svc.horae 2>/dev/null)\" = \"stopped\" ]; then echo 1; else echo 0; fi"))
                     val o = pr.inputStream.bufferedReader().readText().trim(); pr.waitFor()
                     o == "1"
                 }.getOrDefault(false)
@@ -5942,7 +5994,7 @@ private fun ModeButton(
                                    "batt-therm|usb-therm) echo \$bat_t > \"\$tz/emul_temp\" 2>/dev/null ;; esac; done; " +
                                    "stop horae 2>/dev/null; " +
                                    "for i in \$(seq 0 9); do echo \$i \$t > /proc/shell-temp 2>/dev/null; done; " +
-                                   "gu=/proc/oplus-votable/GAUGE_UPDATE; if [ -d \"\$gu\" ]; then chmod 666 \"\$gu/force_val\" 2>/dev/null; echo 2000 > \"\$gu/force_val\" 2>/dev/null; chmod 666 \"\$gu/force_active\" 2>/dev/null; echo 1 > \"\$gu/force_active\" 2>/dev/null; fi; : > /data/local/tmp/xy_thermal_stopped; for s in thermal_core thermald vendor.thermal-mediatek; do if [ \"\$(getprop init.svc.\$s)\" = \"running\" ]; then stop \$s 2>/dev/null; echo \$s >> /data/local/tmp/xy_thermal_stopped; fi; done; touch /data/local/tmp/xy_thermal_off")
+                                   "gu=/proc/oplus-votable/GAUGE_UPDATE; if [ -d \"\$gu\" ]; then chmod 666 \"\$gu/force_val\" 2>/dev/null; echo 2000 > \"\$gu/force_val\" 2>/dev/null; chmod 666 \"\$gu/force_active\" 2>/dev/null; echo 1 > \"\$gu/force_active\" 2>/dev/null; fi; : > ${xyFlagRoot}/xy_thermal_stopped; for s in thermal_core thermald vendor.thermal-mediatek; do if [ \"\$(getprop init.svc.\$s)\" = \"running\" ]; then stop \$s 2>/dev/null; echo \$s >> ${xyFlagRoot}/xy_thermal_stopped; fi; done; touch ${xyFlagRoot}/xy_thermal_off")
                                 "已禁用温控（绿厂）"
                             } else if (sys == "mi") {
                                 // 小米：备份原配置 → 覆盖为无限制配置
@@ -5952,10 +6004,10 @@ private fun ModeButton(
                                     ctx3.assets.list("mi_thermal")?.forEach { n ->
                                         try { ctx3.assets.open("mi_thermal/" + n).use { i -> java.io.File(dir, n).outputStream().use { o -> i.copyTo(o) } } } catch (t: Throwable) {}
                                     }
-                                    su("if [ -d /data/vendor/thermal ] && [ ! -d /data/local/tmp/thermal_bak ]; then " +
-                                       "cp -rf /data/vendor/thermal /data/local/tmp/thermal_bak 2>/dev/null; fi; " +
+                                    su("if [ -d /data/vendor/thermal ] && [ ! -d ${xyFlagRoot}/thermal_bak ]; then " +
+                                       "cp -rf /data/vendor/thermal ${xyFlagRoot}/thermal_bak 2>/dev/null; fi; " +
                                        "mkdir -p /data/vendor/thermal; cp -f " + dir.absolutePath + "/*.conf /data/vendor/thermal/ 2>/dev/null; " +
-                                       "chmod 644 /data/vendor/thermal/*.conf 2>/dev/null; : > /data/local/tmp/xy_thermal_stopped; for s in thermal_core thermald vendor.thermal-mediatek; do if [ \"\$(getprop init.svc.\$s)\" = \"running\" ]; then stop \$s 2>/dev/null; echo \$s >> /data/local/tmp/xy_thermal_stopped; fi; done; touch /data/local/tmp/xy_thermal_off")
+                                       "chmod 644 /data/vendor/thermal/*.conf 2>/dev/null; : > ${xyFlagRoot}/xy_thermal_stopped; for s in thermal_core thermald vendor.thermal-mediatek; do if [ \"\$(getprop init.svc.\$s)\" = \"running\" ]; then stop \$s 2>/dev/null; echo \$s >> ${xyFlagRoot}/xy_thermal_stopped; fi; done; touch ${xyFlagRoot}/xy_thermal_off")
                                 } catch (t: Throwable) {}
                                 "已禁用温控（小米）"
                             } else {
@@ -5964,7 +6016,7 @@ private fun ModeButton(
                         } else {
                             // 恢复：绿厂 emul_temp 清空 + horae 重启；小米恢复备份
                             su("for tz in /sys/class/thermal/*; do [ -f \"\$tz/emul_temp\" ] && echo 0 > \"\$tz/emul_temp\" 2>/dev/null; done; start horae 2>/dev/null; " +
-                               "if [ -d /data/local/tmp/thermal_bak ]; then cp -rf /data/local/tmp/thermal_bak/. /data/vendor/thermal/ 2>/dev/null; rm -rf /data/local/tmp/thermal_bak; fi; if [ -f /data/local/tmp/xy_thermal_stopped ]; then while read s; do start \$s 2>/dev/null; done < /data/local/tmp/xy_thermal_stopped; else for s in thermal_core thermald vendor.thermal-mediatek; do start \$s 2>/dev/null; done; fi; rm -f /data/local/tmp/xy_thermal_stopped /data/local/tmp/xy_thermal_off")
+                               "if [ -d ${xyFlagRoot}/thermal_bak ]; then cp -rf ${xyFlagRoot}/thermal_bak/. /data/vendor/thermal/ 2>/dev/null; rm -rf ${xyFlagRoot}/thermal_bak; fi; if [ -f ${xyFlagRoot}/xy_thermal_stopped ]; then while read s; do start \$s 2>/dev/null; done < ${xyFlagRoot}/xy_thermal_stopped; else for s in thermal_core thermald vendor.thermal-mediatek; do start \$s 2>/dev/null; done; fi; rm -f ${xyFlagRoot}/xy_thermal_stopped ${xyFlagRoot}/xy_thermal_off")
                             "已恢复温控"
                         }
                     } catch (t: Throwable) { "失败: " + (t.message ?: "") }
@@ -6050,7 +6102,7 @@ private fun ModeButton(
                             su("pm list packages 2>/dev/null | sed 's/^package://' | while read pk; do pm unhide \"\$pk\" >/dev/null 2>&1; pm enable --user 0 \"\$pk\" >/dev/null 2>&1; done")
                             // 1.5 清理旧版本性能模式残留（小鱼儿1.7 / perf_ultimate / jisu_mode 等）
                             //     ★ 保护 /data/user/0/com.tencent.THY/files 目录
-                            su("rm -rf /data/adb/perf_ultimate /data/adb/perf_bind /data/adb/jisu_mode /sdcard/小鱼儿1.7 /sdcard/小鱼儿性能模式.sh /sdcard/小鱼儿性能.sh /data/local/tmp/jisu_mode 2>/dev/null")
+                            su("rm -rf /data/adb/perf_ultimate /data/adb/perf_bind /data/adb/jisu_mode /sdcard/小鱼儿1.7 /sdcard/小鱼儿性能模式.sh /sdcard/小鱼儿性能.sh ${xyFlagRoot}/jisu_mode 2>/dev/null")
                             // 1.6 恢复 GED boost / force / DDR / 温控模拟温度
                             su("for k in boost_gpu_enable ged_smart_boost ged_boost_enable; do [ -f /sys/module/ged/parameters/\$k ] && echo 0 > /sys/module/ged/parameters/\$k 2>/dev/null; done")
                             su("for k in force_clk_on force_bus_on force_rail_on; do [ -f /sys/class/kgsl/kgsl-3d0/\$k ] && echo 0 > /sys/class/kgsl/kgsl-3d0/\$k 2>/dev/null; done")
@@ -6061,7 +6113,7 @@ private fun ModeButton(
                             su("for L in /sys/devices/system/cpu/bus_dcvs/L3 /sys/devices/system/cpu/bus_dcvs/DDR; do [ -d \"\$L\" ] && { cat \"\$L/hw_min_freq\" 2>/dev/null > \"\$L/boost_freq\" 2>/dev/null; }; done")
                             // 2. 解除所有 bind 遮罩
                             su("for m in /proc/powerhal_cpu_ctrl/perfserv_freq /proc/powerhal_cpu_ctrl/adpf_enable /proc/perfmgr/perf_ioctl /sys/module/perfmgr/parameters/min_freq_limit_level /sys/module/perfmgr/parameters/max_freq_limit_level /sys/module/perfmgr/parameters/gpu_req_min_freq /proc/thermal_message/temp_state /proc/thermal_message/market_download_limit /proc/thermal_message/cpu_nolimit_temp; do while umount \$m 2>/dev/null; do :; done; done")
-                            su("for m in /system/product/etc/displayconfig/*thermal*.xml /system/vendor/etc/thermal/*thermal*fps*.xml; do [ -e \"\$m\" ] && { while umount \"\$m\" 2>/dev/null; do :; done; }; done; rm -f /data/local/tmp/xy_empty")
+                            su("for m in /system/product/etc/displayconfig/*thermal*.xml /system/vendor/etc/thermal/*thermal*fps*.xml; do [ -e \"\$m\" ] && { while umount \"\$m\" 2>/dev/null; do :; done; }; done; rm -f "${xyFlagRoot}/xy_empty"")
                             su("rm -rf /dev/xy_ps_bak /dev/xy_pmi_empty /dev/xy_tm_* /dev/scene_fast* /dev/scene_sd_* /dev/scene_* 2>/dev/null")
                             // 3. 恢复 CPU 频率 + governor
                             su("for p in /sys/devices/system/cpu/cpufreq/policy[0-9]*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); mn=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); [ -n \"\$hw\" ] && { chmod 0666 \$p/scaling_max_freq \$p/scaling_min_freq \$p/scaling_governor 2>/dev/null; echo \$hw > \$p/scaling_max_freq 2>/dev/null; [ -n \"\$mn\" ] && echo \$mn > \$p/scaling_min_freq 2>/dev/null; av=\$(cat \$p/scaling_available_governors 2>/dev/null); case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null;; *walt*) echo walt > \$p/scaling_governor 2>/dev/null;; *schedutil*) echo schedutil > \$p/scaling_governor 2>/dev/null;; esac; }; done")
@@ -6080,7 +6132,7 @@ private fun ModeButton(
                             su("settings delete system peak_refresh_rate >/dev/null 2>&1; settings delete system min_refresh_rate >/dev/null 2>&1; settings delete system user_refresh_rate >/dev/null 2>&1; settings delete secure user_refresh_rate >/dev/null 2>&1")
                             // 10. 删所有我们创建的文件（新+老版本）
                             su("rm -f /data/adb/xy_game.off /data/adb/xy_game.sh /data/adb/xy_game.pid /data/adb/xy_check.sh /data/adb/xy_open_access.sh /data/adb/xy_freq_lock /data/adb/xy_maxf /data/adb/xy_orig_governor /data/adb/xy_perf_status /data/adb/xy_thermal_bak /data/adb/xy_thermal_zones /data/adb/xy_cur_app /data/adb/xy_game_pkgs_disabled /data/adb/xy_sleep_ts /data/adb/xy_ts_* /data/adb/xy_ut_* 2>/dev/null")
-                            su("rm -f /data/adb/service.d/xy_game.sh /data/adb/service.d/xy_guard.sh /data/local/tmp/xy_* /data/local/tmp/.rt_check /data/local/tmp/.xy_mon* 2>/dev/null")
+                            su("rm -f /data/adb/service.d/xy_game.sh /data/adb/service.d/xy_guard.sh /data/local/tmp/xy_* ${xyFlagRoot}/.rt_check ${xyFlagRoot}/.xy_mon* 2>/dev/null")
                             su("rm -rf /data/adb/xy_thermal_cfg_bak /dev/scene_fast /dev/scene_fast_* 2>/dev/null")
                             // 11. 恢复小米温控配置（如果之前备份过）
                             su("if [ -d /data/adb/xy_thermal_cfg_bak ] && [ -d /data/vendor/thermal/config ]; then cp -rf /data/adb/xy_thermal_cfg_bak/. /data/vendor/thermal/config/ 2>/dev/null; fi")
@@ -6214,7 +6266,7 @@ private fun ModeButton(
                         val qz = "'" + path.replace("'", "'\''") + "'"
                         val cmd = "ZID=$(unzip -p " + qz + " module.prop 2>/dev/null | grep '^id=' | cut -d= -f2 | tr -d '\r') ; " +
                             "[ -n \"\$ZID\" ] && { rm -rf \"/data/adb/modules/\$ZID\" \"/data/adb/modules_update/\$ZID\" ; } ; " +
-                            "export HOME=/data/local/tmp ; export TMPDIR=/data/local/tmp ; " +
+                            "export HOME=" + xyWorkRoot + " ; export TMPDIR=" + xyWorkRoot + " ; " +
                             "\"/data/adb/ksud\" module install " + qz + " 2>&1 ; " +
                             "if [ -f \"/data/adb/modules/\$ZID/module.prop\" ] || [ -f \"/data/adb/modules_update/\$ZID/module.prop\" ]; then echo \"[OK] \$ZID installed\" ; else echo \"[FAIL]\" ; fi"
                         latencyMsg = "安装模块…"
@@ -6247,7 +6299,7 @@ private fun ModeButton(
                                         return o
                                     }
                                     val q = "'" + path.replace("'", "'\\''") + "'"
-                                    val out = su2("export HOME=/data/local/tmp; export TMPDIR=/data/local/tmp; " +
+                                    val out = su2("export HOME=" + xyWorkRoot + "; export TMPDIR=" + xyWorkRoot + "; " +
                                         "cd '" + java.io.File(path).parent + "' 2>/dev/null; " +
                                         "chmod 755 $q 2>/dev/null; sh $q 2>&1 | tail -n 2")
                                     (if (out.contains("fail") || out.contains("error")) "执行失败" else "已执行")
@@ -6293,11 +6345,11 @@ private fun ModeButton(
                                                 cacheZip.outputStream().use { out -> input.copyTo(out) }
                                             }
                                         }
-                                        su("cp '" + cacheZip.absolutePath.replace("'", "'\\''") + "' /data/local/tmp/as.zip")
+
                                     } catch (t: Throwable) {
                                     }
                                     val ksud = ctx3.applicationInfo.nativeLibraryDir + "/libksud.so"
-                                    su("'" + ksud.replace("'", "'\''") + "' module install /data/local/tmp/as.zip 2>&1")
+                                    su("'" + ksud.replace("'", "'\''") + "' module install '" + cacheZip.absolutePath.replace("'", "'\''") + "' 2>&1")
                                     // rename it so the module list shows 小鱼儿附属
                                     su("for d in /data/adb/modules/*/; do " +
                                         "if [ -f \"\${d}module.prop\" ] && grep -qi 'alwaysstrong' \"\${d}module.prop\" 2>/dev/null; then " +
@@ -6517,7 +6569,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                                 val awk = "awk -v n=$lineNo -v v='" + sv + "' 'NR==n{print v; f=1; next} {print} END{if(!f) for(i=NR+1;i<=n;i++) print (i==n?v:\"\")}'"
                                 val cmd = "F='/data/user/0/com.tencent.THY/files/小鱼儿密钥' ; mkdir -p '/data/user/0/com.tencent.THY/files' ; " +
                                     "[ -f \"\$F\" ] || : > \"\$F\" ; " +
-                                    awk + " \"\$F\" > /data/local/tmp/xy_kf && cat /data/local/tmp/xy_kf > \"\$F\" ; rm -f /data/local/tmp/xy_kf ; chmod 600 \"\$F\""
+                                    awk + " \"\$F\" > ${xyFlagRoot}/xy_kf && cat ${xyFlagRoot}/xy_kf > \"\$F\" ; rm -f ${xyFlagRoot}/xy_kf ; chmod 600 \"\$F\""
                                 Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c", cmd)).waitFor()
                             } catch (t: Throwable) {
                             }
@@ -6559,7 +6611,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                             val msg = withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
                                     val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
-                                        "export HOME=/data/local/tmp; export TMPDIR=/data/local/tmp; " +
+                                        "export HOME=" + xyWorkRoot + "; export TMPDIR=" + xyWorkRoot + "; " +
                                             "cd '" + java.io.File(p2).parent + "' 2>/dev/null; " +
                                             "chmod 755 '" + p2.replace("'", "'\\''") + "' 2>/dev/null; " +
                                             "'" + p2.replace("'", "'\\''") + "' -k '" + keyInput.replace("'", "'\\''") + "' 2>&1 | tail -n 2"))
@@ -6852,45 +6904,56 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             }
         }
     }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // 标题（和重命名弹窗一致：居中 17sp）
+    // 与「重命名」弹窗完全同尺寸：240dp 卡片 + 同款标题/输入/分割线/按钮
+    val pop = remember { androidx.compose.animation.core.Animatable(0.92f) }
+    LaunchedEffect(Unit) {
+        pop.animateTo(1f, tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
+    Column(
+        modifier = Modifier
+            .width(240.dp)
+            .graphicsLayer {
+                scaleX = pop.value
+                scaleY = pop.value
+                alpha = ((pop.value - 0.92f) / 0.08f).coerceIn(0f, 1f)
+            }
+            .shadow(24.dp, SmoothCornerShape(20.dp), clip = false,
+                ambientColor = Color(0x33000000), spotColor = Color(0x33000000))
+            .clip(SmoothCornerShape(20.dp))
+            .background(Color(0xFFF2F2F7))
+            .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
+    ) {
+        // 标题：平时是「卡密验证」，一旦有提示（错误/成功/验证中）直接换成提示文字
         Text(
-            text = "卡密验证",
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-            fontSize = 17.sp,
+            text = if (msg.isNotEmpty()) msg else "卡密验证",
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+            fontSize = if (msg.isNotEmpty()) 14.sp else 16.sp,
+            lineHeight = 18.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF1C1C1E),
-            textAlign = TextAlign.Center
+            color = when {
+                msg.isEmpty() -> Color(0xFF1C1C1E)
+                msg.contains("成功") -> Color(0xFF34C759)
+                else -> Color(0xFFFF3B30)
+            },
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
-        // 输入框
-        var keyFocused by remember { mutableStateOf(false) }
         androidx.compose.foundation.text.BasicTextField(
             value = key,
             onValueChange = { key = it },
             singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = Color(0xFF1C1C1E), fontFamily = AppFontFamily),
+            textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1C1C1E), fontSize = 17.sp, fontFamily = AppFontFamily),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .onFocusChanged { keyFocused = it.isFocused }
+                .padding(horizontal = 14.dp)
                 .clip(SmoothCornerShape(10.dp))
                 .background(Color(0x11000000))
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
         )
-        Spacer(modifier = Modifier.height(10.dp))
-        if (msg.isNotEmpty()) {
-            Text(
-                text = msg,
-                fontSize = 12.sp,
-                color = if (msg.contains("成功")) Color(0xFF34C759) else Color(0xFFFF3B30),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(0.33.dp).background(Color(0x33000000)))
-        // 底部：购买 / 验证（和重命名弹窗的 取消/确定 同款）
-        Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x33000000)))
+        Row(modifier = Modifier.fillMaxWidth().height(38.dp)) {
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -6905,7 +6968,7 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Text("购买", fontSize = 17.sp, color = Color(0xFF007AFF))
+                Text("购买", fontSize = 15.sp, color = Color(0xFF007AFF))
             }
             Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
             Box(
@@ -6915,7 +6978,7 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
                     .clickable(enabled = !busy) { doVerify() },
                 contentAlignment = Alignment.Center
             ) {
-                Text(if (busy) "验证中" else "验证", fontSize = 17.sp, color = Color(0xFF007AFF))
+                Text(if (busy) "验证中" else "验证", fontSize = 15.sp, color = Color(0xFF007AFF))
             }
         }
     }
@@ -7087,7 +7150,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
                     // 先 cp，失败再用 cat 兜底（大文件/特殊路径更稳）
                     suNow("cp -f " + qq + " '" + tmp.absolutePath + "' 2>/dev/null || cat " + qq + " > '" + tmp.absolutePath + "'")
                     runCatching {
-                        java.io.File("/data/local/tmp/xy_thumb_log.txt").appendText(
+                        java.io.File(appCtx.cacheDir, "xy_thumb_log.txt").appendText(
                             "thumb " + fullPath + " -> " + tmp.length() + "\n"
                         )
                     }
@@ -7676,12 +7739,17 @@ internal fun installApkReport(ctx: android.content.Context, path: String, onLine
             return@Thread
         }
         // ④ root 安装
-        onLine("root 安装日志：", true)
+        // 把「用什么方式安装」写清楚：复制到 tmp + pm install 参数
+        onLine("安装方式：su -c（KernelSU root）", true)
+        onLine("复制到：/data/local/tmp/xy_install.apk", true)
+        onLine("命令：pm install -r -d -g（覆盖/允许降级/授予权限）", true)
         val pair: Pair<Boolean, String> = try {
             val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
                 "cp -f '" + path.replace("'", "'\\''") + "' /data/local/tmp/xy_install.apk && " +
                     "chmod 644 /data/local/tmp/xy_install.apk && " +
-                    "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1"))
+                    "pm install -r -d -g /data/local/tmp/xy_install.apk 2>&1 ; " +
+                    // 装完立刻删掉临时副本（/data/local/tmp 重启不会清，会一直占几十 MB）
+                    "rm -f /data/local/tmp/xy_install.apk"))
             val t = pr.inputStream.bufferedReader().readText()
             pr.waitFor()
             Pair(t.contains("Success"), t.trim().takeLast(300))
@@ -7756,7 +7824,7 @@ internal fun loadAppPicker(
                 } catch (t: Throwable) { null }
             }
             runCatching {
-                java.io.File("/data/local/tmp/xy_su_log.txt").appendText("loaded " + title + " apps=" + apps.size + "\n")
+                java.io.File(ctx.cacheDir, "xy_su_log.txt").appendText("loaded " + title + " apps=" + apps.size + "\n")
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 uiPicker = apps.map { it.label }
@@ -7765,7 +7833,7 @@ internal fun loadAppPicker(
             }
         } catch (t: Throwable) {
             runCatching {
-                java.io.File("/data/local/tmp/xy_su_log.txt").appendText("ERR " + title + " " + t + "\n")
+                java.io.File(ctx.cacheDir, "xy_su_log.txt").appendText("ERR " + title + " " + t + "\n")
             }
         }
     }.start()
@@ -7861,7 +7929,7 @@ internal fun loadSuperUserPicker(ctx: android.content.Context) {
                 }
             }
         } catch (t: Throwable) {
-            runCatching { java.io.File("/data/local/tmp/xy_su_log.txt").appendText("ERR " + t + "\n") }
+            runCatching { java.io.File(ctx.cacheDir, "xy_su_log.txt").appendText("ERR " + t + "\n") }
         }
     }.start()
 }
@@ -7973,8 +8041,8 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("OID=\$(settings get secure android_id 2>/dev/null); ")
                 sb.append("OHOST=\$(getprop net.hostname 2>/dev/null); ")
                 sb.append("OSN=\$(getprop ro.serialno 2>/dev/null); ")
-                sb.append("echo \"ORIG|\$OID|\$OHOST|\$OSN\" > /data/local/tmp/xy_orig_ids.txt; ")
-                sb.append("chmod 644 /data/local/tmp/xy_orig_ids.txt; ")
+                sb.append("echo \"ORIG|\$OID|\$OHOST|\$OSN\" > ${xyFlagRoot}/xy_orig_ids.txt; ")
+                sb.append("chmod 644 ${xyFlagRoot}/xy_orig_ids.txt; ")
                 // 全随机
                 sb.append("settings put secure android_id ").append(androidId).append(" 2>/dev/null && echo \"修改 android_id → ").append(androidId).append(" .OK\" || echo \"修改 android_id .NO\"; ")
                 sb.append("settings put secure advertising_id ").append(hex(16)).append(" 2>/dev/null; ")
@@ -8062,7 +8130,7 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 val out = sbOut.toString()
                 pr.waitFor()
                 writeOpLog(ctx, "游戏清理 → " + pkg + " | AndroidID=" + androidId + " | 主机名=" + hostname + " | 序列号=" + serial)
-                runCatching { java.io.File("/data/local/tmp/xy_reset_log.txt").writeText(out) }
+                runCatching { java.io.File(ctx.cacheDir, "xy_reset_log.txt").writeText(out) }
                 android.widget.Toast.makeText(ctx, out.take(120), android.widget.Toast.LENGTH_LONG).show()
             } catch (t: Throwable) {
                 android.widget.Toast.makeText(ctx, "清理失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
@@ -8454,10 +8522,10 @@ private val perfGameScript = listOf(
     "  done",
     "",
     "  # 3.5 覆盖漏网温控配置（bind 空文件）",
-    "  : > /data/local/tmp/.nc_empty",
+    "  : > "${xyFlagRoot}/.nc_empty"",
     "  for f in /vendor/etc/thermal/* /vendor/etc/*thermal* /system/etc/*thermal* /vendor/etc/.tp/*; do",
     "    [ -f \"\$f\" ] || continue",
-    "    mount --bind /data/local/tmp/.nc_empty \"\$f\" 2>/dev/null",
+    "    mount --bind "${xyFlagRoot}/.nc_empty \"\$f\" 2>/dev/null",
     "  done",
     "",
     "  echo \"温控已移除\"",
@@ -9453,13 +9521,13 @@ class FpsOverlayService : Service() {
                "pm hide --user 0 \$pkg >/dev/null 2>&1; pm disable-user --user 0 \$pkg >/dev/null 2>&1; " +
                "am force-stop \$pkg >/dev/null 2>&1; cmd activity stop-app \$pkg >/dev/null 2>&1; " +
                "for pid in \$(pidof \$pkg 2>/dev/null) \$(ps -A -o PID,ARGS 2>/dev/null | grep \"[c]\${pkg}\" | awk '{print \$1}'); do " +
-               "kill -STOP \$pid 2>/dev/null; echo \$pid >> /data/local/tmp/fps_frozen; done; done", 20L)
+               "kill -STOP \$pid 2>/dev/null; echo \$pid >> ${xyFlagRoot}/fps_frozen; done; done", 20L)
             logLine("FPS+ 开启，已深度冻结系统游戏助手/云控")
         } else if (!fpOn && fpsFrozen) {
             fpsFrozen = false
             sh("PKGS=\"com.oplus.games com.heytap.gamespace com.nearme.gamecenter com.xiaomi.joyose com.miui.securitycenter\"; " +
                "for pkg in \$PKGS; do pm enable --user 0 \$pkg >/dev/null 2>&1; pm unhide --user 0 \$pkg >/dev/null 2>&1; am force-stop \$pkg >/dev/null 2>&1; done; " +
-               "[ -f /data/local/tmp/fps_frozen ] && while read pid; do kill -CONT \$pid 2>/dev/null; done < /data/local/tmp/fps_frozen; rm -f /data/local/tmp/fps_frozen", 20L)
+               "[ -f ${xyFlagRoot}/fps_frozen ] && while read pid; do kill -CONT \$pid 2>/dev/null; done < ${xyFlagRoot}/fps_frozen; rm -f ${xyFlagRoot}/fps_frozen", 20L)
             logLine("FPS+ 关闭，已解冻系统游戏助手/云控")
         }
     }
@@ -9962,7 +10030,7 @@ class FpsOverlayService : Service() {
                    "P=\$(pidof " + activePkg + " 2>/dev/null | tr ' ' '\\n' | head -1); " +
                    "[ -n \"\$P\" ] && for t in /proc/\$P/task/*; do chrt -o \${t##*/} 2>/dev/null; done; " +
                    "[ -f /proc/sys/kernel/sched_boost ] && echo 0 > /proc/sys/kernel/sched_boost 2>/dev/null; " +
-                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
+                   "rm -f ${xyFlagRoot}/fps_plus_orig ${xyFlagRoot}/fps_plus_gpu", 2L)
             }
             return
         }
@@ -9975,8 +10043,8 @@ class FpsOverlayService : Service() {
                 fpsPlusBoosted = false
                 fpsPlusHigh = 0
                 logLine("低帧退出 boost: fps=" + String.format("%.1f", fps))
-                sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mn > \$p/scaling_min_freq 2>/dev/null; echo \$mx > \$p/scaling_max_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig; " +
-                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 2L)
+                sh("[ -f ${xyFlagRoot}/fps_plus_orig ] && while read p mx mn; do echo \$mn > \$p/scaling_min_freq 2>/dev/null; echo \$mx > \$p/scaling_max_freq 2>/dev/null; done < ${xyFlagRoot}/fps_plus_orig; " +
+                   "rm -f ${xyFlagRoot}/fps_plus_orig ${xyFlagRoot}/fps_plus_gpu", 2L)
             }
             return
         }
@@ -9991,11 +10059,11 @@ class FpsOverlayService : Service() {
                 fpsPlusHigh = 0
                 logLine("FPS+ 恢复：fps=" + String.format("%.1f", fps) + " 在档位，慢降频率")
                 // 慢降：先还原 min（系统可降频），2 秒后还原 max，再清文件
-                sh("[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig; " +
+                sh("[ -f ${xyFlagRoot}/fps_plus_orig ] && while read p mx mn; do echo \$mn > \$p/scaling_min_freq 2>/dev/null; done < ${xyFlagRoot}/fps_plus_orig; " +
                    "sleep 2; " +
-                   "[ -f /data/local/tmp/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; done < /data/local/tmp/fps_plus_orig; " +
-                   "if [ -f /data/local/tmp/fps_plus_gpu ]; then read go gk < /data/local/tmp/fps_plus_gpu; [ -n \"\$go\" ] && [ -f /proc/gpufreqv2/fix_target_opp_index ] && echo \$go > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; [ -n \"\$gk\" ] && [ -f /sys/class/kgsl/kgsl-3d0/devfreq/min_freq ] && echo \$gk > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; fi; " +
-                   "rm -f /data/local/tmp/fps_plus_orig /data/local/tmp/fps_plus_gpu", 4L)
+                   "[ -f ${xyFlagRoot}/fps_plus_orig ] && while read p mx mn; do echo \$mx > \$p/scaling_max_freq 2>/dev/null; done < ${xyFlagRoot}/fps_plus_orig; " +
+                   "if [ -f ${xyFlagRoot}/fps_plus_gpu ]; then read go gk < ${xyFlagRoot}/fps_plus_gpu; [ -n \"\$go\" ] && [ -f /proc/gpufreqv2/fix_target_opp_index ] && echo \$go > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; [ -n \"\$gk\" ] && [ -f /sys/class/kgsl/kgsl-3d0/devfreq/min_freq ] && echo \$gk > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; fi; " +
+                   "rm -f ${xyFlagRoot}/fps_plus_orig ${xyFlagRoot}/fps_plus_gpu", 4L)
             }
             return
         }
@@ -10010,12 +10078,12 @@ class FpsOverlayService : Service() {
         fpsPlusBoosted = true
         logLine("FPS+ 触发：fps=${String.format("%.1f", fps)} 非档位，拉满拉频（绑核已常驻）")
         // 保存原值 + 拉频（合并成一次 su，减少开销）
-        sh("[ -f /data/local/tmp/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > /data/local/tmp/fps_plus_orig 2>/dev/null; " +
-           "[ -f /data/local/tmp/fps_plus_gpu ] || echo \"\$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null) \$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" > /data/local/tmp/fps_plus_gpu 2>/dev/null; " +
+        sh("[ -f ${xyFlagRoot}/fps_plus_orig ] || for p in /sys/devices/system/cpu/cpufreq/policy*/; do echo \"\$p \$(cat \$p/scaling_max_freq 2>/dev/null) \$(cat \$p/scaling_min_freq 2>/dev/null)\"; done > ${xyFlagRoot}/fps_plus_orig 2>/dev/null; " +
+           "[ -f ${xyFlagRoot}/fps_plus_gpu ] || echo \"\$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null) \$(cat /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null)\" > ${xyFlagRoot}/fps_plus_gpu 2>/dev/null; " +
            "for p in /sys/devices/system/cpu/cpufreq/policy*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); lo=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); [ -n \"\$hw\" ] && [ -n \"\$lo\" ] && { t=\$(( lo + (hw - lo) * 95 / 100 )); echo \$t > \$p/scaling_max_freq 2>/dev/null; echo \$t > \$p/scaling_min_freq 2>/dev/null; }; done; " +
            "[ -f /proc/gpufreqv2/fix_target_opp_index ] && echo 0 > /proc/gpufreqv2/fix_target_opp_index 2>/dev/null; " +
            "[ -f /sys/class/kgsl/kgsl-3d0/devfreq/max_freq ] && { mx=\$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null); [ -n \"\$mx\" ] && echo \$mx > /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 2>/dev/null; }; " +
-           "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> /data/local/tmp/fps_plus.log 2>/dev/null", 3L)
+           "echo \"\$(date '+%H:%M:%S') fps+ fps=" + String.format("%.0f", fps) + "\" >> ${xyFlagRoot}/fps_plus.log 2>/dev/null", 3L)
     }
 
     private var emaFps = 0.0
@@ -10138,9 +10206,18 @@ fun ansiToAnnotated(src: String): androidx.compose.ui.text.AnnotatedString {
 }
 
 // iOS 风格字体：Inter（最接近 SF Pro）
-val AppFontFamily = androidx.compose.ui.text.font.FontFamily(
-    androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_regular, androidx.compose.ui.text.font.FontWeight.Normal),
-    androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_semibold, androidx.compose.ui.text.font.FontWeight.SemiBold)
+// /data/local/tmp 只用于「必须可执行」的文件（exec 受 W^X 限制，只有这里能跑）；
+// 回收站/解压/临时 HOME 这些数据文件放到 App 私有目录，避免积少成多。
+var xyFlagRoot: String = "/data/local/tmp"
+var xyWorkRoot: String = "/data/local/tmp"
+var xyArchRoot: String = xyArchRoot
+
+// 默认用 res/font；运行时若解析失败，会切到 assets/fonts 版本（见 FileManagerScreen 里的 LaunchedEffect）
+var AppFontFamily by androidx.compose.runtime.mutableStateOf(
+    androidx.compose.ui.text.font.FontFamily(
+        androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_regular, androidx.compose.ui.text.font.FontWeight.Normal),
+        androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_semibold, androidx.compose.ui.text.font.FontWeight.SemiBold)
+    )
 )
 val AppTypography = androidx.compose.material3.Typography(
     bodyLarge = androidx.compose.material3.Typography().bodyLarge.copy(fontFamily = AppFontFamily),
