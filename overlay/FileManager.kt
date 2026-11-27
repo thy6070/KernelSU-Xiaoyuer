@@ -586,18 +586,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     // 重置（游戏清理）：先进抽屉展示，点右上确定/电源键开始
     fun runResetFor(label: String) {
-        // 关键：先切到「游戏清理」的列表与动作
-        // 否则 uiPickerAction 仍是超级用户的（点一下会弹应用菜单，重置完就出现那个菜单）
-        gameCleanCache(appCtx)
+        pickConfirm = null
+        termDrawerConfirm = null
+        pickCancelClosesDrawer = false
+        // 关键：先切到「游戏清理」的动作（否则 uiPickerAction 还是超级用户的，点一下会弹应用菜单）
+        // silent=true：只装 action，不重载列表，避免抽屉里闪一下应用列表
+        gameCleanCache(appCtx, silent = true)
         termDrawerTitle = label
         uiScope.launch {
-            // 等「游戏清理」应用列表与 action 真正就绪（最多 6s）
-            var tries = 0
-            while ((uiPicker?.isEmpty() != false) && tries < 30) {
-                kotlinx.coroutines.delay(200)
-                tries++
-            }
-            kotlinx.coroutines.delay(300)
+            // silent 装载不动列表 → 固定等 action 就绪（应用列表读取一般 <1s）
+            kotlinx.coroutines.delay(1200)
             // label 是应用名不是包名 → 先从应用列表里查包名
             val pkgOf = runCatching {
                 suAppsGlobal.firstOrNull { it.label == label }?.pkg
@@ -645,13 +643,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                     resetLineSink = null
                     termDrawer = (termDrawer ?: "") + "重置 " + label + " .OK\n已完成 .OK\n"
-                    termDrawerConfirm = {
-                        termDrawerConfirm = null
+                    val askResetReboot: () -> Unit = {
                         pickConfirmOk = "重启"; pickConfirmAccentWord = "重启"; pickConfirmAccentColor = 0xFF007AFF
                         pickConfirm = "重启完全生效" to {
                             uiScope.launch { withContext(Dispatchers.IO) { runCatching { Runtime.getRuntime().exec(arrayOf(suBin(), "-c", "reboot")).waitFor() } } }
                         }
                     }
+                    termDrawerConfirm = {
+                        termDrawerConfirm = null
+                        askResetReboot()
+                    }
+                    // 重置完成 → 自动收起抽屉并弹「重启完全生效」
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        runCatching {
+                            termDrawer = null
+                            askResetReboot()
+                        }
+                    }, 600)
                 }
             }
             termDrawerConfirm = {
@@ -691,12 +699,24 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     ProcessBuilder(suBin(), "--mount-master", "-c", cmd).redirectErrorStream(true).start().waitFor()
                 } catch (t: Throwable) {}
             }
+            termDrawer = (termDrawer ?: "") + "提取完成 .OK\n已完成 .OK\n"
             try {
                 FileLocate.side = if (longPressFromRight) "R" else "L"
                 FileLocate.path = dstFile.absolutePath
                 FileLocate.tick += 1
             } catch (t: Throwable) {}
             refreshTick += 1
+            // 提取完成 → 自动弹「已提取」，点「好」先收日志层再收列表层
+            pickConfirmOk = "好"
+            pickConfirmAccentWord = "已提取"
+            pickConfirmAccentColor = 0xFF007AFF
+            pickConfirm = "好" to {
+                termDrawer = null            // 先收日志抽屉
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    uiPicker = emptyList()   // 再收应用列表抽屉
+                    uiPickerIcons = null
+                }, 220)
+            }
         }
     }
 
@@ -994,6 +1014,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     val uiCtx = androidx.compose.ui.platform.LocalContext.current
         val doActionFile: (String) -> Unit = { soKey ->
+            // 每次进入都重置确认状态（否则上一次点过「确定」后，这次可能直接执行不弹窗）
+            pickConfirm = null
+            termDrawerConfirm = null
+            pickCancelClosesDrawer = false
             val p = longPressPath ?: selectedFile
             val apkName = p?.substringAfterLast('/') ?: ""
             if (p != null) {
@@ -1557,6 +1581,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             termDrawerInput = txt.trim() == "终端"
         },
         onShowSuConfirm = { pkg, uid, label, signed ->
+            // 每次进入都重置确认状态，保证这次一定会重新弹「签名 X？」
             // 阶段1：打开抽屉只展示信息 + 绿色提示；点右上「确定」后才真正执行
             val doExec: () -> Unit = {
                 uiScope.launch {
@@ -1690,6 +1715,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     FileLocate.tick += 1
                 } catch (t: Throwable) {}
                 refreshTick += 1
+                // 提取完成 → 自动弹「已提取」，点「好」先收日志层再收列表层
+                termDrawer = (termDrawer ?: "") + "提取完成 .OK\n已完成 .OK\n"
+                pickConfirmOk = "好"
+                pickConfirmAccentWord = "已提取"
+                pickConfirmAccentColor = 0xFF007AFF
+                pickConfirm = "好" to {
+                    termDrawer = null
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        uiPicker = emptyList()
+                        uiPickerIcons = null
+                    }, 220)
+                }
             }
         },
         onOpenStorage = { leftPath = "/storage/emulated/0" },
@@ -1846,6 +1883,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         rightPath = rightPath,
         onFileOp = fileOp,
         onArchiveMount = {
+            pickConfirm = null
+            termDrawerConfirm = null
+            pickCancelClosesDrawer = false
             val p = selectedFile
             if (p != null) {
                 // 先展示模块信息，点抽屉右上「确定」再安装
@@ -2247,12 +2287,23 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val p6 = "/storage/emulated/0/Android/data/" + amPkg
                         if (longPressFromRight) rightPath = p6 else leftPath = p6
                         refreshTick += 1
+                        // 收起两层抽屉：先日志，再列表
+                        termDrawer = null
+                        uiScope.launch {
+                            kotlinx.coroutines.delay(200)
+                            uiPicker = emptyList(); uiPickerIcons = null
+                        }
                     },
                     "根目录" to {
                         appMenuPkg = null
                         val p6 = "/data/user/0/" + amPkg
                         if (longPressFromRight) rightPath = p6 else leftPath = p6
                         refreshTick += 1
+                        termDrawer = null
+                        uiScope.launch {
+                            kotlinx.coroutines.delay(200)
+                            uiPicker = emptyList(); uiPickerIcons = null
+                        }
                     },
                     "重置" to {
                         val pkgTmp = amPkg
@@ -3069,7 +3120,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 if (sel != null) {
                                     when (pickTitle) {
                                         "选择机型" -> {
-                                            // 先展示信息 + 等右上「确定」，再弹确认
+                                            // 先清掉上次的确认状态，保证这次一定会重新弹
+                                            pickConfirm = null
+                                            termDrawerConfirm = null
+                                            pickCancelClosesDrawer = false
                                             val setAct = uiPickerAction
                                             val selKeep = sel
                                             termDrawerTitle = stripBrand(selKeep)
@@ -4806,9 +4860,19 @@ private fun ProMaxIsland(
                             .background(Color(0xFF007AFF))
                             .clickable {
                                 val op = pendingUndo
-                                // 跟其他按钮一样：正常收起面板
+                                // 先让撤回按钮淡出，再和「删除完成」一样平滑收起岛
+                                // （closeIsland 里会设 navClosing，面板会瞬间隐藏、看不到收起过程）
                                 pendingUndo = null
-                                closeIsland()
+                                undoPanelOnly = false
+                                reopenScope.launch {
+                                    kotlinx.coroutines.delay(160)
+                                    navMode = false
+                                    navTarget = null
+                                    jumpStep = 0
+                                    jumpInput = ""
+                                    onClearLongPress()
+                                    expanded = false
+                                }
                                 if (op != null) {
                                     navScope.launch {
                                         withContext(Dispatchers.IO) {
@@ -6997,6 +7061,10 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
     if (showUrlDialog) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showUrlDialog = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false
+            ),
             title = { androidx.compose.material3.Text("驱动 zip 直链") },
             text = {
                 androidx.compose.foundation.text.BasicTextField(
@@ -7152,6 +7220,10 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
     if (showKeyDialog) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showKeyDialog = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false
+            ),
             title = { androidx.compose.material3.Text("so 密钥") },
             text = {
                 androidx.compose.foundation.text.BasicTextField(
@@ -8624,8 +8696,7 @@ internal fun loadAppPicker(
                 suList.filter { ai ->
                     val aiInfo = ai.packageInfo.applicationInfo
                     val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                    (!isSystem || ai.allowSu) && ai.packageName != "android" &&
-                        ai.packageName != ctx.packageName
+                    (!isSystem || ai.allowSu) && ai.packageName != "android"
                 }
                     .sortedBy { it.label }
                     .map { SuApp(it.packageName, it.label, it.uid, it.allowSu, null) }
@@ -8634,8 +8705,7 @@ internal fun loadAppPicker(
                     .filter {
                         val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
                         val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
-                        !isSystem && hasCode && it.packageName != "android" &&
-                            it.packageName != ctx.packageName
+                        !isSystem && hasCode && it.packageName != "android"
                     }
                     .sortedBy { it.loadLabel(pm).toString() }
                     .map { SuApp(it.packageName, it.loadLabel(pm).toString(), it.uid, false, null) }
@@ -8719,7 +8789,7 @@ internal fun loadSuperUserPicker(ctx: android.content.Context) {
                 suList.filter { ai ->
                     val aiInfo = ai.packageInfo.applicationInfo
                     val isSystem = aiInfo != null && (aiInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                    !isSystem && ai.packageName != "android" && ai.packageName != ctx.packageName
+                    !isSystem && ai.packageName != "android"
                 }
                     .map { SuApp(it.packageName, it.label, it.uid, it.allowSu, null) }
                     // 已授权的置顶，其余按名称
@@ -8729,7 +8799,7 @@ internal fun loadSuperUserPicker(ctx: android.content.Context) {
                     .filter {
                         val isSystem = (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
                         val hasCode = (it.flags and android.content.pm.ApplicationInfo.FLAG_HAS_CODE) != 0
-                        !isSystem && hasCode && it.packageName != "android" && it.packageName != ctx.packageName
+                        !isSystem && hasCode && it.packageName != "android"
                     }
                     .sortedBy { it.loadLabel(pm).toString() }
                     .map { SuApp(it.packageName, it.loadLabel(pm).toString(), it.uid, false, null) }
@@ -8765,10 +8835,12 @@ internal fun loadSuperUserPicker(ctx: android.content.Context) {
     }.start()
 }
 
-internal fun gameCleanCache(ctx: android.content.Context) {
-    // 立即打开抽屉（先空列表，加载完再填）
-    uiPickerTitle = "选择要重置的应用"
-    uiPicker = emptyList()
+internal fun gameCleanCache(ctx: android.content.Context, silent: Boolean = false) {
+    // 立即打开抽屉（先空列表，加载完再填）；silent=true 时只装 action，不碰列表
+    if (!silent) {
+        uiPickerTitle = "选择要重置的应用"
+        uiPicker = emptyList()
+    }
     uiPickerIcons = null
     uiPickerSelected = null
     uiPickerMarks = emptyMap()   // 游戏清理不显示「已签名」
@@ -8818,8 +8890,10 @@ internal fun gameCleanCache(ctx: android.content.Context) {
             } catch (t: Throwable) { null }
         }
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            uiPicker = labels
-            uiPickerIcons = icons
+            if (!silent) {
+                uiPicker = labels
+                uiPickerIcons = icons
+            }
         }
         uiPickerAction = { label ->
             try {
