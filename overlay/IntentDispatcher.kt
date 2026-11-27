@@ -78,6 +78,9 @@ private sealed interface PendingAction {
 
     /** Open a module's WebUI — triggered by shortcut. */
     data class OpenWebUI(val moduleId: String) : PendingAction
+
+    /** 其他应用「用本 App 打开」文件：ACTION_VIEW / ACTION_SEND */
+    data class OpenFile(val uri: Uri) : PendingAction
 }
 
 private sealed interface KsuDeepLink {
@@ -91,6 +94,43 @@ private fun buildInternalWebUiUri(moduleId: String): Uri {
         .authority(HOST_WEBUI)
         .appendQueryParameter(PARAM_ID, moduleId)
         .build()
+}
+
+/**
+ * content:// → 真实文件路径。有 MANAGE_EXTERNAL_STORAGE 时能直接定位原文件，
+ * 解析失败才退回「复制到 cache/incoming」。
+ */
+private fun resolveRealPath(context: android.content.Context, uri: Uri): String? {
+    if (uri.scheme == "file") return uri.path
+    // ExternalStorageProvider：content://com.android.externalstorage.documents/document/primary%3ADownload%2Fx.apk
+    runCatching {
+        if (uri.authority?.contains("externalstorage") == true) {
+            val docId = android.provider.DocumentsContract.getDocumentId(uri)
+            val parts = docId.split(":", limit = 2)
+            if (parts.size == 2) {
+                val base = if (parts[0].equals("primary", true)) "/storage/emulated/0" else "/storage/" + parts[0]
+                return base + "/" + parts[1]
+            }
+        }
+    }
+    // MediaStore：查 _data
+    runCatching {
+        val proj = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
+        context.contentResolver.query(uri, proj, null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val p = c.getString(0)
+                if (!p.isNullOrBlank()) return p
+            }
+        }
+    }
+    // DownloadsProvider
+    runCatching {
+        if (uri.authority == "com.android.providers.downloads.documents") {
+            val id = android.provider.DocumentsContract.getDocumentId(uri)
+            return "/storage/emulated/0/Download/" + (id.substringAfterLast("/"))
+        }
+    }
+    return null
 }
 
 fun getDisplayName(uri: Uri): String {
@@ -114,6 +154,16 @@ private fun resolveIntent(intent: Intent): PendingAction? {
             displayName = getDisplayName(uri),
             requiresConfirmation = false,
         )
+    }
+
+    // 其他应用「用我们的软件打开」：ACTION_VIEW / ACTION_SEND（content:// 或 file://）
+    if (intent.action == Intent.ACTION_VIEW || intent.action == Intent.ACTION_SEND) {
+        @Suppress("DEPRECATION")
+        val shared = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        val uri = intent.data ?: shared
+        if (uri != null && uri.scheme != SCHEME_KSU) {
+            return PendingAction.OpenFile(uri)
+        }
     }
 
     // Check deep links
@@ -205,6 +255,43 @@ fun IntentDispatcher(intentChannel: ReceiveChannel<Intent>) {
                 val webIntent = Intent(context, WebUIActivity::class.java)
                     .setData(buildInternalWebUiUri(action.moduleId))
                 context.startActivity(webIntent)
+            }
+
+            is PendingAction.OpenFile -> {
+                // 其他应用「用本 App 打开」：把文件接进来，丢进文件管理器的收件目录并定位
+                scope.launch {
+                    // 优先解析真实路径（全盘权限已开时直接定位原文件，和 MT 一样）
+                    val realPath = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        resolveRealPath(context, action.uri)
+                    }
+                    if (realPath != null && java.io.File(realPath).exists()) {
+                        me.weishu.kernelsu.ui.screen.FileLocate.side = "L"
+                        me.weishu.kernelsu.ui.screen.FileLocate.path = realPath
+                        me.weishu.kernelsu.ui.screen.FileLocate.tick += 1
+                        navigator.popUntil { it is Route.Main }
+                        return@launch
+                    }
+                    val copied = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            val name = getDisplayName(action.uri)
+                            val dir = java.io.File(context.cacheDir, "incoming").apply { mkdirs() }
+                            val dst = java.io.File(dir, name)
+                            context.contentResolver.openInputStream(action.uri)?.use { ins ->
+                                dst.outputStream().use { outs -> ins.copyTo(outs) }
+                            } ?: throw IllegalStateException("无法读取该文件")
+                            dst.absolutePath
+                        }.getOrNull()
+                    }
+                    if (copied != null) {
+                        me.weishu.kernelsu.ui.screen.FileLocate.side = "L"
+                        me.weishu.kernelsu.ui.screen.FileLocate.path = copied
+                        me.weishu.kernelsu.ui.screen.FileLocate.tick += 1
+                        // 回到文件管理器主界面并定位
+                        navigator.popUntil { it is Route.Main }
+                    } else {
+                        Toast.makeText(context, "打开失败：无法读取该文件", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
