@@ -21,7 +21,15 @@
 
     <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
 
-    <application
+        <!-- 全盘文件访问（和 MT 一样能直接读写 /storage/emulated/0，而不必靠 root 复制） -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
+<application
         android:name=".KernelSUApplication"
         android:zygotePreloadName="me.weishu.kernelsu.magica.AppZygotePreload"
         android:useAppZygote="true"
