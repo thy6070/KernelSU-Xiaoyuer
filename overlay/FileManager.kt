@@ -6809,6 +6809,7 @@ private fun BrowserPane(
         // 目录切换转场：进下一层从右侧滑入，返回从左侧滑入（iOS Files 手感）
         androidx.compose.animation.AnimatedContent(
             targetState = path,
+            modifier = modifier,
             transitionSpec = {
                 val forward = targetState.startsWith(initialState) || targetState.length >= initialState.length
                 val dir = if (forward) 1 else -1
@@ -6827,7 +6828,7 @@ private fun BrowserPane(
             },
             label = "dirTransition"
         ) { _ ->
-        Box(modifier = modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
         // 下拉/刷新指示器：跟手下拉时旋转放大，刷新中转圈
         val pullProgress = (pullDy / 150f).coerceIn(0f, 1f)
         if (pullProgress > 0.02f || pullRefreshing) {
