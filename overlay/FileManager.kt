@@ -6810,7 +6810,7 @@ private fun BrowserPane(
         androidx.compose.animation.AnimatedContent(
             targetState = path,
             transitionSpec = {
-                val forward = targetState.startsWith(source) || targetState.length >= source.length
+                val forward = targetState.startsWith(initialState) || targetState.length >= initialState.length
                 val dir = if (forward) 1 else -1
                 (androidx.compose.animation.slideInHorizontally(
                     animationSpec = tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
