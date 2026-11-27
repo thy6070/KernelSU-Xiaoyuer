@@ -1366,7 +1366,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         onOpenTerminal = { termFull = true },
         onPreview = { previewPath = it },
         onOpen = {
-            undoPanelOnly = false
             // 分岛点击：打开模式面板（FPS+/禁用温控/执行此文件）
             uiScope.launch {
                 panelP.snapTo(0f)
@@ -2794,8 +2793,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val lineShift = remember(ln) { androidx.compose.animation.core.Animatable(10f) }
                         LaunchedEffect(ln) {
                             kotlinx.coroutines.delay((i % 12) * 45L)
-                            kotlinx.coroutines.launch { lineShift.animateTo(0f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
-                            lineAlpha.animateTo(1f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                            kotlinx.coroutines.coroutineScope {
+                                launch { lineShift.animateTo(0f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+                                lineAlpha.animateTo(1f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                            }
                         }
                         Row(
                             modifier = Modifier
@@ -3971,7 +3972,10 @@ private fun ProMaxIsland(
                         onClearSelection()
                         closeIsland()
                         onOpenTerminal()
-                    } else onOpen()
+                    } else {
+                        undoPanelOnly = false
+                        onOpen()
+                    }
                 },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
