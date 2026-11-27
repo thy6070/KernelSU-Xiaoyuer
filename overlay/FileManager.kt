@@ -659,6 +659,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 pickConfirmOk = "确定"; pickConfirmAccentWord = null
                 pickConfirm = "重置 " + label + "？" to { doReset() }
             }
+            // 进入即自动弹「重置 X ？」（不用点抽屉确定）
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                runCatching {
+                    pickConfirmOk = "确定"; pickConfirmAccentWord = null
+                    pickConfirm = "重置 " + label + "？" to { doReset() }
+                }
+            }, 700)
 
         }
     }
@@ -685,7 +692,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 } catch (t: Throwable) {}
             }
             try {
-                FileLocate.side = "L"
+                FileLocate.side = if (longPressFromRight) "R" else "L"
                 FileLocate.path = dstFile.absolutePath
                 FileLocate.tick += 1
             } catch (t: Throwable) {}
@@ -794,6 +801,67 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onMultiDeselect = { p6 -> leftMultiSel = leftMultiSel - p6 },
                 onActivate = { longPressFromRight = false },
                 modifier = Modifier.weight(1f)
+                onZipExtractTo = { vp ->
+                    val (zip, innerRaw) = ZipView.parse(vp)
+                    val inner = innerRaw.trimEnd('/')
+                    val name = inner.substringAfterLast('/')
+                    // 判断是目录还是文件：entries 里有 "inner/..." 即为目录
+                    val isDir = ZipView.entries.any { it == inner + "/" || it.startsWith(inner + "/") }
+                    val target = if (longPressFromRight) leftPath else rightPath
+                    uiScope.launch {
+                        termDrawerTitle = name
+                        termDrawerIcon = null
+                        termDrawer = "解压：" + name + (if (isDir) "/（整个目录）" else "") + "\n" +
+                            "源压缩包：" + zip + "\n" +
+                            "目标目录：" + target + "\n"
+                        val out = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val qz = "'" + zip.replace("'", "'\\''") + "'"
+                                val qt = "'" + target.replace("'", "'\\''") + "'"
+                                val pat = if (isDir) "'" + (inner + "/").replace("'", "'\\''") + "*'" else "'" + inner.replace("'", "'\\''") + "'"
+                                suNow("cd " + qt + " && unzip -o " + qz + " " + pat + " 2>&1", 120000L)
+                            }.getOrDefault("")
+                        }
+                        out.lines().filter { it.isNotBlank() }.forEach { ln ->
+                            termDrawer = (termDrawer ?: "") + ln + "\n"
+                        }
+                        val needPwd = out.contains("password", true) || out.contains("encrypted", true) ||
+                            out.contains("Bad password", true) || out.contains("incorrect", true)
+                        if (needPwd) {
+                            zipPwdName = name
+                            zipPwdText = ""
+                            zipPwdOnOk = {
+                                val pwd = zipPwdText
+                                if (pwd.isNotEmpty()) {
+                                    uiScope.launch {
+                                        termDrawer = (termDrawer ?: "") + "用密码重试…\n"
+                                        val out2 = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                val qz = "'" + zip.replace("'", "'\\''") + "'"
+                                                val qt = "'" + target.replace("'", "'\\''") + "'"
+                                                val qp = "'" + pwd.replace("'", "'\\''") + "'"
+                                                val pat = if (isDir) "'" + (inner + "/").replace("'", "'\\''") + "*'" else "'" + inner.replace("'", "'\\''") + "'"
+                                                suNow("cd " + qt + " && unzip -o -P " + qp + " " + qz + " " + pat + " 2>&1", 120000L)
+                                            }.getOrDefault("")
+                                        }
+                                        out2.lines().filter { it.isNotBlank() }.forEach { ln ->
+                                            termDrawer = (termDrawer ?: "") + ln + "\n"
+                                        }
+                                        val ok2 = !(out2.contains("password", true) || out2.contains("incorrect", true))
+                                        termDrawer = (termDrawer ?: "") + (if (ok2) "解压完成 .OK\n已完成 .OK\n" else "密码错误 .NO\n已完成 .NO\n")
+                                        refreshTick += 1
+                                    }
+                                }
+                            }
+                            zipPwdVisible = true
+                            return@launch
+                        }
+                        termDrawer = (termDrawer ?: "") + "解压完成 .OK\n已完成 .OK\n"
+                        termDrawerConfirm = { termDrawerConfirm = null }
+                        refreshTick += 1
+                    }
+                },
+
             )
         }
         Column(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0xFF4A4A4A))) {}
@@ -859,6 +927,67 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onMultiDeselect = { p6 -> rightMultiSel = rightMultiSel - p6 },
                 onActivate = { longPressFromRight = true },
                 modifier = Modifier.weight(1f)
+                onZipExtractTo = { vp ->
+                    val (zip, innerRaw) = ZipView.parse(vp)
+                    val inner = innerRaw.trimEnd('/')
+                    val name = inner.substringAfterLast('/')
+                    // 判断是目录还是文件：entries 里有 "inner/..." 即为目录
+                    val isDir = ZipView.entries.any { it == inner + "/" || it.startsWith(inner + "/") }
+                    val target = if (longPressFromRight) leftPath else rightPath
+                    uiScope.launch {
+                        termDrawerTitle = name
+                        termDrawerIcon = null
+                        termDrawer = "解压：" + name + (if (isDir) "/（整个目录）" else "") + "\n" +
+                            "源压缩包：" + zip + "\n" +
+                            "目标目录：" + target + "\n"
+                        val out = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val qz = "'" + zip.replace("'", "'\\''") + "'"
+                                val qt = "'" + target.replace("'", "'\\''") + "'"
+                                val pat = if (isDir) "'" + (inner + "/").replace("'", "'\\''") + "*'" else "'" + inner.replace("'", "'\\''") + "'"
+                                suNow("cd " + qt + " && unzip -o " + qz + " " + pat + " 2>&1", 120000L)
+                            }.getOrDefault("")
+                        }
+                        out.lines().filter { it.isNotBlank() }.forEach { ln ->
+                            termDrawer = (termDrawer ?: "") + ln + "\n"
+                        }
+                        val needPwd = out.contains("password", true) || out.contains("encrypted", true) ||
+                            out.contains("Bad password", true) || out.contains("incorrect", true)
+                        if (needPwd) {
+                            zipPwdName = name
+                            zipPwdText = ""
+                            zipPwdOnOk = {
+                                val pwd = zipPwdText
+                                if (pwd.isNotEmpty()) {
+                                    uiScope.launch {
+                                        termDrawer = (termDrawer ?: "") + "用密码重试…\n"
+                                        val out2 = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                val qz = "'" + zip.replace("'", "'\\''") + "'"
+                                                val qt = "'" + target.replace("'", "'\\''") + "'"
+                                                val qp = "'" + pwd.replace("'", "'\\''") + "'"
+                                                val pat = if (isDir) "'" + (inner + "/").replace("'", "'\\''") + "*'" else "'" + inner.replace("'", "'\\''") + "'"
+                                                suNow("cd " + qt + " && unzip -o -P " + qp + " " + qz + " " + pat + " 2>&1", 120000L)
+                                            }.getOrDefault("")
+                                        }
+                                        out2.lines().filter { it.isNotBlank() }.forEach { ln ->
+                                            termDrawer = (termDrawer ?: "") + ln + "\n"
+                                        }
+                                        val ok2 = !(out2.contains("password", true) || out2.contains("incorrect", true))
+                                        termDrawer = (termDrawer ?: "") + (if (ok2) "解压完成 .OK\n已完成 .OK\n" else "密码错误 .NO\n已完成 .NO\n")
+                                        refreshTick += 1
+                                    }
+                                }
+                            }
+                            zipPwdVisible = true
+                            return@launch
+                        }
+                        termDrawer = (termDrawer ?: "") + "解压完成 .OK\n已完成 .OK\n"
+                        termDrawerConfirm = { termDrawerConfirm = null }
+                        refreshTick += 1
+                    }
+                },
+
             )
         }
     }
@@ -882,7 +1011,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             val _dbg = "p=" + p + " lower=" + lower + " isZip=" + lower.endsWith(".zip") + " isSh=" + lower.endsWith(".sh") + "\n"
                             run { }
                             // APK：走结构化安装报告（抽屉终端 5 行）
-                            if (lower.endsWith(".apk")) {
+                            if (isApk(p)) {
                                 termDrawerTitle = file
                                 termDrawerIcon = null
                                 // /data 下 App 读不到 → 先 root 复制到 cache 再解析（拿图标/版本/包名）
@@ -912,8 +1041,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     } else null
                                 }.getOrNull()
                                 termDrawer = nm0 + "  v" + (info0?.versionName ?: "") + "  " + (info0?.packageName ?: "") + "\n准备将此程序加载至桌面\n"
-                                termDrawerConfirm = {
-                                    termDrawerConfirm = null
+                                val askInstallApk: () -> Unit = {
                                     pickConfirmOk = "安装"
                                     pickConfirmAccentWord = null
                                     pickConfirm = "安装 " + nm0 + " ？" to {
@@ -957,6 +1085,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     })
                                     }
                                 }
+                                termDrawerConfirm = {
+                                    termDrawerConfirm = null
+                                    askInstallApk()
+                                }
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    pickCancelClosesDrawer = true
+                    runCatching { askInstallApk() }
+                }, 700)
                                 return@withContext
                             }
                             // 模块 zip 也走抽屉终端；只有脚本/so 才用全屏终端
@@ -980,7 +1116,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 withContext(Dispatchers.Main) { showTerminal = true }
                             }
                             val cmd = when {
-                                lower.endsWith(".apk") ->
+                                isApk(p) ->
                                     // 我们的安装方式：-r 覆盖 + -d 允许降级 + -g 授予权限
                                     "cp -f " + shq(p) + " /data/local/tmp/xy_install.apk ; " +
                                         "chmod 644 /data/local/tmp/xy_install.apk ; " +
@@ -1515,7 +1651,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     termDrawerConfirm = null
                     askStart()
                 }
-
+                // 进入即自动弹「签名 X ？」（不用点抽屉确定）
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    pickCancelClosesDrawer = true
+                    runCatching { askStart() }
+                }, 700)
             }
         },
         onExtractApp = { pkg, label ->
@@ -1724,7 +1864,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     } else null
                 }.getOrNull()
                 termDrawer = p.substringAfterLast('/') + "\n准备安装此模块\n"
-                termDrawerConfirm = {
+                val doMountModule: () -> Unit = {
                     termDrawerConfirm = null
                 uiScope.launch {
                     running = true
@@ -1804,9 +1944,108 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 }
             }
-                }   // termDrawerConfirm 结束
+                }   // doMountModule 结束
+                // 模块安装：进入等待界面后自动开始（不用点抽屉「确定」）
+                val askMountModule: () -> Unit = {
+                    pickConfirmOk = "安装"
+                    pickConfirmAccentWord = null
+                    pickConfirm = "安装此模块 ？" to { doMountModule() }
+                }
+                termDrawerConfirm = {
+                    termDrawerConfirm = null
+                    askMountModule()
+                }
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    pickCancelClosesDrawer = true
+                    runCatching { askMountModule() }
+                }, 700)
         },
     )
+    }
+
+    // 加密压缩包：密码输入（与重命名同款 iOS 弹窗）
+    if (zipPwdVisible) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false,
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(240.dp)
+                    .shadow(24.dp, SmoothCornerShape(20.dp), clip = false, ambientColor = Color(0x33000000), spotColor = Color(0x33000000))
+                    .clip(SmoothCornerShape(20.dp))
+                    .background(Color(0xFFF2F2F7))
+                    .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
+            ) {
+                Text(
+                    "压缩包密码",
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1C1C1E),
+                    textAlign = TextAlign.Center
+                )
+                if (zipPwdName.isNotEmpty()) {
+                    Text(
+                        zipPwdName,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                        fontSize = 11.sp,
+                        color = Color(0x99000000),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .height(34.dp)
+                        .clip(SmoothCornerShape(10.dp))
+                        .background(Color(0x11000000))
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = zipPwdText,
+                        onValueChange = { zipPwdText = it },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = Color(0xFF1C1C1E), fontSize = 16.sp, lineHeight = 20.sp, fontFamily = AppFontFamily
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(0.33.dp).background(Color(0x33000000)))
+                Row(modifier = Modifier.fillMaxWidth().height(38.dp)) {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                            .clickable { zipPwdVisible = false; zipPwdOnOk = null },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
+                    }
+                    Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                            .clickable {
+                                zipPwdVisible = false
+                                val cb = zipPwdOnOk
+                                zipPwdOnOk = null
+                                cb?.invoke()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("解压", fontSize = 15.sp, color = Color(0xFF007AFF))
+                    }
+                }
+            }
+        }
     }
 
     // 重命名输入弹窗（与「重置应用」确认弹窗同款：尺寸/变暗/动画/分割线/按钮）
@@ -2000,12 +2239,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     "提取" to { appMenuPkg = null; appMenuExtract(amPkg, appMenuLabel) },
                     "普通目录" to {
                         appMenuPkg = null
-                        leftPath = "/storage/emulated/0/Android/data/" + amPkg
+                        // 跟随上一次操作的区域（长按/选中的是哪一栏就打开哪一栏）
+                        val p6 = "/storage/emulated/0/Android/data/" + amPkg
+                        if (longPressFromRight) rightPath = p6 else leftPath = p6
                         refreshTick += 1
                     },
                     "根目录" to {
                         appMenuPkg = null
-                        leftPath = "/data/user/0/" + amPkg
+                        val p6 = "/data/user/0/" + amPkg
+                        if (longPressFromRight) rightPath = p6 else leftPath = p6
                         refreshTick += 1
                     },
                     "重置" to {
@@ -2252,7 +2494,72 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 // 参照目录：另一侧当前目录
                 val otherDir = if (cmPath.startsWith(leftPath.trimEnd('/') + "/")) rightPath else leftPath
                 // 移动/复制（直接移到/复制到另一侧目录）
-                items.add(CmItem("移动") { cmFile("move", otherDir) })
+                // 压缩包内：文件不在磁盘上 → 「移动」改为「解压到对面」
+                if (ZipView.isZipPath(cmPath)) {
+                    items.add(CmItem("解压") {
+                        val vp = cmPath
+                        val (zipP, innerRaw) = ZipView.parse(vp)
+                        val inner = innerRaw.trimEnd('/')
+                        val nm = inner.substringAfterLast('/')
+                        val isDirE = ZipView.entries.any { it == inner + "/" || it.startsWith(inner + "/") }
+                        val dstDir = otherDir
+                        ctxMenuPath = null
+                        uiScope.launch {
+                            termDrawerTitle = nm
+                            termDrawerIcon = null
+                            termDrawer = "解压：" + nm + (if (isDirE) "/（整个目录）" else "") + "\n" +
+                                "源压缩包：" + zipP + "\n" +
+                                "目标目录：" + dstDir + "\n"
+                            var out = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    val qz = "'" + zipP.replace("'", "'\\''") + "'"
+                                    val qt = "'" + dstDir.replace("'", "'\\''") + "'"
+                                    val pat = if (isDirE) "'" + (inner + "/").replace("'", "'\\''") + "*'" else "'" + inner.replace("'", "'\\''") + "'"
+                                    suNow("cd " + qt + " && unzip -o " + qz + " " + pat + " 2>&1", 120000L)
+                                }.getOrDefault("")
+                            }
+                            var needPwd = out.contains("password", true) || out.contains("encrypted", true) || out.contains("incorrect", true)
+                            if (needPwd) {
+                                zipPwdName = nm
+                                zipPwdText = ""
+                                zipPwdOnOk = {
+                                    val pwd = zipPwdText
+                                    if (pwd.isNotEmpty()) {
+                                        uiScope.launch {
+                                            out = withContext(Dispatchers.IO) {
+                                                runCatching {
+                                                    val qz = "'" + zipP.replace("'", "'\\''") + "'"
+                                                    val qt = "'" + dstDir.replace("'", "'\\''") + "'"
+                                                    val qp = "'" + pwd.replace("'", "'\\''") + "'"
+                                                    val pat = if (isDirE) "'" + (inner + "/").replace("'", "'\\''") + "*'" else "'" + inner.replace("'", "'\\''") + "'"
+                                                    suNow("cd " + qt + " && unzip -o -P " + qp + " " + qz + " " + pat + " 2>&1", 120000L)
+                                                }.getOrDefault("")
+                                            }
+                                            needPwd = out.contains("password", true) || out.contains("incorrect", true)
+                                            out.lines().filter { it.isNotBlank() }.forEach { ln ->
+                                                termDrawer = (termDrawer ?: "") + ln + "\n"
+                                            }
+                                            termDrawer = (termDrawer ?: "") + (if (needPwd) "密码错误 .NO\n已完成 .NO\n" else "解压完成 .OK\n已完成 .OK\n")
+                                            termDrawerConfirm = { termDrawerConfirm = null }
+                                            refreshTick += 1
+                                        }
+                                    }
+                                }
+                                zipPwdVisible = true
+                                termDrawer = (termDrawer ?: "") + "该压缩包需要密码\n"
+                                return@launch
+                            }
+                            out.lines().filter { it.isNotBlank() }.forEach { ln ->
+                                termDrawer = (termDrawer ?: "") + ln + "\n"
+                            }
+                            termDrawer = (termDrawer ?: "") + "解压完成 .OK\n已完成 .OK\n"
+                            termDrawerConfirm = { termDrawerConfirm = null }
+                            refreshTick += 1
+                        }
+                    })
+                } else {
+                    items.add(CmItem("移动") { cmFile("move", otherDir) })
+                }
                 items.add(CmItem("重命名") {
                     cmRenameText = cmPath.substringAfterLast('/')
                     cmRenamePath = cmPath
@@ -2763,8 +3070,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             val selKeep = sel
                                             termDrawerTitle = stripBrand(selKeep)
                                             termDrawer = "目标机型：" + stripBrand(selKeep) + "\n"
-                                            termDrawerConfirm = {
-                                                termDrawerConfirm = null
+                                            val askConfirmModel: () -> Unit = {
                                                 pickConfirmOk = "确定"
                                                 pickConfirmAccentWord = null
                                                 pickConfirm = "设为 " + stripBrand(selKeep) + " ？" to {
@@ -2853,6 +3159,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             }
                                                 }
                                             }
+                                            // 进入等待界面后自动弹「设为 X？」
+                                            termDrawerConfirm = {
+                                                termDrawerConfirm = null
+                                                askConfirmModel()
+                                            }
+                                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    pickCancelClosesDrawer = true
+                    runCatching { askConfirmModel() }
+                }, 700)
                                         }
                                         // 提取：直接打开应用操作菜单（抽屉保留）
                                         "选择要提取的应用" -> {
@@ -3271,7 +3586,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clickable { pickConfirm = null },
+                            .clickable {
+                                pickConfirm = null
+                                pickCancelClosesDrawer = false
+                                // 任何确认/结果弹窗点取消都收起终端抽屉
+                                termDrawer = null
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("取消", fontSize = 15.sp, color = Color(0xFFFF3B30))
@@ -3289,6 +3609,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .clickable {
                                 val action = pc.second
                                 pickConfirm = null
+                                pickCancelClosesDrawer = false   // 点确定 = 继续执行，不收抽屉
                                 action()
                             },
                         contentAlignment = Alignment.Center
@@ -6900,6 +7221,8 @@ private fun BrowserPane(
     onMultiSelect: (String) -> Unit = {},
     onMultiDeselect: (String) -> Unit = {},
     onActivate: () -> Unit = {},
+    // 压缩包内长按 → 解压到对面目录（虚拟路径）
+    onZipExtractTo: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val paneCtx = androidx.compose.ui.platform.LocalContext.current
@@ -6907,13 +7230,15 @@ private fun BrowserPane(
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var multiMode by remember { mutableStateOf(false) }
     var pullDy by remember { mutableStateOf(0f) }
+    val listState = rememberLazyListState()
     val refreshRef = androidx.compose.runtime.rememberUpdatedState(onRefresh)
     var pullRefreshing by remember { mutableStateOf(false) }
     var lastPullRefreshAt by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     val pullConn = remember {
         object : NestedScrollConnection {
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (available.y > 0f) {
+                val atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                if (available.y > 0f && atTop) {
                     pullDy = (pullDy + available.y).coerceAtMost(220f)
                     val now = System.currentTimeMillis()
                     // 冷却 1.5s：避免刷新后列表重建又被判定为"下拉"→ 无限刷新
@@ -6923,7 +7248,7 @@ private fun BrowserPane(
                         pullDy = 0f
                         refreshRef.value()
                     }
-                } else if (available.y < 0f) {
+                } else if (available.y < 0f || !atTop) {
                     pullDy = 0f
                 }
                 return Offset.Zero
@@ -6931,9 +7256,9 @@ private fun BrowserPane(
         }
     }
     // 刷新完成（列表变化）后收起指示器
-    LaunchedEffect(entries, path) {
+    LaunchedEffect(pullRefreshing) {
         if (pullRefreshing) {
-            kotlinx.coroutines.delay(900)
+            kotlinx.coroutines.delay(1000)
             pullRefreshing = false
         }
     }
@@ -6943,7 +7268,6 @@ private fun BrowserPane(
     }
 
     val parent = parentOf(path)
-    val listState = rememberLazyListState()
     // 滚动方向：1 = 手指上滑看下面（新行从下方进）；-1 = 手指下滑看上面（新行从上方进）
     var enterFromDir by remember { mutableStateOf(1) }
     LaunchedEffect(listState) {
@@ -6997,10 +7321,10 @@ private fun BrowserPane(
                 val forward = targetState.startsWith(initialState) || targetState.length >= initialState.length
                 val dir = if (forward) 1 else -1
                 (androidx.compose.animation.slideInHorizontally(
-                    animationSpec = tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                    animationSpec = tween(280, easing = androidx.compose.animation.core.FastOutSlowInEasing)
                 ) { w -> dir * w / 4 } +
                     androidx.compose.animation.scaleIn(
-                        animationSpec = tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        animationSpec = tween(280, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                         initialScale = 0.98f
                     ) +
                     fadeIn(tween(160))) togetherWith
@@ -7375,17 +7699,17 @@ private fun FsRow(
     var rowVisible by remember { mutableStateOf(!animateIn) }
     val rowAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (rowVisible) 1f else 0f,
-        animationSpec = tween(160, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
+        animationSpec = tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "rowAlpha"
     )
     val rowShift by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (rowVisible) 0f else (if (enterFrom > 0) 6f else -6f),
-        animationSpec = tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        animationSpec = tween(280, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "rowShift"
     )
     LaunchedEffect(fullPath) {
         if (animateIn && !rowVisible) {
-            kotlinx.coroutines.delay(if (index in 0..7) index.coerceAtLeast(0) * 15L else 0L)
+            kotlinx.coroutines.delay(if (index in 0..7) index.coerceAtLeast(0) * 22L else 0L)
             rowVisible = true
         }
     }
@@ -7436,7 +7760,18 @@ private fun FsRow(
                 fontFamily = AppFontFamily,
                 color = Color(TEXT_COLOR)
             )
-            // 不显示文件大小/时间小字
+            // 文件大小：极淡的小字（不抢文件名视线）
+            if (!isDir && sizeText.isNotEmpty()) {
+                Text(
+                    text = sizeText,
+                    fontSize = 10.sp,
+                    lineHeight = 13.sp,
+                    maxLines = 1,
+                    color = Color(0x40000000),
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.padding(start = 6.dp, end = 4.dp)
+                )
+            }
 
         }
         if (!isLast) {
@@ -7602,7 +7937,7 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
     val iconAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(mediaThumbNow, apkIconNow) {
         if (mediaThumbNow != null || apkIconNow != null) {
-            iconAlpha.animateTo(1f, tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            iconAlpha.animateTo(1f, tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing))
         }
     }
     if (mediaThumbNow != null) {
@@ -8762,6 +9097,13 @@ var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compo
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
 // 抽屉项右侧标记（如"已签名"）
 var uiPickerMarks by androidx.compose.runtime.mutableStateOf<Map<String, String>>(emptyMap())
+
+// 加密压缩包：密码输入弹窗（iOS 重命名同款）
+var pickCancelClosesDrawer by androidx.compose.runtime.mutableStateOf(false)
+var zipPwdVisible by androidx.compose.runtime.mutableStateOf(false)
+var zipPwdText by androidx.compose.runtime.mutableStateOf("")
+var zipPwdName by androidx.compose.runtime.mutableStateOf("")
+var zipPwdOnOk by androidx.compose.runtime.mutableStateOf<(() -> Unit)?>(null)
 
 // 虚拟压缩包浏览（MT 式）：只登记条目，点文件才解压该文件
 object ZipView {
