@@ -226,7 +226,21 @@ private val apkIconCache = ConcurrentHashMap<String, ImageBitmap?>()
 private val pkgIconCache = ConcurrentHashMap<String, ImageBitmap?>()
 private val apkIconMutex = Mutex()
 
-data class ModItem(val id: String, val name: String, val version: String, val desc: String, val disabled: Boolean, val author: String = "")
+data class ModItem(
+    val id: String,
+    val name: String,
+    val version: String,
+    val desc: String,
+    val disabled: Boolean,
+    val author: String = "",
+    // 云更新（对应 module.prop 的 updateJson / versionCode）
+    val updateJson: String = "",
+    val versionCode: Int = 0,
+    // 检查结果（远端 versionCode 更大时填充）
+    val updateVer: String = "",
+    val updateZip: String = "",
+    val updateChangelog: String = ""
+)
 
 data class SuApp(val pkg: String, val label: String, val uid: Int, val allowed: Boolean, val icon: android.graphics.Bitmap? = null)
 
@@ -279,34 +293,35 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     // 卡密底部半屏面板：不可下滑关闭，验证成功才自动收起
     if (showCardSheet) {
-        // 卡密验证成功时临时允许隐藏（否则 confirmValueChange 会把 hide() 动画也拒绝掉，面板直接消失）
-        val allowHide = remember { mutableStateOf(false) }
-        val cardSheetState = androidx.compose.material3.rememberModalBottomSheetState(
-            skipPartiallyExpanded = true,
-            confirmValueChange = { it != androidx.compose.material3.SheetValue.Hidden || allowHide.value }
-        )
-        androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { /* 忽略手势/返回键关闭 */ },
-            sheetState = cardSheetState,
-            // iOS 白色主题
-            containerColor = Color(0xFFF2F2F7),
-            contentColor = Color.Black,
-            // 去掉 Material3 默认的 640dp 最大宽度限制，平板上才能真正铺满
-            sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
-            // 卡密面板：小连续曲率
-            shape = SmoothCornerShape(12.dp),
-            // 完全禁止拖拽手势（面板不能被上下拖动）
-            sheetGesturesEnabled = false,
-            // 去掉顶部那个可以往下拉的小把手
-            dragHandle = null
+        // 卡密登录：改成 iOS Alert 风格弹窗（不再是底部抽屉）
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { /* 必须验证，不能点外面关闭 */ },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false,
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
         ) {
-            CardLoginSheet(appCtx) {
-                scope.launch {
-                    // 允许隐藏 → 播放下滑动画 → 动画结束再移除
-                    allowHide.value = true
-                    try { cardSheetState.hide() } catch (t: Throwable) {}
-                    kotlinx.coroutines.delay(120)
-                    showCardSheet = false
+            val cardView = androidx.compose.ui.platform.LocalView.current
+            LaunchedEffect(Unit) { applyImmersiveToDialog(cardView) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x66000000)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(320.dp)
+                        .shadow(30.dp, SmoothCornerShape(20.dp), clip = false,
+                            ambientColor = Color(0x40000000), spotColor = Color(0x40000000))
+                        .clip(SmoothCornerShape(20.dp))
+                        .background(Color(0xFFF2F2F7))
+                ) {
+                    CardLoginSheet(appCtx) {
+                        showCardSheet = false
+                    }
                 }
             }
         }
@@ -780,14 +795,22 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             if (lower.endsWith(".apk")) {
                                 termDrawerTitle = file
                                 termDrawerIcon = null
+                                // /data 下 App 读不到 → 先 root 复制到 cache 再解析（拿图标/版本/包名）
+                                val probeApk = java.io.File(appCtx.cacheDir, "apk_probe.apk")
+                                runCatching {
+                                    if (!java.io.File(p).canRead()) {
+                                        suNow("cp -f '" + p.replace("'", "'\\''") + "' '" + probeApk.absolutePath + "' ; chmod 644 '" + probeApk.absolutePath + "'")
+                                    }
+                                }
+                                val readPath = if (probeApk.exists() && probeApk.length() > 0) probeApk.absolutePath else p
                                 // 先展示信息，抽屉右上「确定」后再安装
-                                val info0 = runCatching { appCtx.packageManager.getPackageArchiveInfo(p, 0) }.getOrNull()
+                                val info0 = runCatching { appCtx.packageManager.getPackageArchiveInfo(readPath, 0) }.getOrNull()
                                 val nm0 = info0?.applicationInfo?.let { ai -> runCatching { ai.loadLabel(appCtx.packageManager).toString() }.getOrDefault(file) } ?: file.removeSuffix(".apk")
                                 termDrawerIcon = runCatching {
                                     val ai0 = info0?.applicationInfo
                                     if (ai0 != null) {
-                                        ai0.sourceDir = p
-                                        ai0.publicSourceDir = p
+                                        ai0.sourceDir = readPath
+                                        ai0.publicSourceDir = readPath
                                         val d = ai0.loadIcon(appCtx.packageManager)
                                         val w0 = d.intrinsicWidth.coerceAtLeast(1)
                                         val h0 = d.intrinsicHeight.coerceAtLeast(1)
@@ -3662,12 +3685,22 @@ private fun ProMaxIsland(
                                 version = map["version"] ?: "",
                                 desc = map["description"] ?: "",
                                 disabled = disabled,
-                                author = map["author"] ?: ""
+                                author = map["author"] ?: "",
+                                updateJson = map["updateJson"] ?: "",
+                                versionCode = (map["versionCode"] ?: "0").toIntOrNull() ?: 0
                             )
                         }
                     }
                 } catch (t: Throwable) {
                     emptyList()
+                }
+            }
+            // 进模块列表自动检查云更新（对齐官方：进列表即检查）
+            val snapshot = modules
+            if (snapshot.isNotEmpty()) {
+                modules = snapshot.map { m ->
+                    val r = checkModuleUpdateOnce(m)
+                    if (r.updateZip.isNotEmpty()) r else m
                 }
             }
         }
@@ -3955,7 +3988,13 @@ private fun ProMaxIsland(
                 .clip(RoundedCornerShape(21.dp))
                 .background(Color.Black)
                 .border(0.5.dp, Color(0x47FFFFFF), RoundedCornerShape(21.dp))
-                .clickable {
+                .combinedClickable(
+                    onLongClick = {
+                        // 长按分岛：始终打开导航栏（不进撤回面板）
+                        undoPanelOnly = false
+                        onOpen()
+                    },
+                    onClick = {
                     if (pendingUndo != null) {
                         // 有撤销事件：展开胶囊（只显示撤回）
                         undoPanelOnly = true
@@ -3976,7 +4015,8 @@ private fun ProMaxIsland(
                         undoPanelOnly = false
                         onOpen()
                     }
-                },
+                    }
+                ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -4495,9 +4535,18 @@ private fun ProMaxIsland(
                                                         it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                                                         navCtx.startActivity(it)
                                                     } else {
-                                                        navCtx.startForegroundService(
-                                                            android.content.Intent(navCtx, FpsOverlayService::class.java)
-                                                        )
+                                                        // 先停再启：服务可能卡在"已运行但没在采集"的状态
+                                                        // （用户反馈：重新开关一次才有效果）
+                                                        runCatching {
+                                                            navCtx.stopService(android.content.Intent(navCtx, FpsOverlayService::class.java))
+                                                        }
+                                                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                                            runCatching {
+                                                                navCtx.startForegroundService(
+                                                                    android.content.Intent(navCtx, FpsOverlayService::class.java)
+                                                                )
+                                                            }
+                                                        }, 250)
                                                     }
                                                 } else {
                                                     navCtx.stopService(
@@ -4686,7 +4735,7 @@ private fun ProMaxIsland(
                                                         modifier = Modifier
                                                             .size(30.dp)
                                                             .clip(RoundedCornerShape(percent = 50))
-                                                            .background(Color(0x33FFFFFF))
+                                                            .background(Color(0xFF0D0D10))
                                                             .clickable {
                                                                 navScope.launch {
                                                                     val exists = withContext(Dispatchers.IO) {
@@ -4760,7 +4809,7 @@ private fun ProMaxIsland(
                                                             modifier = Modifier
                                                                 .size(30.dp)
                                                                 .clip(RoundedCornerShape(percent = 50))
-                                                                .background(Color(0x33FFFFFF))
+                                                                .background(Color(0xFF0D0D10))
                                                                 .clickable {
                                                                     try {
                                                                         val token = me.weishu.kernelsu.data.repository.SettingsRepositoryImpl().intentToken
@@ -4782,6 +4831,66 @@ private fun ProMaxIsland(
                                                                 imageVector = Icons.Rounded.OpenInNew,
                                                                 contentDescription = "打开UI",
                                                                 tint = Color(0xFF0A84FF),
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                    // 云更新：有新版时在「打开UI」旁边显示更新图标（绿色）
+                                                    if (m.updateZip.isNotEmpty()) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .padding(start = 8.dp)
+                                                                .size(30.dp)
+                                                                .clip(RoundedCornerShape(percent = 50))
+                                                                .background(Color(0xFF0D0D10))
+                                                                .clickable {
+                                                                    navScope.launch {
+                                                                        withContext(Dispatchers.Main) {
+                                                                            onShowTermDrawer("模块：${m.id}\n下载更新：v${m.updateVer}\n")
+                                                                        }
+                                                                        val zipPath = withContext(Dispatchers.IO) {
+                                                                            runCatching {
+                                                                                val dst = java.io.File(navCtx.cacheDir, "${m.id}_update.zip")
+                                                                                val c = java.net.URL(m.updateZip).openConnection() as java.net.HttpURLConnection
+                                                                                c.connectTimeout = 10000
+                                                                                c.readTimeout = 20000
+                                                                                c.instanceFollowRedirects = true
+                                                                                c.inputStream.use { ins -> dst.outputStream().use { outs -> ins.copyTo(outs) } }
+                                                                                dst.absolutePath
+                                                                            }.getOrNull()
+                                                                        }
+                                                                        if (zipPath == null) {
+                                                                            withContext(Dispatchers.Main) {
+                                                                                termDrawer = (termDrawer ?: "") + "下载失败 .NO\n"
+                                                                                termDrawer = (termDrawer ?: "") + "已完成 .NO\n"
+                                                                            }
+                                                                        } else {
+                                                                            withContext(Dispatchers.IO) {
+                                                                                runCatching {
+                                                                                    val pr = Runtime.getRuntime().exec(arrayOf(suBin(), "--mount-master", "-c",
+                                                                                        "cp -f '" + zipPath + "' /data/local/tmp/xy_mod_update.zip ; " +
+                                                                                            "/data/adb/ksud module install /data/local/tmp/xy_mod_update.zip 2>&1"))
+                                                                                    val out = pr.inputStream.bufferedReader().readText()
+                                                                                    pr.waitFor()
+                                                                                    val lines = out.split("\n").filter { it.isNotBlank() }
+                                                                                    withContext(Dispatchers.Main) {
+                                                                                        lines.forEach { termDrawer = (termDrawer ?: "") + it + "\n" }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                            withContext(Dispatchers.Main) {
+                                                                                termDrawer = (termDrawer ?: "") + "更新完成 .OK\n"
+                                                                                termDrawer = (termDrawer ?: "") + "已完成 .OK\n"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Rounded.SystemUpdateAlt,
+                                                                contentDescription = "可更新 v${m.updateVer}",
+                                                                tint = Color.White,
                                                                 modifier = Modifier.size(18.dp)
                                                             )
                                                         }
@@ -6710,92 +6819,104 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
             msg = err
         }
     }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 10.dp)
-    ) {
+    // 验证逻辑（购买按钮跳浏览器；这里手动/自动都走同一个函数）
+    val doVerify: () -> Unit = {
+        if (busy) {
+            // 正在验证，忽略
+        } else if (key.isBlank()) {
+            msg = "请输入卡密"
+        } else {
+            busy = true
+            msg = "验证中…"
+            scope.launch {
+                val err = withContext(Dispatchers.IO) {
+                    try { me.weishu.kernelsu.ui.screen.WeiYan.verify(ctx, key.trim()) } catch (t: Throwable) { t.message ?: "验证失败" }
+                }
+                busy = false
+                if (err == null) {
+                    try { ctx.getSharedPreferences("yx_mode", 0).edit().putBoolean("card_ok", true).apply() } catch (t: Throwable) {}
+                    try { java.io.File(ctx.filesDir, "card_key.txt").writeText(key.trim()) } catch (t: Throwable) {}
+                    try {
+                        val k = key.trim().replace("'", "'\\''")
+                        com.topjohnwu.superuser.Shell.cmd(
+                            "F='/data/user/0/com.tencent.THY/files/小鱼儿密钥' ; mkdir -p '/data/user/0/com.tencent.THY/files' ; echo '" + k + "' > \"\$F\" ; chmod 600 \"\$F\""
+                        ).exec()
+                    } catch (t: Throwable) {}
+                    me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
+                    msg = "激活成功"
+                    onDone()
+                } else {
+                    msg = err
+                }
+            }
+        }
+    }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // 标题（和重命名弹窗一致：居中 17sp）
         Text(
-            text = "卡密登录",
+            text = "卡密验证",
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
             fontSize = 17.sp,
-            color = Color.Black,
-            modifier = Modifier.padding(horizontal = 8.dp)
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF1C1C1E),
+            textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(10.dp))
+        // 输入框
         var keyFocused by remember { mutableStateOf(false) }
         androidx.compose.foundation.text.BasicTextField(
             value = key,
             onValueChange = { key = it },
             singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = Color.Black),
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = Color(0xFF1C1C1E), fontFamily = AppFontFamily),
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 16.dp)
                 .onFocusChanged { keyFocused = it.isFocused }
-                .shadow(
-                    elevation = if (keyFocused) 8.dp else 3.dp,
-                    shape = SmoothCornerShape(12.dp),
-                    clip = false,
-                    ambientColor = Color(0x44000000),
-                    spotColor = Color(0x44000000)
-                )
-                .clip(SmoothCornerShape(12.dp))
-                // 无描边：聚焦靠阴影加深 + 背景微亮一阶
-                .background(if (keyFocused) Color(0xFFFFFFFF) else Color(0xFFFAFAFC))
-                .border(
-                    width = 0.5.dp,
-                    color = Color(0x1F000000),
-                    shape = SmoothCornerShape(12.dp)
-                )
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .clip(SmoothCornerShape(10.dp))
+                .background(Color(0x11000000))
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = msg, fontSize = 12.sp, color = Color(0xFFFF3B30), modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(10.dp))
+        if (msg.isNotEmpty()) {
+            Text(
+                text = msg,
+                fontSize = 12.sp,
+                color = if (msg.contains("成功")) Color(0xFF34C759) else Color(0xFFFF3B30),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(0.33.dp).background(Color(0x33000000)))
+        // 底部：购买 / 验证（和重命名弹窗的 取消/确定 同款）
+        Row(modifier = Modifier.fillMaxWidth().height(44.dp)) {
             Box(
                 modifier = Modifier
-                    .clip(SmoothCornerShape(10.dp))
-                    .background(Color(0xFF007AFF))
-                    .clickable(enabled = !busy) {
-                        if (key.isBlank()) { msg = "请输入卡密"; return@clickable }
-                        busy = true
-                        msg = "验证中…"
-                        scope.launch {
-                            val err = withContext(Dispatchers.IO) {
-                                try { me.weishu.kernelsu.ui.screen.WeiYan.verify(ctx, key.trim()) } catch (t: Throwable) { t.message ?: "验证失败" }
-                            }
-                            busy = false
-                            if (err == null) {
-                                try {
-                                    ctx.getSharedPreferences("yx_mode", 0).edit().putBoolean("card_ok", true).apply()
-                                } catch (t: Throwable) {}
-                                // 保存：App 私有目录（我们自己的，读取不用 root）+ 旧的 sdcard 位置
-                                try {
-                                    java.io.File(ctx.filesDir, "card_key.txt").writeText(key.trim())
-                                } catch (t: Throwable) {}
-                                try {
-                                    val k = key.trim().replace("'", "'\\''")
-                                    com.topjohnwu.superuser.Shell.cmd(
-                                        "mkdir -p /data/user/0/com.tencent.THY/files; echo '" + k + "' > \"/data/user/0/com.tencent.THY/files/小鱼儿密钥\""
-                                    ).exec()
-                                } catch (t: Throwable) {}
-                                me.weishu.kernelsu.ui.screen.CardLoginScreenUnlocked = true
-                                msg = "激活成功"
-                                onDone()
-                            } else {
-                                msg = err
-                            }
-                        }
-                    }
-                    .padding(horizontal = 18.dp, vertical = 9.dp)
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable {
+                        try {
+                            val it2 = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://qm.qq.com/q/bQBm89RVwk"))
+                            it2.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            ctx.startActivity(it2)
+                        } catch (t: Throwable) {}
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Text(text = if (busy) "验证中" else "激活", fontSize = 14.sp, color = Color.White)
+                Text("购买", fontSize = 17.sp, color = Color(0xFF007AFF))
+            }
+            Box(modifier = Modifier.width(0.5.dp).fillMaxHeight().background(Color(0x33000000)))
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(enabled = !busy) { doVerify() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(if (busy) "验证中" else "验证", fontSize = 17.sp, color = Color(0xFF007AFF))
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -7497,10 +7618,11 @@ private fun findAllMatches(text: String, q: String): List<Pair<Int, Int>> {
 internal fun installApkReport(ctx: android.content.Context, path: String, onLine: (String, Boolean) -> Unit, onDone: (Boolean) -> Unit) {
     Thread {
         fun dbg(m: String) {
-            runCatching { java.io.File("/data/local/tmp/xy_install_log.txt").appendText(System.currentTimeMillis().toString() + " " + m + "\n") }
+            runCatching { java.io.File(ctx.cacheDir, "xy_install_log.txt").appendText(System.currentTimeMillis().toString() + " " + m + "\n") }
         }
         try {
         dbg("start path=" + path)
+        onLine("解析安装包 …", true)
         val pm = ctx.packageManager
         // ① 图标 + 名称 + 版本
         var label = path.substringAfterLast('/')
@@ -7578,7 +7700,7 @@ internal fun installApkReport(ctx: android.content.Context, path: String, onLine
             onLine("安装异常: " + (t.message ?: ""), false)
             onDone(false)
         }
-    }
+    }.start()
 }
 
 internal fun loadAppPicker(
@@ -7645,9 +7767,38 @@ internal fun loadAppPicker(
                 java.io.File("/data/local/tmp/xy_su_log.txt").appendText("ERR " + title + " " + t + "\n")
             }
         }
-    }
+    }.start()
 }
 
+
+// 模块云更新（对齐 KSU 官方 checkUpdate）：
+// GET module.prop 里的 updateJson → 解析 version/versionCode/zipUrl/changelog
+// 只要远端 versionCode 更大且 zipUrl 非空，就认为有更新
+internal suspend fun checkModuleUpdateOnce(m: ModItem): ModItem = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    if (m.updateJson.isBlank() || m.disabled) return@withContext m
+    return@withContext runCatching {
+        val url = java.net.URL(m.updateJson)
+        val conn = url.openConnection() as java.net.HttpURLConnection
+        conn.connectTimeout = 6000
+        conn.readTimeout = 6000
+        conn.requestMethod = "GET"
+        conn.setRequestProperty("User-Agent", "KernelSU-Manager")
+        val body = try {
+            if (conn.responseCode in 200..299) conn.inputStream.bufferedReader().readText() else ""
+        } finally {
+            runCatching { conn.disconnect() }
+        }
+        if (body.isBlank()) return@runCatching m
+        val o = org.json.JSONObject(body)
+        val ver = o.optString("version", "").trim()
+        val vc = o.optInt("versionCode", 0)
+        val zip = o.optString("zipUrl", "").trim()
+        val log = o.optString("changelog", "").trim()
+        if (vc > m.versionCode && zip.isNotEmpty()) {
+            m.copy(updateVer = ver, updateZip = zip, updateChangelog = log)
+        } else m
+    }.getOrDefault(m)
+}
 
 // 超级用户列表（和 gameCleanCache 完全同款：顶层函数，点击即加载）
 internal fun loadSuperUserPicker(ctx: android.content.Context) {
