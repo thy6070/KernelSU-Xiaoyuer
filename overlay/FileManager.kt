@@ -528,7 +528,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             termDrawerIcon = ic
             termDrawer = label + "\n"
             val doReset: () -> Unit = {
-                stopWatchPowerKey()
                 resetLineSink = { line -> termDrawer = (termDrawer ?: "") + line + "\n" }
                 uiScope.launch {
                     kotlinx.coroutines.delay(800)
@@ -1289,8 +1288,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 termDrawer = label + "  v" + ver + "  " + pkg + "\n"
                 // 点「确定」/ 双击电源键 → 先弹确认弹窗，确定后才开始
                 val askStart: () -> Unit = {
-                    stopWatchPowerKey()
-                    pickConfirmOk = "确定"
+                        pickConfirmOk = "确定"
                     pickConfirmAccentWord = null
                     pickConfirm = (if (signed) "卸载 " + label + " 签名？" else "签名 " + label + "？") to {
                         doExec()
@@ -2494,13 +2492,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 if (sel != null) {
                                     when (pickTitle) {
                                         "选择机型" -> {
-                                            pickConfirmOk = "确定"
-                                            pickConfirmAccentWord = null
-                                            pickConfirm = "设为 " + stripBrand(sel) to {
-                                            // 改机型：日志抽屉 → 执行 → 结果 → 右上确定弹重启
+                                            // 先展示信息 + 等右上「确定」，再弹确认
                                             val setAct = uiPickerAction
-                                            termDrawerTitle = stripBrand(sel)
-                                            termDrawer = "目标机型：" + stripBrand(sel) + "\n"
+                                            val selKeep = sel
+                                            termDrawerTitle = stripBrand(selKeep)
+                                            termDrawer = "目标机型：" + stripBrand(selKeep) + "\n"
+                                            termDrawerConfirm = {
+                                                termDrawerConfirm = null
+                                                pickConfirmOk = "确定"
+                                                pickConfirmAccentWord = null
+                                                pickConfirm = "设为 " + stripBrand(selKeep) + " ？" to {
                                             uiScope.launch {
                                                 kotlinx.coroutines.delay(1000)   // 先让抽屉展开
                                                 // 先读当前机型（修改前）：逐项详细
@@ -2540,7 +2541,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                     }
                                                 }
                                             }
-                                            }   // pickConfirm to { 结束（机型）
+                                                }
+                                            }
                                         }
                                         // 提取：直接打开应用操作菜单（抽屉保留）
                                         "选择要提取的应用" -> {
@@ -9929,37 +9931,6 @@ internal fun parseLatencyText(out: String): Double? {
         val maxFps = 240.0
         return if (fps > maxFps) maxFps else fps
     }
-
-// 监听双击电源键（root getevent）；触发一次后自动结束
-private var powerWatchProc: Process? = null
-internal fun watchPowerKey(onDoubleTap: () -> Unit) {
-    stopWatchPowerKey()
-    Thread {
-        try {
-            val pr = ProcessBuilder(suBin(), "--mount-master", "-c",
-                "getevent -l /dev/input/event* 2>/dev/null").redirectErrorStream(true).start()
-            powerWatchProc = pr
-            var lastDown = 0L
-            pr.inputStream.bufferedReader().useLines { lines ->
-                lines.forEach { ln ->
-                    if (ln.contains("KEY_POWER") && ln.contains("DOWN")) {
-                        val now = System.currentTimeMillis()
-                        if (lastDown > 0 && now - lastDown < 600L) {
-                            onDoubleTap()
-                            return@forEach
-                        }
-                        lastDown = now
-                    }
-                }
-            }
-        } catch (t: Throwable) {
-        }
-    }.apply { isDaemon = true }.start()
-}
-internal fun stopWatchPowerKey() {
-    try { powerWatchProc?.destroy() } catch (t: Throwable) {}
-    powerWatchProc = null
-}
 
 // 去掉机型名的【品牌】前缀
 fun stripBrand(s: String): String = s.substringAfter("】", s).trim()
