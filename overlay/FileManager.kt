@@ -6130,7 +6130,7 @@ private fun ModeButton(
                             su("for L in /sys/devices/system/cpu/bus_dcvs/L3 /sys/devices/system/cpu/bus_dcvs/DDR; do [ -d \"\$L\" ] && { cat \"\$L/hw_min_freq\" 2>/dev/null > \"\$L/boost_freq\" 2>/dev/null; }; done")
                             // 2. 解除所有 bind 遮罩
                             su("for m in /proc/powerhal_cpu_ctrl/perfserv_freq /proc/powerhal_cpu_ctrl/adpf_enable /proc/perfmgr/perf_ioctl /sys/module/perfmgr/parameters/min_freq_limit_level /sys/module/perfmgr/parameters/max_freq_limit_level /sys/module/perfmgr/parameters/gpu_req_min_freq /proc/thermal_message/temp_state /proc/thermal_message/market_download_limit /proc/thermal_message/cpu_nolimit_temp; do while umount \$m 2>/dev/null; do :; done; done")
-                            su("for m in /system/product/etc/displayconfig/*thermal*.xml /system/vendor/etc/thermal/*thermal*fps*.xml; do [ -e \"\$m\" ] && { while umount \"\$m\" 2>/dev/null; do :; done; }; done; rm -f "${xyFlagRoot}/xy_empty"")
+                            su("for m in /system/product/etc/displayconfig/*thermal*.xml /system/vendor/etc/thermal/*thermal*fps*.xml; do [ -e \"\$m\" ] && { while umount \"\$m\" 2>/dev/null; do :; done; }; done; rm -f " + xyFlagRoot + "/xy_empty")
                             su("rm -rf /dev/xy_ps_bak /dev/xy_pmi_empty /dev/xy_tm_* /dev/scene_fast* /dev/scene_sd_* /dev/scene_* 2>/dev/null")
                             // 3. 恢复 CPU 频率 + governor
                             su("for p in /sys/devices/system/cpu/cpufreq/policy[0-9]*/; do hw=\$(cat \$p/cpuinfo_max_freq 2>/dev/null); mn=\$(cat \$p/cpuinfo_min_freq 2>/dev/null); [ -n \"\$hw\" ] && { chmod 0666 \$p/scaling_max_freq \$p/scaling_min_freq \$p/scaling_governor 2>/dev/null; echo \$hw > \$p/scaling_max_freq 2>/dev/null; [ -n \"\$mn\" ] && echo \$mn > \$p/scaling_min_freq 2>/dev/null; av=\$(cat \$p/scaling_available_governors 2>/dev/null); case \"\$av\" in *sugov_ext*) echo sugov_ext > \$p/scaling_governor 2>/dev/null;; *walt*) echo walt > \$p/scaling_governor 2>/dev/null;; *schedutil*) echo schedutil > \$p/scaling_governor 2>/dev/null;; esac; }; done")
@@ -8541,10 +8541,10 @@ private val perfGameScript = listOf(
     "  done",
     "",
     "  # 3.5 覆盖漏网温控配置（bind 空文件）",
-    "  : > "${xyFlagRoot}/.nc_empty"",
+    "  : > " + xyFlagRoot + "/.nc_empty",
     "  for f in /vendor/etc/thermal/* /vendor/etc/*thermal* /system/etc/*thermal* /vendor/etc/.tp/*; do",
     "    [ -f \"\$f\" ] || continue",
-    "    mount --bind "${xyFlagRoot}/.nc_empty \"\$f\" 2>/dev/null",
+    "    mount --bind " + xyFlagRoot + "/.nc_empty \"\$f\" 2>/dev/null",
     "  done",
     "",
     "  echo \"温控已移除\"",
