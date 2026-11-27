@@ -41,6 +41,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -71,7 +73,6 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -1325,6 +1326,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val act = if (signed) "取消签名" else "签名"
                     termDrawer = (termDrawer ?: "") + "写入 setAppProfile(Profile) " + (if (ok) " .OK" else " .NO") + "\n"
                     termDrawer = (termDrawer ?: "") + act + " " + label + (if (ok) " .OK" else " .NO") + "\n"
+                    // 列表状态就地刷新（不用退出重进抽屉）
+                    if (ok) {
+                        runCatching {
+                            suApps = suApps.map { a ->
+                                if (a.pkg == pkg) a.copy(allowed = !signed) else a
+                            }
+                            uiPickerMarks = suApps.filter { it.allowed }.associate { it.label to "已签名" }
+                        }
+                    }
                     termDrawer = (termDrawer ?: "") + "已完成 " + (if (ok) ".OK" else ".NO") + "\n"
                     termDrawerConfirm = {
                         termDrawerConfirm = null
@@ -2915,9 +2925,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             )
                         }
                         // 每行按索引错开做「淡入 + 上滑」动画（不是延迟内容，是动画错峰）
-                        val lineAlpha = remember(ln) { androidx.compose.animation.core.Animatable(0f) }
-                        val lineShift = remember(ln) { androidx.compose.animation.core.Animatable(10f) }
-                        LaunchedEffect(ln) {
+                        val lineAlpha = remember(i, ln) { androidx.compose.animation.core.Animatable(0f) }
+                        val lineShift = remember(i, ln) { androidx.compose.animation.core.Animatable(10f) }
+                        LaunchedEffect(i, ln) {
                             kotlinx.coroutines.delay((i % 12) * 45L)
                             kotlinx.coroutines.coroutineScope {
                                 launch { lineShift.animateTo(0f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
@@ -6721,12 +6731,14 @@ private fun BrowserPane(
     var multiMode by remember { mutableStateOf(false) }
     var pullDy by remember { mutableStateOf(0f) }
     val refreshRef = androidx.compose.runtime.rememberUpdatedState(onRefresh)
+    var pullRefreshing by remember { mutableStateOf(false) }
     val pullConn = remember {
         object : NestedScrollConnection {
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (available.y > 0f) {
-                    pullDy += available.y
-                    if (pullDy > 150f) {
+                    pullDy = (pullDy + available.y).coerceAtMost(220f)
+                    if (pullDy > 150f && !pullRefreshing) {
+                        pullRefreshing = true
                         pullDy = 0f
                         refreshRef.value()
                     }
@@ -6737,6 +6749,13 @@ private fun BrowserPane(
             }
         }
     }
+    // 刷新完成（列表变化）后收起指示器
+    LaunchedEffect(entries, path) {
+        if (pullRefreshing) {
+            kotlinx.coroutines.delay(500)
+            pullRefreshing = false
+        }
+    }
 
     LaunchedEffect(path, refreshTick) {
         entries = listDir(path)
@@ -6744,6 +6763,15 @@ private fun BrowserPane(
 
     val parent = parentOf(path)
     val listState = rememberLazyListState()
+    // 滚动方向：1 = 手指上滑看下面（新行从下方进）；-1 = 手指下滑看上面（新行从上方进）
+    var enterFromDir by remember { mutableStateOf(1) }
+    LaunchedEffect(listState) {
+        var lastIdx = listState.firstVisibleItemIndex
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { idx ->
+            if (idx > lastIdx) enterFromDir = 1 else if (idx < lastIdx) enterFromDir = -1
+            lastIdx = idx
+        }
+    }
     // 滑动（滚动）该区域 → 激活该区域
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
@@ -6780,9 +6808,56 @@ private fun BrowserPane(
         }
     }
 
+        // 目录切换转场：进下一层从右侧滑入，返回从左侧滑入（iOS Files 手感）
+        androidx.compose.animation.AnimatedContent(
+            targetState = path,
+            transitionSpec = {
+                val forward = targetState.startsWith(source) || targetState.length >= source.length
+                val dir = if (forward) 1 else -1
+                (androidx.compose.animation.slideInHorizontally(
+                    animationSpec = tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                ) { w -> dir * w / 4 } +
+                    androidx.compose.animation.scaleIn(
+                        animationSpec = tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        initialScale = 0.98f
+                    ) +
+                    fadeIn(tween(160))) togetherWith
+                    (androidx.compose.animation.slideOutHorizontally(
+                        animationSpec = tween(200, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                    ) { w -> -dir * w / 6 } +
+                        fadeOut(tween(120)))
+            },
+            label = "dirTransition"
+        ) { _ ->
+        Box(modifier = modifier.fillMaxSize()) {
+        // 下拉/刷新指示器：跟手下拉时旋转放大，刷新中转圈
+        val pullProgress = (pullDy / 150f).coerceIn(0f, 1f)
+        if (pullProgress > 0.02f || pullRefreshing) {
+            val spin = rememberInfiniteTransition(label = "pullspin")
+            val angle by spin.animateFloat(
+                initialValue = 0f, targetValue = 360f,
+                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                    tween(700, easing = androidx.compose.animation.core.LinearEasing)
+                ), label = "angle"
+            )
+            androidx.compose.material3.CircularProgressIndicator(
+                color = Color(0xFF007AFF),
+                strokeWidth = 2.dp,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp + (pullProgress * 10).dp)
+                    .size(18.dp)
+                    .graphicsLayer {
+                        alpha = if (pullRefreshing) 1f else pullProgress
+                        rotationZ = if (pullRefreshing) angle else pullProgress * 270f
+                        scaleX = 0.6f + pullProgress * 0.4f
+                        scaleY = 0.6f + pullProgress * 0.4f
+                    }
+            )
+        }
         LazyColumn(
             state = listState,
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .nestedScroll(pullConn)
                 .padding(horizontal = 12.dp),
@@ -6831,6 +6906,9 @@ private fun BrowserPane(
         itemsIndexed(entries, key = { _, e -> joinPath(path, e.name) }) { idx, entry ->
             val rowPath = joinPath(path, entry.name)
             FsRow(
+                index = idx,
+                animateIn = true,
+                enterFrom = enterFromDir,
                 name = entry.name,
                 isDir = entry.isDir,
                 fullPath = rowPath,
@@ -6856,6 +6934,8 @@ private fun BrowserPane(
                 }
             )
         }
+        }   // Box（下拉指示器容器）结束
+        }   // AnimatedContent 结束
     }
 }
 
@@ -7055,6 +7135,9 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
 
 @Composable
 private fun FsRow(
+    index: Int = -1,
+    animateIn: Boolean = false,
+    enterFrom: Int = 1,
     name: String,
     isDir: Boolean,
     fullPath: String,
@@ -7073,6 +7156,23 @@ private fun FsRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
+
+    // 交错进入动画（仅前 8 行，避免长列表全部播）
+    val needAnim = animateIn
+    val rowAlpha = remember { androidx.compose.animation.core.Animatable(if (needAnim) 0f else 1f) }
+    // 滚动方向：+1 向下翻（新行从下方进入）/ -1 向上翻（新行从上方进入）
+    val rowShift = remember { androidx.compose.animation.core.Animatable(if (needAnim) (if (enterFrom > 0) 6f else -6f) else 0f) }
+    LaunchedEffect(fullPath) {
+        if (needAnim) {
+            kotlinx.coroutines.delay(if (index in 0..7) index.coerceAtLeast(0) * 15L else 0L)
+            kotlinx.coroutines.coroutineScope {
+                launch {
+                    rowShift.animateTo(0f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                }
+                rowAlpha.animateTo(1f, tween(160, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
+            }
+        }
+    }
     // iOS Inset Grouped：整体卡片 + 行间 0.5dp 分隔线
     Column {
         Row(
@@ -7087,6 +7187,13 @@ private fun FsRow(
                     val sc = if (isPressed) 1.06f else 1f
                     scaleX = sc
                     scaleY = sc
+                }
+                .graphicsLayer {
+                    // 交错进入：前 8 行依次淡入 + 从下方 8dp 滑入
+                    if (animateIn) {
+                        alpha = rowAlpha.value
+                        translationY = rowShift.value
+                    }
                 }
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 // 定位/选中高亮：直角、铺满整行宽度（不做圆角）
@@ -7275,18 +7382,26 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
 
     val apkIconNow = apkIcon
     val mediaThumbNow = mediaThumb
+    // 异步加载出来的图标/缩略图淡入（避免先占位再"跳"出图标）
+    val iconAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(mediaThumbNow, apkIconNow) {
+        if (mediaThumbNow != null || apkIconNow != null) {
+            iconAlpha.animateTo(1f, tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+        }
+    }
     if (mediaThumbNow != null) {
         Image(
             bitmap = mediaThumbNow,
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = Modifier.size(31.dp).clip(SmoothCornerShape(7.dp))
+                .graphicsLayer { alpha = iconAlpha.value }
         )
     } else if (apkIconNow != null) {
         Image(
             bitmap = apkIconNow,
             contentDescription = null,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(20.dp).graphicsLayer { alpha = iconAlpha.value }
         )
     } else if (isDir) {
         // /data/user/0/<pkg>、/data/data/<pkg>、Android/data/<pkg> → 显示该应用图标
