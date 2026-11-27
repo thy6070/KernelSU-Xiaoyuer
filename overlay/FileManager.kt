@@ -1944,8 +1944,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                 }
             }
-                }   // doMountModule 结束
-                // 模块安装：进入等待界面后自动开始（不用点抽屉「确定」）
+                // 模块安装：进入等待界面后自动弹「安装此模块 ？」
                 val askMountModule: () -> Unit = {
                     pickConfirmOk = "安装"
                     pickConfirmAccentWord = null
@@ -1959,6 +1958,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     pickCancelClosesDrawer = true
                     runCatching { askMountModule() }
                 }, 700)
+                }   // doMountModule + 自动确认 结束
         },
     )
     }
