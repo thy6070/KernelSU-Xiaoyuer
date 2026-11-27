@@ -2189,7 +2189,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0x66000000)),
+                    .background(Color(0x66000000))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { appMenuPkg = null },
                 contentAlignment = Alignment.Center
             ) {
             Column(
@@ -3531,11 +3535,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0x66000000))
-                    .clickable(
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                        indication = null
-                    ) { pickConfirm = null },
+                    .background(Color(0x66000000)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
