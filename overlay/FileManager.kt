@@ -166,6 +166,7 @@ import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -4888,7 +4889,7 @@ private fun ProMaxIsland(
                                                             contentAlignment = Alignment.Center
                                                         ) {
                                                             Icon(
-                                                                imageVector = Icons.Rounded.Sync,
+                                                                imageVector = Icons.Filled.Refresh,
                                                                 contentDescription = "可更新 v${m.updateVer}",
                                                                 tint = Color.White,
                                                                 modifier = Modifier.size(18.dp)
