@@ -586,25 +586,63 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
 
     // 重置（游戏清理）：先进抽屉展示，点右上确定/电源键开始
     fun runResetFor(label: String) {
-        val appSel = uiPickerAction
+        // 关键：先切到「游戏清理」的列表与动作
+        // 否则 uiPickerAction 仍是超级用户的（点一下会弹应用菜单，重置完就出现那个菜单）
+        gameCleanCache(appCtx)
         termDrawerTitle = label
         uiScope.launch {
-            val ic = withContext(Dispatchers.IO) {
+            // 等「游戏清理」应用列表与 action 真正就绪（最多 6s）
+            var tries = 0
+            while ((uiPicker?.isEmpty() != false) && tries < 30) {
+                kotlinx.coroutines.delay(200)
+                tries++
+            }
+            kotlinx.coroutines.delay(300)
+            // label 是应用名不是包名 → 先从应用列表里查包名
+            val pkgOf = runCatching {
+                suAppsGlobal.firstOrNull { it.label == label }?.pkg
+            }.getOrNull() ?: runCatching {
+                uiPicker?.indexOf(label)?.let { idx ->
+                    if (idx >= 0) suAppsGlobal.getOrNull(idx)?.pkg else null
+                }
+            }.getOrNull() ?: ""
+            val info = withContext(Dispatchers.IO) {
                 runCatching {
-                    val d = appCtx.packageManager.getApplicationIcon(label)
+                    val pm = appCtx.packageManager
+                    val ver = if (pkgOf.isNotEmpty()) pm.getPackageInfo(pkgOf, 0).versionName ?: "" else ""
+                    val d = pm.getApplicationIcon(pkgOf)
                     val w = d.intrinsicWidth.coerceAtLeast(48); val h = d.intrinsicHeight.coerceAtLeast(48)
                     val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
                     val cv = android.graphics.Canvas(b); d.setBounds(0, 0, w, h); d.draw(cv)
-                    b.asImageBitmap()
+                    b.asImageBitmap() to ver
                 }.getOrNull()
             }
-            termDrawerIcon = ic
-            termDrawer = label + "\n"
+            termDrawerIcon = info?.first
+            val verText = info?.second ?: ""
+            termDrawer = "应用：" + label + (if (verText.isNotEmpty()) "  v" + verText else "") +
+                (if (pkgOf.isNotEmpty()) "  " + pkgOf else "") + "\n"
             val doReset: () -> Unit = {
                 resetLineSink = { line -> termDrawer = (termDrawer ?: "") + line + "\n" }
                 uiScope.launch {
-                    kotlinx.coroutines.delay(800)
+                    kotlinx.coroutines.delay(500)
+                    // 启动清理（异步输出通过 resetLineSink 进抽屉）
                     withContext(Dispatchers.IO) { runCatching { uiPickerAction?.invoke(label) } }
+                    // 等输出稳定：连续 1.2s 没有新行才算结束（清理一般 2-5s）
+                    var lastLen = -1
+                    var stableTicks = 0
+                    var waited = 0
+                    while (waited < 15000) {
+                        kotlinx.coroutines.delay(200)
+                        waited += 200
+                        val curLen = (termDrawer ?: "").length
+                        if (curLen == lastLen) {
+                            stableTicks += 1
+                            if (stableTicks >= 6) break      // 1.2s 没变化 → 结束
+                        } else {
+                            stableTicks = 0
+                            lastLen = curLen
+                        }
+                    }
                     resetLineSink = null
                     termDrawer = (termDrawer ?: "") + "重置 " + label + " .OK\n已完成 .OK\n"
                     termDrawerConfirm = {
@@ -895,6 +933,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             appCtx.packageManager.getPackageArchiveInfo(p, 0)?.packageName ?: ""
                                         }.getOrDefault("")
                                         android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                            // 关抽屉，否则结果弹窗被抽屉盖住
+                                            termDrawer = null
                                             if (doneOk) {
                                                 pickConfirmOk = "打开"
                                                 pickConfirmAccentWord = "完成"
@@ -1416,8 +1456,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         }
                     }
                     termDrawer = (termDrawer ?: "") + "已完成 " + (if (ok) ".OK" else ".NO") + "\n"
-                    termDrawerConfirm = {
-                        termDrawerConfirm = null
+                    // 签名/取消签名完成 → 自动弹结果窗（不用再点抽屉「确定」）
+                    val showResult: () -> Unit = {
                         if (ok) {
                             pickConfirmOk = "打开"
                             pickConfirmAccentWord = "完成"
@@ -1437,6 +1477,17 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             }
                         }
                     }
+                    termDrawerConfirm = {
+                        termDrawerConfirm = null
+                        showResult()
+                    }
+                    // 自动弹出：日志写完 0.8s 后收起抽屉并弹结果
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        runCatching {
+                            termDrawer = null
+                            showResult()
+                        }
+                    }, 800)
                 }
             }
             uiScope.launch {
@@ -1717,9 +1768,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             withContext(Dispatchers.Main) {
                                 termDrawer = ((termDrawer ?: "") + "已结束 .OK\n")
                                 termDrawer = ((termDrawer ?: "") + "已完成 .OK\n")
-                                // 模块安装完成 → 右上确定弹「重启完全生效」
-                                termDrawerConfirm = {
-                                    termDrawerConfirm = null
+                                // 模块安装完成 → 自动弹「重启完全生效」
+                                val askRebootMod: () -> Unit = {
                                     pickConfirmOk = "重启"
                                     pickConfirmAccentWord = "重启"
                                     pickConfirmAccentColor = 0xFF007AFF
@@ -1731,6 +1781,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                         }
                                     }
                                 }
+                                termDrawerConfirm = {
+                                    termDrawerConfirm = null
+                                    askRebootMod()
+                                }
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    runCatching {
+                                        termDrawer = null
+                                        askRebootMod()
+                                    }
+                                }, 800)
                             }
                         }
                     } catch (t: Throwable) {
@@ -2767,8 +2827,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                 termDrawer = (termDrawer ?: "") + "写入 /data/adb/post-fs-data.d/xy_spoof.sh .OK\n"
                                                 termDrawer = (termDrawer ?: "") + "设置机型 " + stripBrand(sel) + " .OK\n"
                                                 termDrawer = (termDrawer ?: "") + "已完成 .OK\n"
-                                                termDrawerConfirm = {
-                                                    termDrawerConfirm = null
+                                                val askReboot: () -> Unit = {
                                                     pickConfirmOk = "重启"
                                                     pickConfirmAccentWord = "重启"
                                                     pickConfirmAccentColor = 0xFF007AFF
@@ -2780,6 +2839,17 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                         }
                                                     }
                                                 }
+                                                termDrawerConfirm = {
+                                                    termDrawerConfirm = null
+                                                    askReboot()
+                                                }
+                                                // 改机型完成 → 自动收起抽屉并弹「重启完全生效」
+                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                                    runCatching {
+                                                        termDrawer = null
+                                                        askReboot()
+                                                    }
+                                                }, 800)
                                             }
                                                 }
                                             }
@@ -6839,12 +6909,16 @@ private fun BrowserPane(
     var pullDy by remember { mutableStateOf(0f) }
     val refreshRef = androidx.compose.runtime.rememberUpdatedState(onRefresh)
     var pullRefreshing by remember { mutableStateOf(false) }
+    var lastPullRefreshAt by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     val pullConn = remember {
         object : NestedScrollConnection {
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (available.y > 0f) {
                     pullDy = (pullDy + available.y).coerceAtMost(220f)
-                    if (pullDy > 150f && !pullRefreshing) {
+                    val now = System.currentTimeMillis()
+                    // 冷却 1.5s：避免刷新后列表重建又被判定为"下拉"→ 无限刷新
+                    if (pullDy > 150f && !pullRefreshing && now - lastPullRefreshAt > 1500L) {
+                        lastPullRefreshAt = now
                         pullRefreshing = true
                         pullDy = 0f
                         refreshRef.value()
@@ -6859,7 +6933,7 @@ private fun BrowserPane(
     // 刷新完成（列表变化）后收起指示器
     LaunchedEffect(entries, path) {
         if (pullRefreshing) {
-            kotlinx.coroutines.delay(500)
+            kotlinx.coroutines.delay(900)
             pullRefreshing = false
         }
     }
@@ -6952,8 +7026,13 @@ private fun BrowserPane(
                 color = Color(0xFF007AFF),
                 strokeWidth = 2.dp,
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 8.dp + (pullProgress * 10).dp)
+                    // 左栏靠左、右栏靠右（跟随该区域的方向）
+                    .align(if (pathAlignRight) Alignment.TopEnd else Alignment.TopStart)
+                    .padding(
+                        top = 8.dp + (pullProgress * 10).dp,
+                        start = if (pathAlignRight) 0.dp else 16.dp,
+                        end = if (pathAlignRight) 16.dp else 0.dp
+                    )
                     .size(18.dp)
                     .graphicsLayer {
                         alpha = if (pullRefreshing) 1f else pullProgress
