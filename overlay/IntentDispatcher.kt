@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.core.net.toUri
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.data.repository.SettingsRepositoryImpl
@@ -103,32 +104,40 @@ private fun buildInternalWebUiUri(moduleId: String): Uri {
 private fun resolveRealPath(context: android.content.Context, uri: Uri): String? {
     if (uri.scheme == "file") return uri.path
     // ExternalStorageProvider：content://com.android.externalstorage.documents/document/primary%3ADownload%2Fx.apk
-    runCatching {
-        if (uri.authority?.contains("externalstorage") == true) {
+    if (uri.authority?.contains("externalstorage") == true) {
+        val path = try {
             val docId = android.provider.DocumentsContract.getDocumentId(uri)
             val parts = docId.split(":", limit = 2)
             if (parts.size == 2) {
                 val base = if (parts[0].equals("primary", true)) "/storage/emulated/0" else "/storage/" + parts[0]
-                return base + "/" + parts[1]
-            }
+                base + "/" + parts[1]
+            } else null
+        } catch (t: Throwable) {
+            null
         }
+        if (path != null) return path
     }
     // MediaStore：查 _data
-    runCatching {
+    val mediaPath = try {
+        var p: String? = null
         val proj = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
         context.contentResolver.query(uri, proj, null, null, null)?.use { c ->
-            if (c.moveToFirst()) {
-                val p = c.getString(0)
-                if (!p.isNullOrBlank()) return p
-            }
+            if (c.moveToFirst()) p = c.getString(0)
         }
+        p
+    } catch (t: Throwable) {
+        null
     }
+    if (!mediaPath.isNullOrBlank()) return mediaPath
     // DownloadsProvider
-    runCatching {
-        if (uri.authority == "com.android.providers.downloads.documents") {
+    if (uri.authority == "com.android.providers.downloads.documents") {
+        val dlPath = try {
             val id = android.provider.DocumentsContract.getDocumentId(uri)
-            return "/storage/emulated/0/Download/" + (id.substringAfterLast("/"))
+            "/storage/emulated/0/Download/" + id.substringAfterLast("/")
+        } catch (t: Throwable) {
+            null
         }
+        if (dlPath != null) return dlPath
     }
     return null
 }
