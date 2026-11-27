@@ -744,15 +744,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onFileClick = { picked ->
                     longPressFromRight = false
                     if (longPressPath != null) longPressPath = null
-                    if (selectedFile != null && selectedFile != picked) {
-                        selectedFile = null
-                        uiScope.launch {
-                            kotlinx.coroutines.delay(280)
-                            selectedFile = picked
-                        }
-                    } else {
-                        selectedFile = picked
-                    }
+                    // 立即生效：之前有 280ms 空窗，点了新文件马上点安装会用到旧路径（装错包）
+                    selectedFile = picked
                 },
                 refreshTick = refreshTick,
                 onRefresh = { refreshTick += 1 },
@@ -816,15 +809,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onFileClick = { picked ->
                     longPressFromRight = true
                     if (longPressPath != null) longPressPath = null
-                    if (selectedFile != null && selectedFile != picked) {
-                        selectedFile = null
-                        uiScope.launch {
-                            kotlinx.coroutines.delay(280)
-                            selectedFile = picked
-                        }
-                    } else {
-                        selectedFile = picked
-                    }
+                    // 立即生效：之前有 280ms 空窗，点了新文件马上点安装会用到旧路径（装错包）
+                    selectedFile = picked
                 },
                 refreshTick = refreshTick,
                 onRefresh = { refreshTick += 1 },
@@ -1592,7 +1578,8 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 }.getOrDefault(false)) p0 else null
             if (p != null) {
                 // .zip：MT 式虚拟浏览（不解压，只登记条目，点文件才解压那一个）
-                if (p.lowercase().endsWith(".zip")) {
+                val isZipView = p.lowercase().endsWith(".zip")
+                if (isZipView) {
                     uiScope.launch {
                         val list = withContext(Dispatchers.IO) {
                             runCatching {
@@ -1613,8 +1600,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             android.widget.Toast.makeText(appCtx, "无法读取压缩包目录（可能已加密或损坏）", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     }
-                    return@onArchiveEnter
-                }
+                } else {
                 uiScope.launch {
                     running = true
                     showTerminal = true
@@ -1653,6 +1639,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         runMessage = "解压失败或无内容"
                     }
                     refreshTick += 1
+                }
                 }
             }
         },
@@ -7630,6 +7617,37 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
             tint = tintColor
         )
     }
+}
+
+// /data/app 下的目录（~~xxx== 容器 或 pkg-hash）→ 用 sourceDir 前缀匹配已安装应用，拿图标
+private fun loadPkgIconByPath(ctx: Context, dirPath: String): ImageBitmap? {
+    pkgIconCache[dirPath]?.let { return it }
+    return runCatching {
+        val pm = ctx.packageManager
+        var hit: android.graphics.drawable.Drawable? = null
+        for (a in pm.getInstalledApplications(0)) {
+            val sd = a.sourceDir ?: continue
+            if (sd.startsWith(dirPath.trimEnd('/') + "/")) {
+                hit = pm.getApplicationIcon(a)
+                break
+            }
+        }
+        if (hit == null) {
+            val seg = dirPath.trimEnd('/').substringAfterLast('/')
+            if (!seg.startsWith("~~")) {
+                val pkg = seg.substringBeforeLast("-").ifBlank { seg }
+                hit = runCatching { pm.getApplicationIcon(pkg) }.getOrNull()
+            }
+        }
+        val d = hit ?: return null
+        val w = d.intrinsicWidth.coerceAtLeast(48)
+        val h = d.intrinsicHeight.coerceAtLeast(48)
+        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val cv = android.graphics.Canvas(bmp)
+        d.setBounds(0, 0, w, h)
+        d.draw(cv)
+        bmp.asImageBitmap().also { pkgIconCache[dirPath] = it }
+    }.getOrNull()
 }
 
 private fun loadPkgIcon(ctx: Context, pkg: String): ImageBitmap? {
