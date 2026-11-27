@@ -5152,7 +5152,7 @@ private fun ProMaxIsland(
                                                 Color(0xFF0A84FF)
                                             ) {
                                                 when {
-                                                    isApkFile -> onFileOp("install", "")
+                                                    isApkFile -> onAction("")   // 走 doActionFile：抽屉终端 + 确认弹窗
                                                     isArchive -> onArchiveEnter()
                                                     isExec -> onFileOp("edit", "")
                                                     else -> onAction("")
@@ -7157,19 +7157,22 @@ private fun FsRow(
 ) {
 
     // 交错进入动画（仅前 8 行，避免长列表全部播）
-    val needAnim = animateIn
-    val rowAlpha = remember { androidx.compose.animation.core.Animatable(if (needAnim) 0f else 1f) }
-    // 滚动方向：+1 向下翻（新行从下方进入）/ -1 向上翻（新行从上方进入）
-    val rowShift = remember { androidx.compose.animation.core.Animatable(if (needAnim) (if (enterFrom > 0) 6f else -6f) else 0f) }
+    // 用 animateFloatAsState：即使动画被打断也一定会落到 1f/0f，不会卡在透明
+    var rowVisible by remember { mutableStateOf(!animateIn) }
+    val rowAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (rowVisible) 1f else 0f,
+        animationSpec = tween(160, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
+        label = "rowAlpha"
+    )
+    val rowShift by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (rowVisible) 0f else (if (enterFrom > 0) 6f else -6f),
+        animationSpec = tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "rowShift"
+    )
     LaunchedEffect(fullPath) {
-        if (needAnim) {
+        if (animateIn && !rowVisible) {
             kotlinx.coroutines.delay(if (index in 0..7) index.coerceAtLeast(0) * 15L else 0L)
-            kotlinx.coroutines.coroutineScope {
-                launch {
-                    rowShift.animateTo(0f, tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing))
-                }
-                rowAlpha.animateTo(1f, tween(160, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
-            }
+            rowVisible = true
         }
     }
     // iOS Inset Grouped：整体卡片 + 行间 0.5dp 分隔线
@@ -7190,8 +7193,8 @@ private fun FsRow(
                 .graphicsLayer {
                     // 交错进入：前 8 行依次淡入 + 从下方 8dp 滑入
                     if (animateIn) {
-                        alpha = rowAlpha.value
-                        translationY = rowShift.value
+                        alpha = rowAlpha
+                        translationY = rowShift
                     }
                 }
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
