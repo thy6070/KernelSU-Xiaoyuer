@@ -278,7 +278,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             val inter = android.graphics.Typeface.Builder(ctx.assets, "fonts/Inter-Regular.ttf").build()
             val interSemi = android.graphics.Typeface.Builder(ctx.assets, "fonts/Inter-SemiBold.ttf").build()
             val noto = android.graphics.Typeface.Builder(ctx.assets, "fonts/NotoSansSC-Regular.otf").build()
-            val notoSemi = android.graphics.Typeface.Builder(ctx.assets, "fonts/NotoSansSC-SemiBold.otf").build()
+            val notoSemi = android.graphics.Typeface.Builder(ctx.assets, "fonts/NotoSansSC-Medium.otf").build()
             val family = if (android.os.Build.VERSION.SDK_INT >= 29) {
                 val r = android.graphics.Typeface.CustomFallbackBuilder(inter)
                     .addCustomFallback(noto).build()
