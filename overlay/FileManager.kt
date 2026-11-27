@@ -278,6 +278,30 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         java.io.File(xyArchRoot).mkdirs()
     }
     // 字体：全局 MiSans（res/font，见文件末尾 AppFontFamily），不再有运行时切换/兜底
+    // 首次启动：检查「所有文件访问」权限（和 MT 一样能直接定位原文件）
+    LaunchedEffect(Unit) {
+        runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                if (!android.os.Environment.isExternalStorageManager()) {
+                    val sp = appCtx.getSharedPreferences("settings", 0)
+                    if (!sp.getBoolean("asked_all_files", false)) {
+                        sp.edit().putBoolean("asked_all_files", true).apply()
+                        android.widget.Toast.makeText(
+                            appCtx,
+                            "建议开启「所有文件访问」：否则从其他应用打开的文件只能复制副本",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                        val it2 = android.content.Intent(
+                            android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            android.net.Uri.parse("package:" + appCtx.packageName)
+                        )
+                        it2.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        appCtx.startActivity(it2)
+                    }
+                }
+            }
+        }
+    }
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
     var showCardSheet by remember { mutableStateOf(false) }
     // 启动清理：撤销回收站里超过 1 天的备份（避免占用空间）
@@ -7751,11 +7775,32 @@ internal fun changeDeviceModel(ctx: android.content.Context) {
                 "ROG" -> "ASUS" to "ASUS"
                 else -> brand to brand
             }
-            // 只写 post-fs-data.d 脚本（3 行白名单属性），重启后由 init 执行；不生成模块
+            // 设备指纹一致性：model/brand/manufacturer/device/name/fingerprint 必须同源，
+            // 否则「品牌小米 + 指纹一加」是最典型的黑设备特征
+            val fpDevice = realModel.lowercase().replace(" ", "_")
+            val fpName = fpDevice
+            val fpVer = runCatching {
+                com.topjohnwu.superuser.Shell.cmd("getprop ro.build.version.release").exec().out.joinToString("").trim()
+            }.getOrDefault("").ifBlank { "14" }
+            val fpId = runCatching {
+                com.topjohnwu.superuser.Shell.cmd("getprop ro.build.id").exec().out.joinToString("").trim()
+            }.getOrDefault("").ifBlank { "AP2A.240905.003" }
+            val fpInc = runCatching {
+                com.topjohnwu.superuser.Shell.cmd("getprop ro.build.version.incremental").exec().out.joinToString("").trim()
+            }.getOrDefault("").ifBlank { "12345678" }
+            val fingerprint = spoofBrand + "/" + fpName + "/" + fpDevice + ":" + fpVer + "/" + fpId + "/" + fpInc + ":user/release-keys"
+            // 只写 post-fs-data.d 脚本（白名单属性 + 指纹一致性），重启后由 init 执行；不生成模块
             val script = "#!/system/bin/sh\n" +
                     "resetprop ro.product.brand " + spoofBrand + "\n" +
                     "resetprop ro.product.manufacturer " + spoofMfr + "\n" +
-                    "resetprop ro.product.model " + realModel + "\n"
+                    "resetprop ro.product.model " + realModel + "\n" +
+                    "resetprop ro.product.device " + fpDevice + "\n" +
+                    "resetprop ro.product.name " + fpName + "\n" +
+                    "resetprop ro.build.fingerprint " + fingerprint + "\n" +
+                    "resetprop ro.bootimage.build.fingerprint " + fingerprint + "\n" +
+                    "resetprop ro.vendor.build.fingerprint " + fingerprint + "\n" +
+                    "resetprop ro.system.build.fingerprint " + fingerprint + "\n" +
+                    "resetprop ro.product.build.fingerprint " + fingerprint + "\n"
             val cmd = "mkdir -p /data/adb/post-fs-data.d; " +
                     "printf '%s\\n' " + shq(script) + " > /data/adb/post-fs-data.d/xy_spoof.sh; " +
                     "chmod 755 /data/adb/post-fs-data.d/xy_spoof.sh; " +
@@ -8189,6 +8234,31 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                     for (i in 0 until n) sb.append("0123456789abcdef"[rnd.nextInt(16)])
                     return sb.toString()
                 }
+                // UUID 格式（OAID/VAID/AAID 都是 UUIDv4 风格，纯 hex 会被判定格式非法）
+                fun uuid(): String {
+                    val h = hex(32).toCharArray()
+                    h[12] = '4'                                     // version 4
+                    h[16] = "89ab"[rnd.nextInt(4)]                  // variant
+                    val t = String(h)
+                    return t.substring(0, 8) + "-" + t.substring(8, 12) + "-" +
+                        t.substring(12, 16) + "-" + t.substring(16, 20) + "-" + t.substring(20, 32)
+                }
+                // 合法 IMEI：14 位 + Luhn 校验位（随机 15 位会被判定伪造）
+                fun imei(): String {
+                    val base = "86916" + (0 until 9).map { rnd.nextInt(10) }.joinToString("")
+                    var sum = 0
+                    for (i in base.indices.reversed()) {
+                        var d = base[i] - '0'
+                        // 从右往左第 2 位开始 ×2
+                        if ((base.length - 1 - i) % 2 == 1) {
+                            d *= 2
+                            if (d > 9) d -= 9
+                        }
+                        sum += d
+                    }
+                    val check = (10 - sum % 10) % 10
+                    return base + check
+                }
                 val androidId = hex(16)
                 val hostname = "android-" + hex(8)
                 val serial = "SN" + hex(12).uppercase()
@@ -8229,6 +8299,10 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("OID=\$(settings get secure android_id 2>/dev/null); ")
                 sb.append("OHOST=\$(getprop net.hostname 2>/dev/null); ")
                 sb.append("OSN=\$(getprop ro.serialno 2>/dev/null); ")
+                sb.append("OIMEI=\$(settings get secure imei 2>/dev/null); ")
+                sb.append("OOAID=\$(settings get secure oaid 2>/dev/null); ")
+                sb.append("OVAID=\$(settings get secure vaid 2>/dev/null); ")
+                sb.append("OAAID=\$(settings get secure aaid 2>/dev/null); ")
                 sb.append("echo \"ORIG|\$OID|\$OHOST|\$OSN\" > ${xyFlagRoot}/xy_orig_ids.txt; ")
                 sb.append("chmod 644 ${xyFlagRoot}/xy_orig_ids.txt; ")
                 sb.append("echo \"原始 android_id=\$OID\"; echo \"原始 net.hostname=\$OHOST\"; echo \"原始 ro.serialno=\$OSN\"; ")
@@ -8243,26 +8317,45 @@ internal fun gameCleanCache(ctx: android.content.Context) {
                 sb.append("resetprop ro.boot.serialno '").append(serial).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.boot.bootserialno '").append(serial).append("' 2>/dev/null; ")
                 sb.append("resetprop ro.build.id '").append(hex(12).uppercase()).append("' 2>/dev/null; ")
-                sb.append("resetprop ro.vaid '").append(hex(16)).append("' 2>/dev/null; ")
-                sb.append("resetprop ro.aaid '").append(hex(16)).append("' 2>/dev/null; ")
-                sb.append("settings put secure oaid '").append(hex(24)).append("' 2>/dev/null; ")
+                sb.append("VAIDN=\$(printf '%s' '").append(uuid()).append("'); resetprop ro.vaid \"\$VAIDN\" 2>/dev/null && echo \"修改 ro.vaid：\$OVAID → \$VAIDN .OK\"; ")
+                sb.append("AAIDN=\$(printf '%s' '").append(uuid()).append("'); resetprop ro.aaid \"\$AAIDN\" 2>/dev/null && echo \"修改 ro.aaid：\$OAAID → \$AAIDN .OK\"; ")
+                sb.append("OAIDN=\$(printf '%s' '").append(uuid()).append("'); settings put secure oaid \"\$OAIDN\" 2>/dev/null && echo \"修改 oaid：\$OOAID → \$OAIDN .OK\"; ")
                 // DRM ID（Widevine device id）——删掉让系统重建（drmidswap 同款）
                 sb.append("rm -f /data/vendor/mediadrm/*.id /data/vendor/mediadrm/*.key 2>/dev/null; ")
+                // CPU 序列号：/proc/cpuinfo 可 bind mount 伪造（实测有效），没有 Serial 行就跳过
+                val cpuSerial = hex(16)
+                sb.append("if grep -q '^Serial' /proc/cpuinfo 2>/dev/null; then ")
+                sb.append("OSER=\$(grep '^Serial' /proc/cpuinfo 2>/dev/null | awk -F': ' '{print \$2}' | tr -d ' \t'); ")
+                sb.append("cp /proc/cpuinfo ").append(xyFlagRoot).append("/fake_cpuinfo 2>/dev/null; ")
+                sb.append("sed -i 's/^Serial.*/Serial\t\t: ").append(cpuSerial).append("/' ").append(xyFlagRoot).append("/fake_cpuinfo 2>/dev/null; ")
+                sb.append("chmod 644 ").append(xyFlagRoot).append("/fake_cpuinfo 2>/dev/null; ")
+                sb.append("mount --bind ").append(xyFlagRoot).append("/fake_cpuinfo /proc/cpuinfo 2>/dev/null ")
+                sb.append("&& echo \"伪造 /proc/cpuinfo Serial：\$OSER → ").append(cpuSerial).append(" .OK\" ")
+                sb.append("|| echo \"伪造 /proc/cpuinfo Serial .NO\"; fi; ")
                 // 防设备标记：清 ano_tmp（游戏设备标记缓存）+ 锁定 persist 权限（000）
                 sb.append("for u in 0 10 11 999; do rm -rf /data/user/\$u/").append(pkg).append("/files/ano_tmp 2>/dev/null; done; ")
                 sb.append("chmod -R 000 /mnt/vendor/persist/data 2>/dev/null; ")
                 // MAC / 蓝牙 / GSF 等更多标识（全随机）
-                sb.append("settings put global wifi_mac ").append(hex(12)).append(" 2>/dev/null; ")
+                val macNew = hex(12)
+                sb.append("settings put global wifi_mac ").append(macNew).append(" 2>/dev/null; ")
+                // 真实网卡 MAC（游戏读 /sys/class/net/wlan0/address）
+                sb.append("for i in wlan0 wlan1; do ")
+                sb.append("if [ -e \"/sys/class/net/\$i/address\" ]; then ")
+                sb.append("ip link set \$i down 2>/dev/null; ")
+                sb.append("OMAC=\$(cat \"/sys/class/net/\$i/address\" 2>/dev/null); ")
+                sb.append("ip link set \$i address ").append(macNew).append(" 2>/dev/null; ")
+                sb.append("ip link set \$i up 2>/dev/null; ")
+                sb.append("echo \"修改 \$i MAC：\$OMAC → ").append(macNew).append(" .OK\"; fi; done; ")
                 sb.append("settings put global ble_mac ").append(hex(12)).append(" 2>/dev/null; ")
                 sb.append("settings put secure android_id_g ").append(hex(16)).append(" 2>/dev/null; ")
                 sb.append("resetprop ro.com.google.clientidbase 'android-").append(hex(8)).append("' 2>/dev/null; ")
-                val imeiNew = hex(15)
-                sb.append("settings put secure imei '").append(imeiNew).append("' 2>/dev/null && echo \"修改 imei → ").append(imeiNew).append(" .OK\" || echo \"修改 imei .NO\"; ")
+                val imeiNew = imei()
+                sb.append("settings put secure imei '").append(imeiNew).append("' 2>/dev/null && echo \"修改 imei：\$OIMEI → ").append(imeiNew).append(" .OK\" || echo \"修改 imei .NO\"; ")
                 // IMEI 用 resetprop（更彻底，模块同款）
                 sb.append("for i in \$(getprop | grep imei | awk -F '[][]' '{print \$2}'); do imei=\$(getprop \$i); ")
-                sb.append("[ \${#imei} -lt 15 ] && continue; resetprop \$i 86916\$(tr -dc '1-9' < /dev/urandom | head -c 10); done; ")
-                sb.append("settings put secure vaid '").append(hex(24)).append("' 2>/dev/null; ")
-                sb.append("settings put secure aaid '").append(hex(24)).append("' 2>/dev/null; ")
+                sb.append("[ \${#imei} -lt 15 ] && continue; resetprop \$i ").append(imeiNew).append("; done; ")
+                sb.append("settings put secure vaid '").append(uuid()).append("' 2>/dev/null; ")
+                sb.append("settings put secure aaid '").append(uuid()).append("' 2>/dev/null; ")
                 // 应用 ID（SSAID）双方案：
                 //  旧系统文本 XML → sed 就地改该应用条目
                 //  新系统 ABX 二进制 → 删文件让系统重建
