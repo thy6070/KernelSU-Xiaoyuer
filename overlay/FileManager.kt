@@ -253,7 +253,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
     androidx.compose.material3.MaterialTheme(typography = AppTypography) {
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.material3.LocalTextStyle provides
-            androidx.compose.material3.LocalTextStyle.current.copy(fontFamily = AppFontFamily)
+            androidx.compose.material3.LocalTextStyle.current.copy(
+                fontFamily = AppFontFamily,
+                // iOS 风格：数字等宽 + 轻微负字距（SF Pro/PingFang 都有这个收紧）
+                fontFeatureSettings = "tnum",
+                letterSpacing = (-0.2).sp
+            )
     ) {
     val appCtx = LocalContext.current
     val view = LocalView.current
@@ -265,23 +270,35 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         java.io.File(xyWorkRoot).mkdirs()
         java.io.File(xyArchRoot).mkdirs()
     }
-    // 字体：res/font 有时解析不到（资源混淆/压缩），这里再用 assets 里的 Inter 兜一次
+    // 字体：Inter（英文/数字，最接近 SF Pro）+ Noto Sans SC（中文，与苹方同源）
+    // 用 CustomFallbackBuilder 把英文优先、中文回退串起来（API 29+）
     LaunchedEffect(Unit) {
         runCatching {
-            val fam = androidx.compose.ui.text.font.FontFamily(
-                androidx.compose.ui.text.font.Font("fonts/Inter-Regular.ttf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.Normal),
-                androidx.compose.ui.text.font.Font("fonts/Inter-SemiBold.ttf", appCtx.assets, androidx.compose.ui.text.font.FontWeight.SemiBold)
-            )
-            AppFontFamily = fam
-            runCatching {
-                java.io.File(appCtx.filesDir, "font_log.txt").appendText(
-                    "assets Inter loaded ok; res font = " + runCatching {
-                        appCtx.resources.getFont(com.tencent.THY.R.font.inter_regular)
-                    }.isSuccess + "\n"
+            val ctx = appCtx
+            val inter = android.graphics.Typeface.Builder(ctx.assets, "fonts/Inter-Regular.ttf").build()
+            val interSemi = android.graphics.Typeface.Builder(ctx.assets, "fonts/Inter-SemiBold.ttf").build()
+            val noto = android.graphics.Typeface.Builder(ctx.assets, "fonts/NotoSansSC-Regular.otf").build()
+            val notoSemi = android.graphics.Typeface.Builder(ctx.assets, "fonts/NotoSansSC-SemiBold.otf").build()
+            val family = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                val r = android.graphics.Typeface.CustomFallbackBuilder(inter)
+                    .addCustomFallback(noto).build()
+                val s2 = android.graphics.Typeface.CustomFallbackBuilder(interSemi)
+                    .addCustomFallback(notoSemi).build()
+                androidx.compose.ui.text.font.FontFamily(
+                    androidx.compose.ui.text.font.Font(androidx.compose.ui.text.platform.Typeface(r), androidx.compose.ui.text.font.FontWeight.Normal),
+                    androidx.compose.ui.text.font.Font(androidx.compose.ui.text.platform.Typeface(s2), androidx.compose.ui.text.font.FontWeight.SemiBold)
                 )
+            } else null
+            if (family != null) {
+                AppFontFamily = family
+                runCatching {
+                    java.io.File(ctx.filesDir, "font_log.txt").appendText("Inter+Noto fallback loaded\n")
+                }
             }
         }.onFailure { t ->
-            runCatching { java.io.File(appCtx.filesDir, "font_log.txt").appendText("assets Inter FAIL " + t + "\n") }
+            runCatching {
+                java.io.File(appCtx.filesDir, "font_log.txt").appendText("Inter+Noto FAIL " + t + "\n")
+            }
         }
     }
     // 卡密登录：底部半屏面板（未激活时首次自动弹出，之后从胶囊导航可再次打开）
@@ -7036,10 +7053,12 @@ private fun FsRow(
             Text(
                 text = name,
                 modifier = Modifier.weight(1f),
-                fontSize = 15.sp,
+                // iOS 文件列表：正文 17pt 视觉 → 16sp，行高固定避免跳动
+                fontSize = 16.sp,
+                lineHeight = 20.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontFamily = AppFontFamily,   // iOS：Inter（不再用等宽）
+                fontFamily = AppFontFamily,
                 color = Color(TEXT_COLOR)
             )
             // 不显示文件大小/时间小字
@@ -10214,6 +10233,7 @@ var xyArchRoot: String = xyArchRoot
 
 // 默认用 res/font；运行时若解析失败，会切到 assets/fonts 版本（见 FileManagerScreen 里的 LaunchedEffect）
 var AppFontFamily by androidx.compose.runtime.mutableStateOf(
+    // 默认 Inter（res/font 一定存在）；运行时优先切到 assets 里的 Noto Sans SC（中文≈苹方）
     androidx.compose.ui.text.font.FontFamily(
         androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_regular, androidx.compose.ui.text.font.FontWeight.Normal),
         androidx.compose.ui.text.font.Font(com.tencent.THY.R.font.inter_semibold, androidx.compose.ui.text.font.FontWeight.SemiBold)
