@@ -6605,7 +6605,7 @@ val modDir = su("grep -l '小鱼儿附属' /data/adb/modules/*/module.prop 2>/de
                 ) {
                     Text(
                         "取消",
-                        modifier = Modifier.weight(1f).fillMaxHeight().clickable { showPathDialog = false }.wrapContentHeight(Alignment.CenterVertically),
+                        modifier = Modifier.weight(1f).fillMaxHeight().clickable { showPathDialog = false }.padding(vertical = 8.dp),
                         fontSize = 15.sp,
                         color = Color(0xFFFF3B30),
                         textAlign = TextAlign.Center
