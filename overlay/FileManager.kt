@@ -1061,8 +1061,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val list = paths.joinToString(" ") { q(it) }
                     val cmd = when (op) {
                         "delete" -> "rm -rf " + list
-                        "copy" -> if (arg.isNotEmpty()) "cp -rf " + list + " " + q(arg) else ""
-                        "move" -> if (arg.isNotEmpty()) "mv -f " + list + " " + q(arg) else ""
+                        "copy" -> if (arg.isNotEmpty())
+                            "for f in " + list + "; do n=\$(basename \"\$f\"); cp -rf \"\$f\" " + q(arg.trimEnd('/') + "/") +
+                                " 2>/dev/null && echo \"复制 \$n .OK\" || echo \"复制 \$n .NO\"; done"
+                        else ""
+                        "move" -> if (arg.isNotEmpty())
+                            "for f in " + list + "; do n=\$(basename \"\$f\"); mv -f \"\$f\" " + q(arg.trimEnd('/') + "/") +
+                                " 2>/dev/null && echo \"移动 \$n .OK\" || echo \"移动 \$n .NO\"; done"
+                        else ""
                         else -> ""
                     }
                     if (cmd.isNotEmpty()) {
@@ -1099,8 +1105,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     val dir = srcPath.substringBeforeLast('/', "/")
                     val name = srcPath.substringAfterLast('/')
                     val cmd = when (op) {
-                        "move" -> "mv -f " + q(srcPath) + " " + q(arg)
-                        "copy" -> "cp -rf " + q(srcPath) + " " + q(arg)
+                        "move" -> "if mv -f " + q(srcPath) + " " + q(arg.trimEnd('/') + "/") +
+                            " 2>/dev/null; then echo \"移动 " + name.replace("\\", "\\\\").replace("\"", "\\\"") + " .OK\"; else echo \"移动 " +
+                            name.replace("\\", "\\\\").replace("\"", "\\\"") + " .NO\"; fi"
+                        "copy" -> "if cp -rf " + q(srcPath) + " " + q(arg.trimEnd('/') + "/") +
+                            " 2>/dev/null; then echo \"复制 " + name.replace("\\", "\\\\").replace("\"", "\\\"") + " .OK\"; else echo \"复制 " +
+                            name.replace("\\", "\\\\").replace("\"", "\\\"") + " .NO\"; fi"
                         "zip" -> "cd " + q(dir) + " && tar -czf " + q(name + ".tar.gz") + " " + q(name)
                         "unzip" -> {
                             val lp2 = srcPath.lowercase()
@@ -1129,12 +1139,74 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             val prep = "rm -rf " + q(trash) + " ; mkdir -p " + q(trash) + " ; cp -a " + q(srcPath) + " " + q(trash) + "/ 2>/dev/null || true"
                             ProcessBuilder(suBin(), "--mount-master", "-c", prep).redirectErrorStream(true).start().waitFor()
                         }
+                        // 移动/复制：iOS 弹窗进度（真进度：先统计源条目数，执行中轮询目标条目数）
+                        val isMoveLike = op == "move" || op == "copy"
+                        val dstPath = if (isMoveLike) (arg.trimEnd('/') + "/" + name) else ""
+                        var pollJob: kotlinx.coroutines.Job? = null
+                        if (isMoveLike) {
+                            // 源条目总数（单文件=1）
+                            val total = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    val r = ProcessBuilder(suBin(), "--mount-master", "-c",
+                                        "if [ -d " + q(srcPath) + " ]; then find " + q(srcPath) + " -mindepth 1 | wc -l; else echo 1; fi")
+                                        .redirectErrorStream(true).start()
+                                    val o = r.inputStream.bufferedReader().readText().trim(); r.waitFor()
+                                    o.toIntOrNull() ?: 1
+                                }.getOrDefault(1)
+                            }
+                            val baseText = (if (op == "move") "移动：" else "复制：") + srcPath + "\n" +
+                                "目标：" + arg + "\n" +
+                                "共 " + total + " 项\n"
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                termDrawerTitle = name
+                                termDrawer = baseText
+                            }
+                            // 逐行输出（每移动/复制一个文件就一行 .OK/.NO），不再轮询
+                        }
                         val proc = ProcessBuilder(suBin(), "--mount-master", "-c", cmd + " >> '" + appCtx.cacheDir.absolutePath + "/xy_archive_log.txt' 2>&1")
                             .redirectErrorStream(true).start()
-                        val txt = proc.inputStream.bufferedReader().readText()
-                        proc.waitFor()
+                        val txt: String
+                        if (isMoveLike) {
+                            // 逐行读：每个条目立即出现在抽屉里
+                            val sbTxt = StringBuilder()
+                            proc.inputStream.bufferedReader().useLines { lines ->
+                                lines.forEach { ln ->
+                                    if (ln.isNotBlank()) {
+                                        sbTxt.append(ln).append("\n")
+                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                            termDrawer = (termDrawer ?: "") + ln + "\n"
+                                        }
+                                    }
+                                }
+                            }
+                            proc.waitFor()
+                            txt = sbTxt.toString()
+                        } else {
+                            txt = proc.inputStream.bufferedReader().readText()
+                            proc.waitFor()
+                        }
                         ok = true
                         if (op == "install") ok = txt.contains("Success")
+                        if (isMoveLike) {
+                            // 校验目标是否存在（大目录用 find 统计条目数）
+                            val verifyCmd = "if [ -e " + q(dstPath) + " ]; then " +
+                                "echo \"到达 \$( [ -d " + q(dstPath) + " ] && find " + q(dstPath) + " -mindepth 1 | wc -l || echo 1 ) 项\"; " +
+                                "else echo MISSING; fi"
+                            val vr = ProcessBuilder(suBin(), "--mount-master", "-c", verifyCmd)
+                                .redirectErrorStream(true).start()
+                            val vOut = vr.inputStream.bufferedReader().readText().trim()
+                            vr.waitFor()
+                            val arrived = !vOut.contains("MISSING")
+                            pollJob?.cancel()
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                val baseText = termDrawer?.substringBefore("进度：") ?: ""
+                                termDrawer = baseText + (if (arrived) vOut + " .OK\n" else "目标不存在 .NO\n") +
+                                    (if (op == "move") "移动完成 .OK\n" else "复制完成 .OK\n") +
+                                    "已完成 " + (if (arrived) ".OK\n" else ".NO\n")
+                                termDrawerConfirm = { termDrawerConfirm = null }
+                            }
+                            if (!arrived) ok = false
+                        }
                         when (op) {
                             "delete" -> pendingUndo = UndoOp("delete", listOf(srcPath))
                             "move" -> pendingUndo = UndoOp("move", listOf(srcPath), listOf(arg))
@@ -1519,6 +1591,30 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     suNow("test -f '" + p0.replace("'", "'\\''") + "' && echo ok 2>/dev/null").contains("ok")
                 }.getOrDefault(false)) p0 else null
             if (p != null) {
+                // .zip：MT 式虚拟浏览（不解压，只登记条目，点文件才解压那一个）
+                if (p.lowercase().endsWith(".zip")) {
+                    uiScope.launch {
+                        val list = withContext(Dispatchers.IO) {
+                            runCatching {
+                                suNow("unzip -Z1 '" + p.replace("'", "'\\''") + "' 2>/dev/null")
+                                    .lines().map { it.trim() }.filter { it.isNotEmpty() }
+                            }.getOrDefault(emptyList())
+                        }
+                        if (list.isNotEmpty()) {
+                            ZipView.zipPath = p
+                            ZipView.inner = ""
+                            ZipView.entries = list
+                            ZipView.tick += 1
+                            val vp = ZipView.makePath(p, "")
+                            archiveReturnPath = if (longPressFromRight) rightPath else leftPath
+                            dirScroll.remove(vp)
+                            if (longPressFromRight) rightPath = vp else leftPath = vp
+                        } else {
+                            android.widget.Toast.makeText(appCtx, "无法读取压缩包目录（可能已加密或损坏）", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    return@onArchiveEnter
+                }
                 uiScope.launch {
                     running = true
                     showTerminal = true
@@ -6749,6 +6845,8 @@ private fun BrowserPane(
     onActivate: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val paneCtx = androidx.compose.ui.platform.LocalContext.current
+    val paneScope = androidx.compose.runtime.rememberCoroutineScope()
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var multiMode by remember { mutableStateOf(false) }
     var pullDy by remember { mutableStateOf(0f) }
@@ -6948,7 +7046,33 @@ private fun BrowserPane(
                 onRowPos = { y -> onRowPos(rowPath, y) },
                 isPressed = pressedPath == rowPath,
                 onClick = {
-                    if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
+                    if (ZipView.isZipPath(path)) {
+                        val vp = joinPath(path, entry.name)
+                        if (entry.isDir) {
+                            onNavigate(vp + "/")
+                        } else {
+                            // 只解压这一个文件（MT 式按需解压）
+                            paneScope.launch {
+                                val (zip, inner) = ZipView.parse(vp)
+                                val fullName = inner + entry.name
+                                val outDir = java.io.File(paneCtx.cacheDir, "zipview").apply { mkdirs() }
+                                val outFile = java.io.File(outDir, entry.name)
+                                val ok = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        suNow("cd '" + outDir.absolutePath + "' && unzip -o -j '" +
+                                            zip.replace("'", "'\\''") + "' '" + fullName.replace("'", "'\\''") + "' 2>&1")
+                                        outFile.exists() && outFile.length() > 0
+                                    }.getOrDefault(false)
+                                }
+                                if (ok) {
+                                    android.widget.Toast.makeText(paneCtx, "已解压：" + outFile.name, android.widget.Toast.LENGTH_SHORT).show()
+                                    onFileClick(outFile.absolutePath)
+                                } else {
+                                    android.widget.Toast.makeText(paneCtx, "解压失败（加密/损坏）", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    } else if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
                 onLongClick = {
                     // 先记录行号再开菜单，否则菜单会先用旧位置出现再跳
@@ -7433,11 +7557,18 @@ private fun RowIcon(isDir: Boolean, name: String, fullPath: String) {
         // /data/user/0/<pkg>、/data/data/<pkg>、Android/data/<pkg> → 显示该应用图标
         val parent = fullPath.substringBeforeLast('/', "")
         val isAppDataDir = parent.endsWith("/data/user/0") || parent.endsWith("/data/data") ||
-            parent.endsWith("/Android/data") || parent.endsWith("/Android/obb") ||
-            parent.endsWith("/data/app")
-        val appIcon by produceState<ImageBitmap?>(if (isAppDataDir) pkgIconCache[name] else null, fullPath) {
-            if (!isAppDataDir) return@produceState
-            value = kotlinx.coroutines.withContext(Dispatchers.IO) { loadPkgIcon(ctx, name) }
+            parent.endsWith("/Android/data") || parent.endsWith("/Android/obb")
+        // /data/app 下的目录名不是包名：可能是 "~~xxxx==" 容器目录，或 "<pkg>-<hash>"
+        // /data/app 下任意层目录（~~xxx== 容器、<pkg>-hash）都尝试匹配应用图标
+        val isDataAppDir = isDir && fullPath.startsWith("/data/app/")
+        val appIcon by produceState<ImageBitmap?>(
+            if (isAppDataDir) pkgIconCache[name] else null, fullPath
+        ) {
+            if (isAppDataDir) {
+                value = kotlinx.coroutines.withContext(Dispatchers.IO) { loadPkgIcon(ctx, name) }
+            } else if (isDataAppDir) {
+                value = kotlinx.coroutines.withContext(Dispatchers.IO) { loadPkgIconByPath(ctx, fullPath) }
+            }
         }
         if (appIcon != null) {
             Image(
@@ -7594,6 +7725,17 @@ private fun formatSizeText(bytes: Long): String {
 }
 
 private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatchers.IO) {
+    // 虚拟压缩包目录：直接用 ZipView 里的条目渲染（不解压）
+    if (ZipView.isZipPath(path)) {
+        val (zip, inner) = ZipView.parse(path)
+        if (zip != ZipView.zipPath || inner != ZipView.inner) {
+            ZipView.zipPath = zip
+            ZipView.inner = inner
+        }
+        return@withContext ZipView.children().map { (n, isDir) ->
+            FsEntry(name = n, isDir = isDir)
+        }
+    }
     val norm = if (path.endsWith("/")) path else "$path/"
 
     // go straight through su: libsu may be uninitialised and silently yields an empty list
@@ -7634,6 +7776,16 @@ private suspend fun listDir(path: String): List<FsEntry> = withContext(Dispatche
 }
 
 private fun parentOf(path: String): String {
+    // 虚拟压缩包：末层返回 zip 所在目录，否则退到上一级内部路径
+    if (ZipView.isZipPath(path)) {
+        val (zip, inner) = ZipView.parse(path)
+        val trimmed = inner.trimEnd('/')
+        if (trimmed.isEmpty()) {
+            return zip.substringBeforeLast('/', "/")
+        }
+        val up = trimmed.substringBeforeLast('/', "")
+        return ZipView.makePath(zip, if (up.isEmpty()) "" else up + "/")
+    }
     val p = if (path.length > 1 && path.endsWith("/")) path.dropLast(1) else path
     val i = p.lastIndexOf('/')
     return if (i <= 0) "/" else p.substring(0, i)
@@ -8513,6 +8665,54 @@ var uiPickerIcons by androidx.compose.runtime.mutableStateOf<List<androidx.compo
 var uiPickerAction by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
 // 抽屉项右侧标记（如"已签名"）
 var uiPickerMarks by androidx.compose.runtime.mutableStateOf<Map<String, String>>(emptyMap())
+
+// 虚拟压缩包浏览（MT 式）：只登记条目，点文件才解压该文件
+object ZipView {
+    const val SCHEME = "zipview://"
+    var zipPath: String = ""                 // 真实 zip 路径
+    var inner: String = ""                   // 内部路径，如 "" 或 "res/" 
+    var entries: List<String> = emptyList()  // 全量条目名
+    var tick by androidx.compose.runtime.mutableStateOf(0)
+    fun isZipPath(p: String) = p.startsWith(SCHEME)
+    fun makePath(zip: String, inner: String) = SCHEME + zip + "!" + inner
+    fun parse(p: String): Pair<String, String> {
+        val body = p.removePrefix(SCHEME)
+        val i = body.lastIndexOf('!')
+        return if (i < 0) body to "" else body.substring(0, i) to body.substring(i + 1).trimStart('/')
+    }
+    /** 当前层的直接子项：目录名以 "/" 结尾，文件为完整名 */
+    fun children(): List<Pair<String, Boolean>> {
+        val prefix = inner.trimStart('/').let { if (it.isEmpty() || it.endsWith("/")) it else it + "/" }
+        val dirs = LinkedHashSet<String>()
+        val files = LinkedHashSet<String>()
+        for (e in entries) {
+            if (!e.startsWith(prefix)) continue
+            val rest = e.substring(prefix.length)
+            if (rest.isEmpty()) continue
+            val slash = rest.indexOf('/')
+            if (slash >= 0) {
+                dirs.add(rest.substring(0, slash))
+            } else {
+                files.add(rest)
+            }
+        }
+        return dirs.map { it to true } + files.map { it to false }
+    }
+}
+
+// 移动/复制进度（iOS 弹窗）
+data class MoveCopyState(
+    val moving: Boolean,      // true=移动 false=复制
+    val name: String,
+    val src: String,
+    val dst: String,
+    val done: Int,
+    val total: Int,
+    val finished: Boolean = false,
+    val failed: Boolean = false,
+    val message: String = ""
+)
+var moveCopyState by androidx.compose.runtime.mutableStateOf<MoveCopyState?>(null)
 // 重置过程的实时输出回调（供抽屉终端逐行显示）
 var resetLineSink by androidx.compose.runtime.mutableStateOf<((String) -> Unit)?>(null)
 var uiPickerSelected by androidx.compose.runtime.mutableStateOf<String?>(null)
