@@ -10262,6 +10262,8 @@ class FpsOverlayService : Service() {
         zeroCount = 0
         idleCount = 0
         try { java.io.File(filesDir, "fps_raw").delete() } catch (t: Throwable) {}
+        // 启动立刻拉一次 fpsgo（不等 tick 的 1 秒节流），开关切换后马上有数据
+        try { refreshFpsgoFile() } catch (t: Throwable) {}
         startForegroundCompat()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
@@ -10814,8 +10816,8 @@ class FpsOverlayService : Service() {
                 }
                 }
                 // 读不到：保持上次值（防闪烁），持续 3 秒（约 10 次）无数据才显示 --
-                if (failCount < 8) {
-                    // 保持上次显示
+                if (failCount < 20) {
+                    // 保持上次显示（采集刚启动/层刚重建时留足 8 秒，别急着显示 --）
                 } else {
                     showFps(0.0, reading = false)
                 }
