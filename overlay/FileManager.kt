@@ -10475,7 +10475,48 @@ class FpsOverlayService : Service() {
     private var lastRawChange = 0L
 
     // MTK fpsgo：直接给出前台 App 的 currentFPS（联发科机型最稳的兜底）
+    // fpsgo 只有 root 能读：用 su 拉一次并缓存到 fpsgo_raw（主循环读文件，零 su 开销）
+    private fun refreshFpsgoFile() {
+        val now = System.currentTimeMillis()
+        if (now - lastFpsgoAt < 1000L) return
+        lastFpsgoAt = now
+        try {
+            val out = sh(
+                "for p in /sys/kernel/fpsgo/fstb/fpsgo_status /sys/kernel/fpsgo/fpsgo/fpsgo_status; do " +
+                    "[ -r \"\$p\" ] && { cat \"\$p\"; break; }; done", 2L
+            )
+            if (out.isNotBlank()) java.io.File(filesDir, "fpsgo_raw").writeText(out)
+        } catch (t: Throwable) {}
+    }
+
     private fun readFpsgoFps(): Double? {
+        // 优先读 daemon 缓存的文件（普通权限可读）；没有就现拉一次
+        val cache = java.io.File(filesDir, "fpsgo_raw")
+        var text = ""
+        try {
+            if (cache.exists() && System.currentTimeMillis() - cache.lastModified() < 3000L) {
+                text = cache.readText()
+            }
+        } catch (t: Throwable) {}
+        if (text.isBlank()) return null
+        val pkg = activePkg
+        if (pkg.isEmpty()) return null
+        var best = -1.0
+        for (line in text.lines()) {
+            if (line.isBlank()) continue
+            if (line.startsWith("tid") || line.contains("dfps_ceiling") || line.contains("policy")) continue
+            val cols = line.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            if (cols.size < 4) continue
+            val name = cols.getOrNull(2) ?: continue
+            val hit = name.contains(pkg) || pkg.contains(name) || name.endsWith(pkg.takeLast(12))
+            if (!hit) continue
+            val cur = cols.getOrNull(3)?.toDoubleOrNull() ?: continue
+            if (cur > best) best = cur
+        }
+        return if (best >= 0.0) best else null
+    }
+
+    private fun readFpsgoFpsOld(): Double? {
         val paths = arrayOf(
             "/sys/kernel/fpsgo/fstb/fpsgo_status",
             "/sys/kernel/fpsgo/fpsgo/fpsgo_status"
@@ -10751,6 +10792,7 @@ class FpsOverlayService : Service() {
                 }
             } catch (t: Throwable) {}
             refreshPanelHz()   // 保证 panelHz 是真实刷新率（不用帧间隔推算）
+            refreshFpsgoFile() // root 拉一次 fpsgo 缓存（fpsbinder2 不稳定时兜底）
             val fpsRaw0 = readDaemonFps()
             // 异常值过滤：超过面板刷新率 10% 视为选错层/合成层，直接丢弃
             val fpsRaw = if (fpsRaw0 != null && panelHz > 0.0 && fpsRaw0 > panelHz * 1.10) {
@@ -10925,6 +10967,7 @@ class FpsOverlayService : Service() {
     private var fpsPlusBoosted = false
     @Volatile private var panelHz = 0.0
     private var panelHzAt = 0L
+    private var lastFpsgoAt = 0L
 
     // 真实屏幕刷新率（来自 dumpsys display，10 秒缓存）；读不到退回 120
     private fun refreshPanelHz() {
