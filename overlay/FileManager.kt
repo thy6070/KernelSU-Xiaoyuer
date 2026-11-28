@@ -10251,6 +10251,15 @@ class FpsOverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // 关掉再打开时，上一次的层名/daemon 状态会残留 → 强制清空，保证能重新采集
+        layerName = null
+        daemonLayer = null
+        daemonStartedAt = 0L
+        lastLayerRefresh = 0L
+        failCount = 0
+        zeroCount = 0
+        idleCount = 0
+        try { java.io.File(filesDir, "fps_raw").delete() } catch (t: Throwable) {}
         startForegroundCompat()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addOverlay()
@@ -10726,6 +10735,8 @@ class FpsOverlayService : Service() {
             } else {
                 failCount = 0
                 if (fpsRaw < 0.5) {
+                    // 真的掉到 0：照样显示 0.0（不要因为 0 就不更新，否则看起来像"不显示了"）
+                    showFps(0.0, reading = true)
                     idleCount++
                     if (idleCount >= 3 && System.currentTimeMillis() - lastProbe > 2000L) {
                         lastProbe = System.currentTimeMillis()
