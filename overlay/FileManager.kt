@@ -268,6 +268,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             )
     ) {
     val appCtx = LocalContext.current
+    // iOS 那种"关键节点给一下"的触感；系统关掉触感时自动静默
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    fun hp(type: androidx.compose.ui.hapticfeedback.HapticFeedbackType) {
+        runCatching { haptics.performHapticFeedback(type) }
+    }
     val view = LocalView.current
     // 工作目录：回收站/临时 HOME 放 App 缓存，解压目录放 files（root 与 App 都可访问）
     runCatching {
@@ -670,6 +675,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     resetLineSink = null
                     termDrawer = (termDrawer ?: "") + "重置 " + label + " .OK\n已完成 .OK\n"
                     val askResetReboot: () -> Unit = {
+                        runCatching { hp(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm) }
                         pickConfirmOk = "重启"; pickConfirmAccentWord = "重启"; pickConfirmAccentColor = 0xFF007AFF
                         pickConfirm = "重启完全生效" to {
                             uiScope.launch { withContext(Dispatchers.IO) { runCatching { Runtime.getRuntime().exec(arrayOf(suBin(), "-c", "reboot")).waitFor() } } }
@@ -794,6 +800,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onLongPressRow = { _, idx -> ctxMenuRow = idx },
                 onRowPos = { p, y -> rowYs[p] = y },
                 onNavigate = { np ->
+                    runCatching { hp(androidx.compose.ui.hapticfeedback.HapticFeedbackType.ContextClick) }
                     longPressFromRight = false
                     // 切目录：清残留选中（防解压旧包/操作错文件）
                     selectedFile = null
@@ -922,6 +929,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 onLongPressRow = { _, idx -> ctxMenuRow = idx },
                 onRowPos = { p, y -> rowYs[p] = y },
                 onNavigate = { np2 ->
+                    runCatching { hp(androidx.compose.ui.hapticfeedback.HapticFeedbackType.ContextClick) }
                     longPressFromRight = true
                     selectedFile = null
                     longPressPath = null
@@ -1113,6 +1121,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             appCtx.packageManager.getPackageArchiveInfo(p, 0)?.packageName ?: ""
                                         }.getOrDefault("")
                                         android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                            runCatching {
+                                                hp(if (doneOk) androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm
+                                                   else androidx.compose.ui.hapticfeedback.HapticFeedbackType.Reject)
+                                            }
                                             if (doneOk) {
                                                 pickConfirmOk = "打开"
                                                 pickConfirmAccentWord = "完成"
@@ -1645,6 +1657,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     termDrawer = (termDrawer ?: "") + "已完成 " + (if (ok) ".OK" else ".NO") + "\n"
                     // 签名/取消签名完成 → 自动弹结果窗（不用再点抽屉「确定」）
                     val showResult: () -> Unit = {
+                        runCatching {
+                            hp(if (ok) androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm
+                               else androidx.compose.ui.hapticfeedback.HapticFeedbackType.Reject)
+                        }
                         if (ok) {
                             pickConfirmOk = "打开"
                             pickConfirmAccentWord = "完成"
@@ -2030,6 +2046,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 termDrawer = ((termDrawer ?: "") + "已完成 .OK\n")
                                 // 模块安装完成 → 自动弹「重启完全生效」
                                 val askRebootMod: () -> Unit = {
+                                    runCatching { hp(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm) }
                                     pickConfirmOk = "重启"
                                     pickConfirmAccentWord = "重启"
                                     pickConfirmAccentColor = 0xFF007AFF
@@ -3258,6 +3275,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                 termDrawer = (termDrawer ?: "") + "设置机型 " + stripBrand(sel) + " .OK\n"
                                                 termDrawer = (termDrawer ?: "") + "已完成 .OK\n"
                                                 val askReboot: () -> Unit = {
+                                                    runCatching { hp(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm) }
                                                     pickConfirmOk = "重启"
                                                     pickConfirmAccentWord = "重启"
                                                     pickConfirmAccentColor = 0xFF007AFF
@@ -3717,6 +3735,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .weight(1f)
                             .fillMaxHeight()
                             .clickable {
+                                runCatching { hp(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Reject) }
                                 pickConfirm = null
                                 // 第一层（进入流程自动弹的确认）取消 → 连抽屉一起收
                                 if (pickCancelClosesDrawer) {
@@ -4939,12 +4958,17 @@ private fun ProMaxIsland(
                             .background(Color(0xFF007AFF))
                             .clickable {
                                 val op = pendingUndo
-                                // 和删除完成后的收起一致：直接收，不加额外延迟/清理
+                                // 和导航面板切换同款：navClosing 过渡 → 面板带回弹地收起
                                 pendingUndo = null
                                 undoPanelOnly = false
-                                navMode = false
-                                navTarget = null
-                                expanded = false
+                                reopenScope.launch {
+                                    navClosing = true
+                                    kotlinx.coroutines.delay(110)
+                                    navMode = false
+                                    navTarget = null
+                                    navClosing = false
+                                    expanded = false
+                                }
                                 if (op != null) {
                                     navScope.launch {
                                         withContext(Dispatchers.IO) {
@@ -7577,6 +7601,7 @@ private fun BrowserPane(
             FsRow(
                 index = idx,
                 animateIn = rowAnimWindow,
+                animBase = listState.firstVisibleItemIndex,
                 enterFrom = enterFromDir,
                 name = entry.name,
                 isDir = entry.isDir,
@@ -7601,6 +7626,8 @@ private fun BrowserPane(
                     } else if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
                 onLongClick = {
+                    // 长按给一下触感（系统关闭触感时自动静默）
+                    runCatching { hp(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) }
                     // 先记录行号再开菜单，否则菜单会先用旧位置出现再跳
                     onLongPressRow(rowPath, idx)
                     onLongPress(rowPath, entry.isDir)
@@ -7810,6 +7837,7 @@ private fun CardLoginSheet(ctx: android.content.Context, onDone: () -> Unit) {
 private fun FsRow(
     index: Int = -1,
     animateIn: Boolean = false,
+    animBase: Int = 0,
     enterFrom: Int = 1,
     name: String,
     isDir: Boolean,
@@ -7830,22 +7858,27 @@ private fun FsRow(
     onLongClick: () -> Unit = {}
 ) {
 
-    // 交错进入动画（仅前 8 行，避免长列表全部播）
-    // 用 animateFloatAsState：即使动画被打断也一定会落到 1f/0f，不会卡在透明
+    // 波浪式进入：从屏幕顶部往下逐行铺开
+    // 用 animateFloatAsState：即使被打断也一定会落到 1f/0f，不会卡在透明
     var rowVisible by remember { mutableStateOf(!animateIn) }
+    // 波浪曲线：快起慢收（iOS 那种"荡开"的手感）
+    val waveEase = androidx.compose.animation.core.CubicBezierEasing(0.22f, 0.9f, 0.3f, 1f)
     val rowAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (rowVisible) 1f else 0f,
-        animationSpec = tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        animationSpec = tween(300, easing = waveEase),
         label = "rowAlpha"
     )
     val rowShift by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (rowVisible) 0f else (if (enterFrom > 0) 6f else -6f),
-        animationSpec = tween(280, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        // 位移从 12px 收到 0，配合淡入形成"浮上来"的波
+        targetValue = if (rowVisible) 0f else (if (enterFrom > 0) 12f else -12f),
+        animationSpec = tween(360, easing = waveEase),
         label = "rowShift"
     )
     LaunchedEffect(fullPath) {
         if (animateIn && !rowVisible) {
-            kotlinx.coroutines.delay(if (index in 0..7) index.coerceAtLeast(0) * 22L else 0L)
+            // 以屏幕可见第一行为起点；越往下的行越晚，形成一道向下的波
+            val rel = (index - animBase).coerceAtLeast(0)
+            kotlinx.coroutines.delay(if (rel <= 14) rel * 34L else 14 * 34L)
             rowVisible = true
         }
     }
@@ -7877,6 +7910,7 @@ private fun FsRow(
                 .background(
                     if (multiSelected) Color(0x88FF69B4)
                     else if (highlight != null && (highlight == fullPath || highlight == name)) Color(0x4D007AFF)
+                    else if (isPressed) Color(0x1F000000)   // 按压态：淡灰底
                     else Color.Transparent
                 )
                 // 右侧不留内边距：大小/时间小字正好贴在分割线尽头
@@ -7900,10 +7934,10 @@ private fun FsRow(
             if (!isDir && sizeText.isNotEmpty()) {
                 Text(
                     text = sizeText,
-                    fontSize = 9.sp,
-                    lineHeight = 11.sp,
+                    fontSize = 8.sp,
+                    lineHeight = 10.sp,
                     maxLines = 1,
-                    color = Color(0x40000000),
+                    color = Color(0x33000000),
                     textAlign = TextAlign.End,
                     modifier = Modifier.padding(start = 6.dp, end = 4.dp)
                 )
