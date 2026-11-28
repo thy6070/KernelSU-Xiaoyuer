@@ -3449,8 +3449,11 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
         }
         // 外部请求收起（带下滑动画）
+        // 只在「本次请求」时收：记住已处理的 tick，避免抽屉重新打开时被上次的 tick 立刻关掉
+
         LaunchedEffect(termHideTick) {
-            if (termHideTick > 0) {
+            if (termHideTick > lastHandledHideTickGlobal) {
+                lastHandledHideTickGlobal = termHideTick
                 try { termSheetState.hide() } catch (t: Throwable) {}
                 termDrawer = null
                 termDrawerIcon = null
@@ -9253,6 +9256,7 @@ var pickCancelClosesDrawer by androidx.compose.runtime.mutableStateOf(false)
 var pickConfirmSingle by androidx.compose.runtime.mutableStateOf(false)
 // 请求收起终端抽屉（走 ModalBottomSheet 下滑动画）
 var termHideTick by androidx.compose.runtime.mutableIntStateOf(0)
+var lastHandledHideTickGlobal by androidx.compose.runtime.mutableIntStateOf(0)
 // 目录切换标记：行进入动画只在新目录第一屏播放
 var dirEnterTick by androidx.compose.runtime.mutableIntStateOf(0)
 var zipPwdVisible by androidx.compose.runtime.mutableStateOf(false)
