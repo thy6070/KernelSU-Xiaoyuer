@@ -10242,6 +10242,8 @@ class FpsOverlayService : Service() {
     private var lastCpuSampleMs = 0L
     private var lastRawDbgMs = 0L
     private var adaptDownTick = 0
+    // FPS+ 调节用的滑动窗口（取中位数，抗抖）
+    private val adaptHist = ArrayList<Double>()
     private var fpsFrozen = false
     private var lastProbe = 0L
     private var idleCount = 0
@@ -10472,7 +10474,45 @@ class FpsOverlayService : Service() {
     private var lastRawMtime = 0L
     private var lastRawChange = 0L
 
+    // MTK fpsgo：直接给出前台 App 的 currentFPS（联发科机型最稳的兜底）
+    private fun readFpsgoFps(): Double? {
+        val paths = arrayOf(
+            "/sys/kernel/fpsgo/fstb/fpsgo_status",
+            "/sys/kernel/fpsgo/fpsgo/fpsgo_status"
+        )
+        for (p in paths) {
+            try {
+                val f = java.io.File(p)
+                if (!f.exists() || !f.canRead()) continue
+                val pkg = activePkg
+                var best = -1.0
+                for (line in f.readLines()) {
+                    if (line.isBlank()) continue
+                    if (line.startsWith("tid") || line.contains("dfps_ceiling") || line.contains("policy")) continue
+                    val cols = line.split(Regex("\s+")).filter { it.isNotEmpty() }
+                    if (cols.size < 4) continue
+                    val name = cols.getOrNull(2) ?: continue
+                    // 只认前台 App（名字可能被截断，用 contains 双向兼容）
+                    val hit = if (pkg.isEmpty()) false else
+                        (name.contains(pkg) || pkg.contains(name) || name.endsWith(pkg.takeLast(12)))
+                    if (!hit) continue
+                    val cur = cols.getOrNull(3)?.toDoubleOrNull() ?: continue
+                    if (cur > best) best = cur
+                }
+                if (best >= 0.0) return best
+            } catch (t: Throwable) {}
+        }
+        return null
+    }
+
     private fun readDaemonFps(): Double? {
+        // 先看 fpsbinder2 有没有产出；没有就用 MTK fpsgo 兜底
+        val raw = readRawFps()
+        if (raw != null) return raw
+        return readFpsgoFps()
+    }
+
+    private fun readRawFps(): Double? {
         return try {
             val f = File(filesDir, "fps_raw")
             val nowDbg = System.currentTimeMillis()
@@ -10496,8 +10536,7 @@ class FpsOverlayService : Service() {
             // 简单数值（fpsbinder2 的 timestats 兜底会直接写 "60.00"）
             val simple = text.trim().toDoubleOrNull()
             if (simple != null && simple >= 0.0 && simple < 2000.0) return simple
-            val ns = text.lineSequence().firstOrNull()?.trim()?.toLongOrNull() ?: 0L
-            if (ns > 0L) panelHz = 1_000_000_000.0 / ns
+            // 注意：这里不再用帧间隔推算 panelHz（游戏跑 30 帧时会被算成 30Hz，导致 FPS+ 档位全错）
             parseLatencyText(text)
         } catch (t: Throwable) {
             null
@@ -10711,7 +10750,13 @@ class FpsOverlayService : Service() {
                     logLine("fps_raw 超时未更新，强制重扫层")
                 }
             } catch (t: Throwable) {}
-            val fpsRaw = readDaemonFps()
+            refreshPanelHz()   // 保证 panelHz 是真实刷新率（不用帧间隔推算）
+            val fpsRaw0 = readDaemonFps()
+            // 异常值过滤：超过面板刷新率 10% 视为选错层/合成层，直接丢弃
+            val fpsRaw = if (fpsRaw0 != null && panelHz > 0.0 && fpsRaw0 > panelHz * 1.10) {
+                logLine("丢弃异常帧率 " + String.format("%.1f", fpsRaw0) + "（面板 " + String.format("%.0f", panelHz) + "Hz）")
+                null
+            } else fpsRaw0
             if (fpsRaw == null) {
                 // daemon 刚启动的 2 秒内不算失败（文件还没写出来）
                 if (System.currentTimeMillis() - daemonStartedAt < 2000L) {
@@ -10735,9 +10780,10 @@ class FpsOverlayService : Service() {
             } else {
                 failCount = 0
                 if (fpsRaw < 0.5) {
-                    // 真的掉到 0：照样显示 0.0（不要因为 0 就不更新，否则看起来像"不显示了"）
-                    showFps(0.0, reading = true)
+                    // 短暂 0（画面静止/层重建）→ 保持上一个值，别闪 0.0
+                    // 持续 0 超过约 1.6 秒（4 次）才显示 0.0
                     idleCount++
+                    if (idleCount >= 4) showFps(0.0, reading = true)
                     if (idleCount >= 3 && System.currentTimeMillis() - lastProbe > 2000L) {
                         lastProbe = System.currentTimeMillis()
                         val alt = probeLayer(10)
@@ -10878,6 +10924,25 @@ class FpsOverlayService : Service() {
     private var fpsPlusHigh = 0
     private var fpsPlusBoosted = false
     @Volatile private var panelHz = 0.0
+    private var panelHzAt = 0L
+
+    // 真实屏幕刷新率（来自 dumpsys display，10 秒缓存）；读不到退回 120
+    private fun refreshPanelHz() {
+        val now = System.currentTimeMillis()
+        if (now - panelHzAt < 10000L && panelHz > 0.0) return
+        panelHzAt = now
+        try {
+            val out = sh("dumpsys display 2>/dev/null | grep -m1 -o 'renderFrameRate [0-9.]*'", 2L)
+            val v = Regex("[0-9.]+").find(out)?.value?.toDoubleOrNull()
+            if (v != null && v in 24.0..240.0) { panelHz = v; return }
+        } catch (t: Throwable) {}
+        try {
+            val out2 = sh("dumpsys display 2>/dev/null | grep -m1 -o 'fps=[0-9.]*'", 2L)
+            val v2 = Regex("[0-9.]+").find(out2)?.value?.toDoubleOrNull()
+            if (v2 != null && v2 in 24.0..240.0) { panelHz = v2; return }
+        } catch (t: Throwable) {}
+        if (panelHz <= 0.0) panelHz = 120.0
+    }
     private val fpsHist = ArrayDeque<Double>()
 
     private fun isGamePkg(pkg: String): Boolean {
@@ -11113,14 +11178,20 @@ class FpsOverlayService : Service() {
     //   fps 低于目标 95%  → 立即升档（保帧率）
     //   fps 连续 3 次高于目标 → 降一档（省电，不激进）
     //   其他情况保持，避免来回震荡
-    private fun adaptiveFreq(fps: Double) {
+    private fun adaptiveFreq(fpsIn: Double) {
         val now = System.currentTimeMillis()
         if (now - lastAdaptMs < 1000L) return   // 1s 调节周期
         lastAdaptMs = now
+        // 用 1 秒窗口的中位数做判断，避免瞬时抖动误判（fpsgo 的 currentFPS 会跳）
+        adaptHist.add(fpsIn)
+        if (adaptHist.size > 20) adaptHist.removeAt(0)
+        val sorted = adaptHist.sorted()
+        val fps = if (sorted.isEmpty()) fpsIn else sorted[sorted.size / 2]
         // 实时感知：每周期按当前帧率重新归档（不锁定，切帧率/加载界面都能跟上）
         //   fps ≤ 65 → 60 档，≤ 95 → 90 档，≤ 125 → 120 档，≤ 149 → 144 档，≤ 170 → 165 档
         val stdTiers = listOf(60.0, 90.0, 120.0, 144.0, 165.0)
-        val tierHit = stdTiers.firstOrNull { fps <= it + 5.0 }
+        // 死区：距离档位 3 帧以内不降档（60/90 边界抖不会来回切）
+        val tierHit = stdTiers.firstOrNull { fps <= it + 3.0 }
         val target = if (tierHit != null && tierHit < panelHz - 5) {
             tierHit
         } else {
@@ -11289,13 +11360,19 @@ internal fun parseLatencyText(out: String): Double? {
         }
         if (times.size < 3) return null
         times.sort()
+        // 去重：同一帧的时间戳重复出现会把帧率算高
+        val uniq = ArrayList<Long>(times.size)
+        var prevT = -1L
+        for (t in times) { if (t != prevT) { uniq.add(t); prevT = t } }
+        times.clear(); times.addAll(uniq)
+        if (times.size < 3) return null
         val end = times[times.size - 1]
         if (System.nanoTime() - end > 1_500_000_000L) return 0.0
         // 对齐 Scene 的 1 秒口径：窗口默认 1000ms（60/90/120Hz 都能取满）。
         // 144Hz 下 1 秒 = 144 帧，超过 --latency 的 128 帧缓存，所以按 120 帧封顶（833ms）。
         val refreshNs = lines[0].trim().toLongOrNull()?.takeIf { it in 1_000_000L..50_000_000L } ?: 16_666_667L
-        // 窗口 250ms：延迟压到极限，120Hz≈30帧仍够
-        val winNs = minOf(250_000_000L, refreshNs * 120).coerceAtLeast(180_000_000L)
+        // 窗口 400ms：比 250ms 更稳（120Hz≈48 帧），延迟仍可接受
+        val winNs = minOf(400_000_000L, refreshNs * 120).coerceAtLeast(300_000_000L)
         var start = end - winNs
         var n = times.count { it >= start }
         if (n < 4) {
