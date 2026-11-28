@@ -328,6 +328,19 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         if (f.lastModified() < deadline) runCatching { f.deleteRecursively() }
                     }
                 }
+                // ③b 压缩包虚拟浏览临时解出来的单文件：超过 1 天清掉
+                runCatching {
+                    val zv = java.io.File(appCtx.cacheDir, "zipview")
+                    val deadline = System.currentTimeMillis() - 24L * 3600 * 1000
+                    zv.listFiles()?.forEach { f ->
+                        if (f.lastModified() < deadline) runCatching { f.deleteRecursively() }
+                    }
+                }
+                // ③c /data/local/tmp 下我们留下的临时文件：超过 1 天清掉
+                runCatching {
+                    suNow("find /data/local/tmp -maxdepth 1 -name 'xy_*' -mtime +1 -exec rm -rf {} + 2>/dev/null; " +
+                        "find /data/local/tmp -maxdepth 1 -name 'yx_*' -mtime +1 -exec rm -rf {} + 2>/dev/null")
+                }
                 // ④ 缓存目录总量超过 100MB：按修改时间清掉最旧的一批文件
                 runCatching {
                     val all = appCtx.cacheDir.walkTopDown().filter { it.isFile }.toList()
@@ -668,10 +681,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                     // 重置完成 → 自动收起抽屉并弹「重启完全生效」
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        runCatching {
-                            termDrawer = null
-                            askResetReboot()
-                        }
+                        runCatching { askResetReboot() }
                     }, 600)
                 }
             }
@@ -700,8 +710,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             if (!outDir.exists()) outDir.mkdirs()
             val dstFile = java.io.File(outDir, safe + ".apk")
             termDrawerTitle = label
-            termDrawer = "提取应用：" + label + "\n" +
-                "包名：" + pkg + "\n" +
+            termDrawerIcon = runCatching {
+                val d = appCtx.packageManager.getApplicationIcon(pkg)
+                val w = d.intrinsicWidth.coerceAtLeast(48); val h = d.intrinsicHeight.coerceAtLeast(48)
+                val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                val cv = android.graphics.Canvas(b); d.setBounds(0, 0, w, h); d.draw(cv)
+                b.asImageBitmap()
+            }.getOrNull()
+            val verA = runCatching { appCtx.packageManager.getPackageInfo(pkg, 0).versionName ?: "" }.getOrDefault("")
+            termDrawer = "应用：" + label + (if (verA.isNotEmpty()) "  v" + verA else "") + "  " + pkg + "\n" +
                 "目标：" + dstFile.absolutePath + "\n" +
                 "方式：pm path 定位 → su cp -f → chmod 644\n"
             withContext(Dispatchers.IO) {
@@ -725,7 +742,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             pickConfirmAccentWord = "已完成"
             pickConfirmAccentColor = 0xFF007AFF
             pickConfirmSingle = true
-            pickConfirm = "好" to {
+            pickConfirm = "已完成" to {
                 pickConfirmSingle = false
             }
         }
@@ -1096,8 +1113,6 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                             appCtx.packageManager.getPackageArchiveInfo(p, 0)?.packageName ?: ""
                                         }.getOrDefault("")
                                         android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                            // 关抽屉，否则结果弹窗被抽屉盖住
-                                            termDrawer = null
                                             if (doneOk) {
                                                 pickConfirmOk = "打开"
                                                 pickConfirmAccentWord = "完成"
@@ -1655,10 +1670,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     }
                     // 自动弹出：日志写完 0.8s 后收起抽屉并弹结果
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        runCatching {
-                            termDrawer = null
-                            showResult()
-                        }
+                        runCatching { showResult() }
                     }, 800)
                 }
             }
@@ -1695,6 +1707,16 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
             }
         },
         onExtractApp = { pkg, label ->
+            termDrawerTitle = label
+            termDrawerIcon = runCatching {
+                val d = appCtx.packageManager.getApplicationIcon(pkg)
+                val w = d.intrinsicWidth.coerceAtLeast(48); val h = d.intrinsicHeight.coerceAtLeast(48)
+                val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                val cv = android.graphics.Canvas(b); d.setBounds(0, 0, w, h); d.draw(cv)
+                b.asImageBitmap()
+            }.getOrNull()
+            val verB = runCatching { appCtx.packageManager.getPackageInfo(pkg, 0).versionName ?: "" }.getOrDefault("")
+            termDrawer = "应用：" + label + (if (verB.isNotEmpty()) "  v" + verB else "") + "  " + pkg + "\n"
             uiScope.launch {
                 withContext(Dispatchers.IO) {
                     try {
@@ -1732,7 +1754,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 pickConfirmAccentWord = "已完成"
                 pickConfirmAccentColor = 0xFF007AFF
                 pickConfirmSingle = true
-                pickConfirm = "好" to {
+                pickConfirm = "已完成" to {
                     pickConfirmSingle = false
                 }
             }
@@ -2024,10 +2046,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                     askRebootMod()
                                 }
                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                    runCatching {
-                                        termDrawer = null
-                                        askRebootMod()
-                                    }
+                                    runCatching { askRebootMod() }
                                 }, 800)
                             }
                         }
@@ -3256,10 +3275,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                                 }
                                                 // 改机型完成 → 自动收起抽屉并弹「重启完全生效」
                                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                                    runCatching {
-                                                        termDrawer = null
-                                                        askReboot()
-                                                    }
+                                                    runCatching { askReboot() }
                                                 }, 800)
                                             }
                                                 }
@@ -3429,6 +3445,15 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 try { termSheetState.hide() } catch (t: Throwable) {}
                 termDrawer = null
                 termDrawerIcon = null        // 清空图标，避免下次显示上一个的
+                termDrawerConfirm = null
+            }
+        }
+        // 外部请求收起（带下滑动画）
+        LaunchedEffect(termHideTick) {
+            if (termHideTick > 0) {
+                try { termSheetState.hide() } catch (t: Throwable) {}
+                termDrawer = null
+                termDrawerIcon = null
                 termDrawerConfirm = null
             }
         }
@@ -3692,7 +3717,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                                 pickConfirm = null
                                 // 第一层（进入流程自动弹的确认）取消 → 连抽屉一起收
                                 if (pickCancelClosesDrawer) {
-                                    termDrawer = null
+                                    termHideTick += 1
                                 }
                                 pickCancelClosesDrawer = false
                             },
@@ -7363,10 +7388,10 @@ private fun BrowserPane(
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 val atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
                 if (available.y > 0f && atTop) {
-                    pullDy = (pullDy + available.y).coerceAtMost(220f)
+                    pullDy = (pullDy + available.y).coerceAtMost(340f)
                     val now = System.currentTimeMillis()
                     // 冷却 1.5s：避免刷新后列表重建又被判定为"下拉"→ 无限刷新
-                    if (pullDy > 150f && !pullRefreshing && now - lastPullRefreshAt > 1500L) {
+                    if (pullDy > 260f && !pullRefreshing && now - lastPullRefreshAt > 1500L) {
                         lastPullRefreshAt = now
                         pullRefreshing = true
                         pullDy = 0f
@@ -7467,7 +7492,7 @@ private fun BrowserPane(
         }
         Box(modifier = Modifier.fillMaxSize().graphicsLayer { rotationZ = tilt.value }) {
         // 下拉/刷新指示器：跟手下拉时旋转放大，刷新中转圈
-        val pullProgress = (pullDy / 150f).coerceIn(0f, 1f)
+        val pullProgress = (pullDy / 260f).coerceIn(0f, 1f)
         if (pullProgress > 0.02f || pullRefreshing) {
             val spin = rememberInfiniteTransition(label = "pullspin")
             val angle by spin.animateFloat(
@@ -7567,45 +7592,9 @@ private fun BrowserPane(
                 isPressed = pressedPath == rowPath,
                 onClick = {
                     if (ZipView.isZipPath(path)) {
+                        // 压缩包内：点文件夹进入；点文件只选中（不解压）
                         val vp = joinPath(path, entry.name)
-                        if (entry.isDir) {
-                            onNavigate(vp + "/")
-                        } else {
-                            // 只解压这一个文件（MT 式按需解压）
-                            paneScope.launch {
-                                val (zip, inner) = ZipView.parse(vp)
-                                val fullName = inner + entry.name
-                                val outDir = java.io.File(paneCtx.cacheDir, "zipview").apply { mkdirs() }
-                                val outFile = java.io.File(outDir, entry.name)
-                                val ok = withContext(Dispatchers.IO) {
-                                    runCatching {
-                                        val zq = "'" + zip.replace("'", "'\\''") + "'"
-                                        val eq = "'" + fullName.replace("'", "'\\''") + "'"
-                                        val od = "'" + outDir.absolutePath + "'"
-                                        val lz = zip.lowercase()
-                                        when {
-                                            lz.endsWith(".zip") -> suNow("cd " + od + " && unzip -o -j " + zq + " " + eq + " 2>&1")
-                                            lz.endsWith(".tar") || lz.endsWith(".tar.gz") || lz.endsWith(".tgz") ->
-                                                suNow("cd " + od + " && tar -xf " + zq + " " + eq + " 2>&1")
-                                            lz.endsWith(".tar.xz") || lz.endsWith(".txz") ->
-                                                suNow("cd " + od + " && tar -xJf " + zq + " " + eq + " 2>&1")
-                                            lz.endsWith(".tar.bz2") || lz.endsWith(".tbz2") ->
-                                                suNow("cd " + od + " && tar -xjf " + zq + " " + eq + " 2>&1")
-                                            lz.endsWith(".7z") -> suNow("7z e -y -o" + od + " " + zq + " " + eq + " 2>&1")
-                                            lz.endsWith(".rar") -> suNow("cd " + od + " && unrar e -o+ " + zq + " " + eq + " 2>&1")
-                                            else -> suNow("cd " + od + " && unzip -o -j " + zq + " " + eq + " 2>&1")
-                                        }
-                                        outFile.exists() && outFile.length() > 0
-                                    }.getOrDefault(false)
-                                }
-                                if (ok) {
-                                    android.widget.Toast.makeText(paneCtx, "已解压：" + outFile.name, android.widget.Toast.LENGTH_SHORT).show()
-                                    onFileClick(outFile.absolutePath)
-                                } else {
-                                    android.widget.Toast.makeText(paneCtx, "解压失败（加密/损坏）", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
+                        if (entry.isDir) onNavigate(vp + "/") else onFileClick(vp)
                     } else if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
                 onLongClick = {
@@ -7908,8 +7897,8 @@ private fun FsRow(
             if (!isDir && sizeText.isNotEmpty()) {
                 Text(
                     text = sizeText,
-                    fontSize = 10.sp,
-                    lineHeight = 13.sp,
+                    fontSize = 9.sp,
+                    lineHeight = 11.sp,
                     maxLines = 1,
                     color = Color(0x40000000),
                     textAlign = TextAlign.End,
@@ -9262,6 +9251,8 @@ var uiPickerMarks by androidx.compose.runtime.mutableStateOf<Map<String, String>
 var pickCancelClosesDrawer by androidx.compose.runtime.mutableStateOf(false)
 // 单按钮模式（如「提取完成」只有一个「好」）
 var pickConfirmSingle by androidx.compose.runtime.mutableStateOf(false)
+// 请求收起终端抽屉（走 ModalBottomSheet 下滑动画）
+var termHideTick by androidx.compose.runtime.mutableIntStateOf(0)
 // 目录切换标记：行进入动画只在新目录第一屏播放
 var dirEnterTick by androidx.compose.runtime.mutableIntStateOf(0)
 var zipPwdVisible by androidx.compose.runtime.mutableStateOf(false)
