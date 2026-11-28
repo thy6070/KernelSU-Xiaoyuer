@@ -8978,7 +8978,6 @@ internal fun queryDisplayName(ctx: android.content.Context, uri: android.net.Uri
 
 // 执行「改机/清理」的核心逻辑（不依赖列表：重置直接调它）
 internal fun performGameReset(ctx: android.content.Context, label: String, apps: List<SuApp>, sink: ((String) -> Unit)? = null) {
- label ->
             try {
                 // 按名字找回包名（列表为空时遍历已安装应用兜底）
                 val pkg = apps.firstOrNull { it.label == label }?.pkg
