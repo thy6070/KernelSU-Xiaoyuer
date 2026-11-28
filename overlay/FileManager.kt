@@ -10489,7 +10489,7 @@ class FpsOverlayService : Service() {
                 for (line in f.readLines()) {
                     if (line.isBlank()) continue
                     if (line.startsWith("tid") || line.contains("dfps_ceiling") || line.contains("policy")) continue
-                    val cols = line.split(Regex("\s+")).filter { it.isNotEmpty() }
+                    val cols = line.split(Regex("\\s+")).filter { it.isNotEmpty() }
                     if (cols.size < 4) continue
                     val name = cols.getOrNull(2) ?: continue
                     // 只认前台 App（名字可能被截断，用 contains 双向兼容）
