@@ -7395,6 +7395,7 @@ private fun BrowserPane(
     modifier: Modifier = Modifier
 ) {
     val paneCtx = androidx.compose.ui.platform.LocalContext.current
+    val paneHaptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val paneScope = androidx.compose.runtime.rememberCoroutineScope()
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     // 刚进目录 700ms 内才播「行进入动画」，滚动时不播
@@ -7626,8 +7627,10 @@ private fun BrowserPane(
                     } else if (entry.isDir) onNavigate(joinPath(path, entry.name)) else onFileClick(joinPath(path, entry.name))
                 },
                 onLongClick = {
-                    // 长按给一下触感（系统关闭触感时自动静默）
-                    runCatching { hp(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) }
+                    // 长按给一下触感（BrowserPane 内没有 Screen 的 hp，这里直接取）
+                    runCatching {
+                        paneHaptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    }
                     // 先记录行号再开菜单，否则菜单会先用旧位置出现再跳
                     onLongPressRow(rowPath, idx)
                     onLongPress(rowPath, entry.isDir)
