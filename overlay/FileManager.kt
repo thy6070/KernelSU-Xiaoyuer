@@ -3693,10 +3693,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             scaleY = pop.value
                             alpha = ((pop.value - 0.92f) / 0.08f).coerceIn(0f, 1f)
                         }
-                        .shadow(24.dp, SmoothCornerShape(20.dp), clip = false, ambientColor = Color(0x33000000), spotColor = Color(0x33000000))
+                        .shadow(28.dp, SmoothCornerShape(20.dp), clip = false, ambientColor = Color(0x40000000), spotColor = Color(0x40000000))
                         .clip(SmoothCornerShape(20.dp))
-                        .background(Color(0xFFF2F2F7))
-                        .border(0.5.dp, Color(0x47FFFFFF), SmoothCornerShape(20.dp))
+                        .background(Color(0xF2F2F2F7))
+                        .border(0.6.dp, Color(0x66FFFFFF), SmoothCornerShape(20.dp))
                 ) {
                 Text(
                     text = run {
@@ -10235,6 +10235,7 @@ class FpsOverlayService : Service() {
     private var candIdx = 0
     private var failCount = 0
     private var zeroCount = 0
+    private var suspiciousHigh = 0
     private var fpsBindStarted = false
     private var bindChannel = "无"
     private var lastBindCheckMs = 0L
@@ -10516,20 +10517,10 @@ class FpsOverlayService : Service() {
             val m = Regex("([A-Za-z0-9_.]+)/[A-Za-z0-9_.]+").find(actOut)
             if (m != null) activePkg = m.groupValues[1]
         }
-        // 不在游戏里就不采集：停掉采集进程，不选层（桌面/设置/普通 App 一律不显示帧率）
-        if (!isGamePkg(activePkg)) {
-            if (layerName != null) {
-                layerName = null
-                stopDaemon()
-            }
-            return
-        }
-        // 规则：只在游戏里采集。非游戏前台立即停采集并清掉 fps_raw，
-        // 否则退出游戏后悬浮窗会一直停在上一层/上一局的帧率。
-        if (!isGamePkg(activePkg)) {
+        // 任何前台 App 都采集（不再用游戏白名单限制，否则小厂游戏/模拟器一律不显示）
+        if (activePkg.isEmpty()) {
             layerName = null
             stopDaemon()
-            try { java.io.File(filesDir, "fps_raw").delete() } catch (t: Throwable) {}
             return
         }
         val scored = ArrayList<Pair<String, Int>>()
@@ -10549,6 +10540,11 @@ class FpsOverlayService : Service() {
             // 不能按 hex 排除（之前错误排除导致选 VRI 层读不到数据）
             // 强约束：只认前台应用自己的层，避免选中壁纸/系统动画层算出假帧率
             if (activePkg.isNotEmpty() && !n.contains(activePkg)) continue
+            // 排除系统/桌面层：否则会读到恒 120 的合成层（显示偏高）
+            if (n.contains("com.android.systemui") || n.contains("com.miui.home") ||
+                n.contains("com.oppo.launcher") || n.contains("com.huawei.android.launcher") ||
+                n.contains("com.android.launcher") || n.contains("com.google.android.apps.nexuslauncher") ||
+                n.contains("StatusBar") || n.contains("NavigationBar") || n.contains("NotificationShade")) continue
             var sc = 0
             if (n.contains("SurfaceView")) sc += 100
             // 游戏真正出帧的是带 (BLAST) 后缀的那个 SurfaceView 层
@@ -10576,11 +10572,33 @@ class FpsOverlayService : Service() {
                 layerName = loose.first()
                 return
             }
+            // 三级兜底：任意 SurfaceView / BLASTBufferQueue / 任意带 # 的层
+            val anyLayer = ArrayList<String>()
+            for (l in out.lines()) {
+                val i = l.indexOf('{')
+                val j = l.indexOf(" parentId=")
+                if (i < 0 || j <= i) continue
+                val n = l.substring(i + 1, j).trim()
+                if (!n.contains("#")) continue
+                if (n.contains("ActivityRecord") || n.contains("InputSink") ||
+                    n.contains("animation-leash") || n.contains("Background for ") ||
+                    n.contains("BackgroundFor") || n.contains("Wallpaper")) continue
+                anyLayer.add(n)
+            }
+            // 优先 SurfaceView / BLAST
+            val preferred = anyLayer.filter { it.contains("SurfaceView") || it.contains("BLAST") }
+            val pool = if (preferred.isNotEmpty()) preferred else anyLayer
+            if (pool.isNotEmpty()) {
+                candidates = pool
+                candIdx = 0
+                failCount = 0
+                layerName = pool.first()
+                return
+            }
             candidates = emptyList()
             layerName = null
-            // 选不到层：停采集并清掉旧值，避免用上一层/上一局残留的帧率继续触发 FPS+
-            stopDaemon()
-            try { java.io.File(filesDir, "fps_raw").delete() } catch (t: Throwable) {}
+            // 选不到层：保留采集进程（稍后会重试），但标记为不可用，UI 显示 "--"
+            try { java.io.File(filesDir, "fps_raw").writeText("--") } catch (t: Throwable) {}
             return
         }
         scored.sortByDescending { it.second }
@@ -10594,7 +10612,8 @@ class FpsOverlayService : Service() {
     private fun probeLayer(maxTry: Int): String? {
         if (candidates.size <= 1) return null
         var tried = 0
-        val deadline = System.currentTimeMillis() + 1000L
+        // 放宽：更多候选 + 更长窗口（部分机型 --latency 较慢）
+        val deadline = System.currentTimeMillis() + 2500L
         for (n in candidates) {
             if (n == layerName) continue
             if (tried >= maxTry) break
@@ -10757,6 +10776,15 @@ class FpsOverlayService : Service() {
                            "settings put secure miui_refresh_rate " + bestHz, 1L)
                     }
                     logLine("刷新率切换到 " + bestHz + "Hz（sfModeId=" + bestSf + "）")
+                }
+                // 合理性检查：游戏前台却恒定 >90 且几乎不变 → 可能读错层（系统合成层）
+                if (isGamePkg(activePkg) && fpsRaw > 90f && Math.abs(fpsRaw - lastShown) < 1f) {
+                    suspiciousHigh++
+                    if (suspiciousHigh == 10) {
+                        logLine("帧率恒定 " + fpsRaw.toInt() + "（>90）且不变，疑似选中系统合成层：" + (layerName ?: "?"))
+                    }
+                } else {
+                    suspiciousHigh = 0
                 }
                 // 持续 0（层重建/切帧率后旧层失效）→ 强制重扫层自愈
                 if (fpsRaw <= 0.5) {
