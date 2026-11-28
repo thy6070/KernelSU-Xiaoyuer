@@ -589,30 +589,42 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
         pickConfirm = null
         termDrawerConfirm = null
         pickCancelClosesDrawer = false
-        // 关键：先切到「游戏清理」的动作（否则 uiPickerAction 还是超级用户的，点一下会弹应用菜单）
-        // silent=true：只装 action，不重载列表，避免抽屉里闪一下应用列表
-        gameCleanCache(appCtx, silent = true)
         termDrawerTitle = label
         uiScope.launch {
-            // silent 装载不动列表 → 固定等 action 就绪（应用列表读取一般 <1s）
-            kotlinx.coroutines.delay(1200)
-            // label 是应用名不是包名 → 先从应用列表里查包名
+
+            // label 是应用名不是包名 → 逐级兜底查包名
+            val idxInPicker = uiPicker?.indexOf(label) ?: -1
             val pkgOf = runCatching {
                 suAppsGlobal.firstOrNull { it.label == label }?.pkg
-            }.getOrNull() ?: runCatching {
-                uiPicker?.indexOf(label)?.let { idx ->
-                    if (idx >= 0) suAppsGlobal.getOrNull(idx)?.pkg else null
-                }
-            }.getOrNull() ?: ""
+            }.getOrNull()?.takeIf { it.isNotEmpty() }
+                ?: runCatching {
+                    if (idxInPicker >= 0) suAppsGlobal.getOrNull(idxInPicker)?.pkg else null
+                }.getOrNull()?.takeIf { it.isNotEmpty() }
+                ?: runCatching {
+                    // 遍历已安装应用，按应用名精确匹配（suAppsGlobal 为空时兜底）
+                    appCtx.packageManager.getInstalledApplications(0)
+                        .firstOrNull { it.loadLabel(appCtx.packageManager).toString() == label }
+                        ?.packageName
+                }.getOrNull()
+                ?: ""
+            // 列表里的图标优先（最稳），没有再按包名加载
+            val iconFromList = runCatching {
+                if (idxInPicker >= 0) uiPickerIcons?.getOrNull(idxInPicker) else null
+            }.getOrNull()
             val info = withContext(Dispatchers.IO) {
                 runCatching {
                     val pm = appCtx.packageManager
-                    val ver = if (pkgOf.isNotEmpty()) pm.getPackageInfo(pkgOf, 0).versionName ?: "" else ""
-                    val d = pm.getApplicationIcon(pkgOf)
-                    val w = d.intrinsicWidth.coerceAtLeast(48); val h = d.intrinsicHeight.coerceAtLeast(48)
-                    val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-                    val cv = android.graphics.Canvas(b); d.setBounds(0, 0, w, h); d.draw(cv)
-                    b.asImageBitmap() to ver
+                    val ver = if (pkgOf.isNotEmpty()) {
+                        runCatching { pm.getPackageInfo(pkgOf, 0).versionName ?: "" }.getOrDefault("")
+                    } else ""
+                    val bmp = iconFromList ?: if (pkgOf.isNotEmpty()) {
+                        val d = pm.getApplicationIcon(pkgOf)
+                        val w = d.intrinsicWidth.coerceAtLeast(48); val h = d.intrinsicHeight.coerceAtLeast(48)
+                        val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                        val cv = android.graphics.Canvas(b); d.setBounds(0, 0, w, h); d.draw(cv)
+                        b.asImageBitmap()
+                    } else null
+                    bmp to ver
                 }.getOrNull()
             }
             termDrawerIcon = info?.first
@@ -623,8 +635,9 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 resetLineSink = { line -> termDrawer = (termDrawer ?: "") + line + "\n" }
                 uiScope.launch {
                     kotlinx.coroutines.delay(500)
-                    // 启动清理（异步输出通过 resetLineSink 进抽屉）
-                    withContext(Dispatchers.IO) { runCatching { uiPickerAction?.invoke(label) } }
+                    // 直接执行清理（不经过列表 action，也不需要重新读应用列表）
+                    val appsNow = runCatching { suAppsGlobal }.getOrNull() ?: emptyList()
+                    withContext(Dispatchers.IO) { runCatching { performGameReset(appCtx, label, appsNow) } }
                     // 等输出稳定：连续 1.2s 没有新行才算结束（清理一般 2-5s）
                     var lastLen = -1
                     var stableTicks = 0
@@ -667,9 +680,10 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 pickConfirmOk = "确定"; pickConfirmAccentWord = null
                 pickConfirm = "重置 " + label + "？" to { doReset() }
             }
-            // 进入即自动弹「重置 X ？」（不用点抽屉确定）
+            // 进入即自动弹「重置 X ？」（取消时连抽屉一起收）
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 runCatching {
+                    pickCancelClosesDrawer = true
                     pickConfirmOk = "确定"; pickConfirmAccentWord = null
                     pickConfirm = "重置 " + label + "？" to { doReset() }
                 }
@@ -706,16 +720,13 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                 FileLocate.tick += 1
             } catch (t: Throwable) {}
             refreshTick += 1
-            // 提取完成 → 自动弹「已提取」，点「好」先收日志层再收列表层
+            // 提取完成 → 自动弹「已完成」（单按钮「好」，点它只关弹窗）
             pickConfirmOk = "好"
-            pickConfirmAccentWord = "已提取"
+            pickConfirmAccentWord = "已完成"
             pickConfirmAccentColor = 0xFF007AFF
+            pickConfirmSingle = true
             pickConfirm = "好" to {
-                termDrawer = null            // 先收日志抽屉
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    uiPicker = emptyList()   // 再收应用列表抽屉
-                    uiPickerIcons = null
-                }, 220)
+                pickConfirmSingle = false
             }
         }
     }
@@ -1715,17 +1726,14 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     FileLocate.tick += 1
                 } catch (t: Throwable) {}
                 refreshTick += 1
-                // 提取完成 → 自动弹「已提取」，点「好」先收日志层再收列表层
+                // 提取完成 → 自动弹「已完成」（单按钮「好」，点它只关弹窗）
                 termDrawer = (termDrawer ?: "") + "提取完成 .OK\n已完成 .OK\n"
                 pickConfirmOk = "好"
-                pickConfirmAccentWord = "已提取"
+                pickConfirmAccentWord = "已完成"
                 pickConfirmAccentColor = 0xFF007AFF
+                pickConfirmSingle = true
                 pickConfirm = "好" to {
-                    termDrawer = null
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        uiPicker = emptyList()
-                        uiPickerIcons = null
-                    }, 220)
+                    pickConfirmSingle = false
                 }
             }
         },
@@ -1805,15 +1813,65 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                     suNow("test -f '" + p0.replace("'", "'\\''") + "' && echo ok 2>/dev/null").contains("ok")
                 }.getOrDefault(false)) p0 else null
             if (p != null) {
-                // .zip：MT 式虚拟浏览（不解压，只登记条目，点文件才解压那一个）
-                val isZipView = p.lowercase().endsWith(".zip")
+                // 各种压缩包：MT 式虚拟浏览（只列条目，点文件才解压那一个）
+                val lpArc = p.lowercase()
+                val isTarLike = lpArc.endsWith(".tar") || lpArc.endsWith(".tar.gz") || lpArc.endsWith(".tgz") ||
+                    lpArc.endsWith(".tar.xz") || lpArc.endsWith(".txz") || lpArc.endsWith(".tar.bz2") ||
+                    lpArc.endsWith(".tbz2") || lpArc.endsWith(".tar.zst")
+                val isZipView = lpArc.endsWith(".zip") || isTarLike || lpArc.endsWith(".7z") || lpArc.endsWith(".rar")
                 if (isZipView) {
                     uiScope.launch {
                         val list = withContext(Dispatchers.IO) {
-                            runCatching {
-                                suNow("unzip -Z1 '" + p.replace("'", "'\\''") + "' 2>/dev/null")
-                                    .lines().map { it.trim() }.filter { it.isNotEmpty() }
-                            }.getOrDefault(emptyList())
+                            val qz = "'" + p.replace("'", "'\\''") + "'"
+                            // tar 系列 / 7z / rar 只列条目
+                            if (isTarLike) {
+                                var out = runCatching { suNow("tar -tf " + qz + " 2>/dev/null") }.getOrDefault("")
+                                if (out.isBlank()) out = runCatching { suNow("tar -tJf " + qz + " 2>/dev/null") }.getOrDefault("")
+                                if (out.isBlank()) out = runCatching { suNow("tar -tjf " + qz + " 2>/dev/null") }.getOrDefault("")
+                                val e0 = out.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                                if (e0.isNotEmpty()) return@withContext e0.distinct()
+                            }
+                            if (lpArc.endsWith(".7z")) {
+                                val out = runCatching { suNow("7z l -ba " + qz + " 2>/dev/null") }.getOrDefault("")
+                                val e0 = out.lines().mapNotNull { ln ->
+                                    val parts = ln.trim().split(Regex("\\s+"))
+                                    if (parts.size >= 6) parts.drop(5).joinToString(" ") else null
+                                }.filter { it.isNotEmpty() }
+                                if (e0.isNotEmpty()) return@withContext e0.distinct()
+                            }
+                            if (lpArc.endsWith(".rar")) {
+                                var out = runCatching { suNow("unrar lb " + qz + " 2>/dev/null") }.getOrDefault("")
+                                if (out.isBlank()) out = runCatching { suNow("7z l -ba " + qz + " 2>/dev/null") }.getOrDefault("")
+                                val e0 = out.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("Archive") }
+                                if (e0.isNotEmpty()) return@withContext e0.distinct()
+                            }
+                            // 多级回退：unzip -Z1（Info-ZIP）→ unzip -l 解析 → 7z → busybox
+                            var out = runCatching { suNow("unzip -Z1 " + qz + " 2>/dev/null") }.getOrDefault("")
+                            var entries = out.lines().map { it.trim() }
+                                .filter { it.isNotEmpty() && !it.startsWith("Archive:") && !it.contains("End-of-central") }
+                            if (entries.isEmpty()) {
+                                out = runCatching { suNow("unzip -l " + qz + " 2>/dev/null") }.getOrDefault("")
+                                entries = out.lines().mapNotNull { ln ->
+                                    // unzip -l:  "  Length      Date    Time    Name"
+                                    val m = Regex("^\\s*\\d+\\s+\\S+\\s+\\S+\\s+(.+)$").find(ln)
+                                    m?.groupValues?.get(1)?.trim()
+                                }.filter { it.isNotEmpty() && it != "Name" && !it.startsWith("----") && !it.contains("files") }
+                            }
+                            if (entries.isEmpty()) {
+                                out = runCatching { suNow("7z l -ba " + qz + " 2>/dev/null") }.getOrDefault("")
+                                entries = out.lines().mapNotNull { ln ->
+                                    val parts = ln.trim().split(Regex("\\s+"))
+                                    if (parts.size >= 6) parts.drop(5).joinToString(" ") else null
+                                }.filter { it.isNotEmpty() }
+                            }
+                            if (entries.isEmpty()) {
+                                out = runCatching { suNow("busybox unzip -l " + qz + " 2>/dev/null") }.getOrDefault("")
+                                entries = out.lines().mapNotNull { ln ->
+                                    val m = Regex("^\\s*\\d+\\s+\\S+\\s+\\S+\\s+(.+)$").find(ln)
+                                    m?.groupValues?.get(1)?.trim()
+                                }.filter { it.isNotEmpty() && it != "Name" }
+                            }
+                            entries.distinct()
                         }
                         if (list.isNotEmpty()) {
                             ZipView.zipPath = p
@@ -2287,23 +2345,12 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         val p6 = "/storage/emulated/0/Android/data/" + amPkg
                         if (longPressFromRight) rightPath = p6 else leftPath = p6
                         refreshTick += 1
-                        // 收起两层抽屉：先日志，再列表
-                        termDrawer = null
-                        uiScope.launch {
-                            kotlinx.coroutines.delay(200)
-                            uiPicker = emptyList(); uiPickerIcons = null
-                        }
                     },
                     "根目录" to {
                         appMenuPkg = null
                         val p6 = "/data/user/0/" + amPkg
                         if (longPressFromRight) rightPath = p6 else leftPath = p6
                         refreshTick += 1
-                        termDrawer = null
-                        uiScope.launch {
-                            kotlinx.coroutines.delay(200)
-                            uiPicker = emptyList(); uiPickerIcons = null
-                        }
                     },
                     "重置" to {
                         val pkgTmp = amPkg
@@ -3636,15 +3683,18 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                         .background(Color(0x33000000))
                 )
                 Row(modifier = Modifier.fillMaxWidth().height(38.dp)) {
+                    if (!pickConfirmSingle) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
                             .clickable {
                                 pickConfirm = null
+                                // 第一层（进入流程自动弹的确认）取消 → 连抽屉一起收
+                                if (pickCancelClosesDrawer) {
+                                    termDrawer = null
+                                }
                                 pickCancelClosesDrawer = false
-                                // 任何确认/结果弹窗点取消都收起终端抽屉
-                                termDrawer = null
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -3656,6 +3706,7 @@ fun FileManagerScreen(onBack: () -> Unit = {}, onNavigate: (String) -> Unit = {}
                             .fillMaxHeight()
                             .background(Color(0x33000000))
                     )
+                    }
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -4860,19 +4911,12 @@ private fun ProMaxIsland(
                             .background(Color(0xFF007AFF))
                             .clickable {
                                 val op = pendingUndo
-                                // 先让撤回按钮淡出，再和「删除完成」一样平滑收起岛
-                                // （closeIsland 里会设 navClosing，面板会瞬间隐藏、看不到收起过程）
+                                // 和删除完成后的收起一致：直接收，不加额外延迟/清理
                                 pendingUndo = null
                                 undoPanelOnly = false
-                                reopenScope.launch {
-                                    kotlinx.coroutines.delay(160)
-                                    navMode = false
-                                    navTarget = null
-                                    jumpStep = 0
-                                    jumpInput = ""
-                                    onClearLongPress()
-                                    expanded = false
-                                }
+                                navMode = false
+                                navTarget = null
+                                expanded = false
                                 if (op != null) {
                                     navScope.launch {
                                         withContext(Dispatchers.IO) {
@@ -7535,8 +7579,22 @@ private fun BrowserPane(
                                 val outFile = java.io.File(outDir, entry.name)
                                 val ok = withContext(Dispatchers.IO) {
                                     runCatching {
-                                        suNow("cd '" + outDir.absolutePath + "' && unzip -o -j '" +
-                                            zip.replace("'", "'\\''") + "' '" + fullName.replace("'", "'\\''") + "' 2>&1")
+                                        val zq = "'" + zip.replace("'", "'\\''") + "'"
+                                        val eq = "'" + fullName.replace("'", "'\\''") + "'"
+                                        val od = "'" + outDir.absolutePath + "'"
+                                        val lz = zip.lowercase()
+                                        when {
+                                            lz.endsWith(".zip") -> suNow("cd " + od + " && unzip -o -j " + zq + " " + eq + " 2>&1")
+                                            lz.endsWith(".tar") || lz.endsWith(".tar.gz") || lz.endsWith(".tgz") ->
+                                                suNow("cd " + od + " && tar -xf " + zq + " " + eq + " 2>&1")
+                                            lz.endsWith(".tar.xz") || lz.endsWith(".txz") ->
+                                                suNow("cd " + od + " && tar -xJf " + zq + " " + eq + " 2>&1")
+                                            lz.endsWith(".tar.bz2") || lz.endsWith(".tbz2") ->
+                                                suNow("cd " + od + " && tar -xjf " + zq + " " + eq + " 2>&1")
+                                            lz.endsWith(".7z") -> suNow("7z e -y -o" + od + " " + zq + " " + eq + " 2>&1")
+                                            lz.endsWith(".rar") -> suNow("cd " + od + " && unrar e -o+ " + zq + " " + eq + " 2>&1")
+                                            else -> suNow("cd " + od + " && unzip -o -j " + zq + " " + eq + " 2>&1")
+                                        }
                                         outFile.exists() && outFile.length() > 0
                                     }.getOrDefault(false)
                                 }
@@ -8896,9 +8954,40 @@ internal fun gameCleanCache(ctx: android.content.Context, silent: Boolean = fals
             }
         }
         uiPickerAction = { label ->
+            performGameReset(ctx, label, apps)
+        }
+
+    } catch (t: Throwable) {
+        android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
+    }
+    }.start()
+}
+
+internal fun queryDisplayName(ctx: android.content.Context, uri: android.net.Uri): String? {
+    try {
+        ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0) return c.getString(idx)
+            }
+        }
+    } catch (t: Throwable) {}
+    return null
+}
+
+
+// 执行「改机/清理」的核心逻辑（不依赖列表：重置直接调它）
+internal fun performGameReset(ctx: android.content.Context, label: String, apps: List<SuApp>, sink: ((String) -> Unit)? = null) {
+ label ->
             try {
-                // 按名字找回包名
-                val pkg = apps.firstOrNull { it.label == label }?.pkg ?: label
+                // 按名字找回包名（列表为空时遍历已安装应用兜底）
+                val pkg = apps.firstOrNull { it.label == label }?.pkg
+                    ?: runCatching {
+                        val pm0 = ctx.packageManager
+                        pm0.getInstalledApplications(0)
+                            .firstOrNull { it.loadLabel(pm0).toString() == label }?.packageName
+                    }.getOrNull()
+                    ?: label
                 // 随机标识（安卓ID / 主机名 / 序列号）
                 val rnd = java.util.Random()
                 fun hex(n: Int): String {
@@ -9076,9 +9165,9 @@ internal fun gameCleanCache(ctx: android.content.Context, silent: Boolean = fals
                 pr.inputStream.bufferedReader().useLines { lines ->
                     lines.forEach { ln ->
                         sbOut.append(ln).append("\n")
-                        val sink = resetLineSink
-                        if (sink != null) {
-                            android.os.Handler(android.os.Looper.getMainLooper()).post { sink(ln) }
+                        val sinkOut = sink ?: resetLineSink
+                        if (sinkOut != null) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { sinkOut(ln) }
                         }
                     }
                 }
@@ -9090,23 +9179,7 @@ internal fun gameCleanCache(ctx: android.content.Context, silent: Boolean = fals
             } catch (t: Throwable) {
                 android.widget.Toast.makeText(ctx, "清理失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
             }
-        }
-    } catch (t: Throwable) {
-        android.widget.Toast.makeText(ctx, "失败: " + (t.message ?: ""), android.widget.Toast.LENGTH_SHORT).show()
-    }
-    }.start()
-}
-
-internal fun queryDisplayName(ctx: android.content.Context, uri: android.net.Uri): String? {
-    try {
-        ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) {
-                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0) return c.getString(idx)
-            }
-        }
-    } catch (t: Throwable) {}
-    return null
+        
 }
 
 internal fun queryRealPath(ctx: android.content.Context, uri: android.net.Uri): String? {
@@ -9188,6 +9261,8 @@ var uiPickerMarks by androidx.compose.runtime.mutableStateOf<Map<String, String>
 
 // 加密压缩包：密码输入弹窗（iOS 重命名同款）
 var pickCancelClosesDrawer by androidx.compose.runtime.mutableStateOf(false)
+// 单按钮模式（如「提取完成」只有一个「好」）
+var pickConfirmSingle by androidx.compose.runtime.mutableStateOf(false)
 // 目录切换标记：行进入动画只在新目录第一屏播放
 var dirEnterTick by androidx.compose.runtime.mutableIntStateOf(0)
 var zipPwdVisible by androidx.compose.runtime.mutableStateOf(false)
