@@ -10549,10 +10549,41 @@ class FpsOverlayService : Service() {
     }
 
     private fun readDaemonFps(): Double? {
-        // 先看 fpsbinder2 有没有产出；没有就用 MTK fpsgo 兜底
+        // 三级数据源，逐级自愈：
+        //   ① fpsbinder2（binder 直连，最快）
+        //   ② MTK fpsgo（root 缓存，联发科最稳）
+        //   ③ dumpsys --latency（全品牌通用兜底，慢但覆盖最广）
         val raw = readRawFps()
-        if (raw != null) return raw
-        return readFpsgoFps()
+        if (raw != null && raw > 0.5) return raw
+        val go = readFpsgoFps()
+        if (go != null && go > 0.5) return go
+
+        // ③ 通用兜底：直接 dumpsys --latency（2 秒节流，避免频繁开 shell）
+        val now = System.currentTimeMillis()
+        if (now - lastSfFallbackAt > 2000L && !activePkg.isEmpty()) {
+            lastSfFallbackAt = now
+            try {
+                // 从 --list 里挑一个含前台包名的层，直接读 latency
+                val lst = sh("dumpsys SurfaceFlinger --list 2>/dev/null | grep -i " + activePkg + " | head -3", 3L)
+                for (ln in lst.lines()) {
+                    val i0 = ln.indexOf('{')
+                    val i1 = ln.indexOf(" parentId=")
+                    if (i0 < 0 || i1 <= i0) continue
+                    val name = ln.substring(i0 + 1, i1).trim()
+                    if (name.isEmpty() || name.contains("ActivityRecord") || name.contains("InputSink")) continue
+                    val lat = sh("dumpsys SurfaceFlinger --latency '" + name.replace("'", "'\\''") + "' 2>/dev/null", 3L)
+                    if (lat.isNotBlank()) {
+                        val v = parseLatencyText(lat)
+                        if (v != null && v > 0.5) {
+                            lastSfLayer = name
+                            return v
+                        }
+                    }
+                }
+            } catch (t: Throwable) {}
+        }
+        // 都没有效值：保留 0（真静止）或 null
+        return raw ?: go
     }
 
     private fun readRawFps(): Double? {
@@ -10970,6 +11001,8 @@ class FpsOverlayService : Service() {
     @Volatile private var panelHz = 0.0
     private var panelHzAt = 0L
     private var lastFpsgoAt = 0L
+    private var lastSfFallbackAt = 0L
+    private var lastSfLayer: String? = null
 
     // 真实屏幕刷新率（来自 dumpsys display，10 秒缓存）；读不到退回 120
     private fun refreshPanelHz() {
